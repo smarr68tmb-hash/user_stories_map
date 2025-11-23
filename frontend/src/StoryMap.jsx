@@ -17,9 +17,43 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+// Настройка axios для автоматического добавления токена
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 const API_URL = "http://127.0.0.1:8000";
 
-function StoryMap({ project, onUpdate }) {
+// Функция для обработки ошибок с проверкой 401
+const handleApiError = (error, onUnauthorized) => {
+  if (error.response?.status === 401) {
+    // Токен истек или невалиден
+    localStorage.removeItem('auth_token');
+    if (onUnauthorized) {
+      onUnauthorized();
+    } else {
+      window.location.reload();
+    }
+    return 'Сессия истекла. Пожалуйста, войдите снова.';
+  }
+  
+  if (error.response?.data?.detail) {
+    return error.response.data.detail;
+  }
+  
+  if (error.response) {
+    return `Ошибка сервера: ${error.response.status}`;
+  }
+  
+  if (error.request) {
+    return 'Не удалось подключиться к серверу';
+  }
+  
+  return 'Произошла неизвестная ошибка';
+};
+
+function StoryMap({ project, onUpdate, onUnauthorized }) {
   const [editingStory, setEditingStory] = useState(null);
   const [addingToCell, setAddingToCell] = useState(null);
   const [newStoryTitle, setNewStoryTitle] = useState('');
@@ -72,13 +106,14 @@ function StoryMap({ project, onUpdate }) {
         task_id: taskId,
         release_id: releaseId,
         position: position
-      });
+      }, { headers: getAuthHeaders() });
       // Обновляем проект
-      const res = await axios.get(`${API_URL}/project/${project.id}`);
+      const res = await axios.get(`${API_URL}/project/${project.id}`, { headers: getAuthHeaders() });
       onUpdate(res.data);
     } catch (error) {
       console.error('Error moving story:', error);
-      alert('Ошибка при перемещении карточки');
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
     }
   };
 
@@ -92,7 +127,7 @@ function StoryMap({ project, onUpdate }) {
         title: newStoryTitle,
         description: newStoryDescription,
         priority: newStoryPriority
-      });
+      }, { headers: getAuthHeaders() });
       
       setNewStoryTitle('');
       setNewStoryDescription('');
@@ -100,26 +135,28 @@ function StoryMap({ project, onUpdate }) {
       setAddingToCell(null);
       
       // Обновляем проект
-      const res = await axios.get(`${API_URL}/project/${project.id}`);
+      const res = await axios.get(`${API_URL}/project/${project.id}`, { headers: getAuthHeaders() });
       onUpdate(res.data);
     } catch (error) {
       console.error('Error adding story:', error);
-      alert('Ошибка при добавлении карточки');
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
     }
   };
 
   const handleUpdateStory = async (storyId, updates) => {
     try {
-      await axios.put(`${API_URL}/story/${storyId}`, updates);
+      await axios.put(`${API_URL}/story/${storyId}`, updates, { headers: getAuthHeaders() });
       
       setEditingStory(null);
       
       // Обновляем проект
-      const res = await axios.get(`${API_URL}/project/${project.id}`);
+      const res = await axios.get(`${API_URL}/project/${project.id}`, { headers: getAuthHeaders() });
       onUpdate(res.data);
     } catch (error) {
       console.error('Error updating story:', error);
-      alert('Ошибка при обновлении карточки');
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
     }
   };
 
@@ -127,14 +164,15 @@ function StoryMap({ project, onUpdate }) {
     if (!confirm('Удалить эту карточку?')) return;
 
     try {
-      await axios.delete(`${API_URL}/story/${storyId}`);
+      await axios.delete(`${API_URL}/story/${storyId}`, { headers: getAuthHeaders() });
       
       // Обновляем проект
-      const res = await axios.get(`${API_URL}/project/${project.id}`);
+      const res = await axios.get(`${API_URL}/project/${project.id}`, { headers: getAuthHeaders() });
       onUpdate(res.data);
     } catch (error) {
       console.error('Error deleting story:', error);
-      alert('Ошибка при удалении карточки');
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
     }
   };
 

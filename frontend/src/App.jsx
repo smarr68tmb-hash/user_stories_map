@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api, { auth } from './api';
 import StoryMap from './StoryMap.jsx';
+import Auth from './Auth.jsx';
 
-// URL твоего бэкенда
-const API_URL = "http://127.0.0.1:8000";
 const MAX_CHARS = 10000;
 const MIN_CHARS = 10;
 
 function App() {
+  const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
+  const [user, setUser] = useState(null);
+  
   // Загружаем сохраненный черновик из localStorage
   const [input, setInput] = useState(() => {
     return localStorage.getItem('draft_requirements') || '';
@@ -16,6 +18,21 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
+  
+  // Проверка токена при загрузке
+  useEffect(() => {
+    if (token) {
+      // Проверяем валидность токена
+      auth.getMe()
+        .then(res => setUser(res.data))
+        .catch(() => {
+          // Если не удалось получить пользователя - разлогиниваем
+          // Интерцептор уже обработал обновление токена, если это было возможно
+          // Если мы здесь, значит токен невалиден
+          handleLogout();
+        });
+    }
+  }, [token]);
   
   // Автосохранение черновика
   useEffect(() => {
@@ -48,6 +65,28 @@ function App() {
   const charCount = input.length;
   const remainingChars = MAX_CHARS - charCount;
 
+  const handleLogin = async (loginData) => {
+    // loginData теперь приходит из Auth компонента, который использует api.js
+    // Токены уже сохранены в localStorage
+    setToken(localStorage.getItem('auth_token'));
+    
+    // Загружаем информацию о пользователе
+    try {
+      const res = await auth.getMe();
+      setUser(res.data);
+    } catch (e) {
+      console.error("Failed to fetch user data:", e);
+    }
+  };
+
+  const handleLogout = async () => {
+    await auth.logout();
+    setToken(null);
+    setUser(null);
+    setProject(null);
+    setInput('');
+  };
+
   // 1. Отправка требований
   const handleGenerate = async () => {
     if (!input.trim()) {
@@ -70,12 +109,12 @@ function App() {
     
     try {
       // Генерируем карту
-      const res = await axios.post(`${API_URL}/generate-map`, { text: input });
+      const res = await api.post('/generate-map', { text: input });
       setProgress(70);
       const projectId = res.data.project_id;
       
       // Забираем полные данные
-      const projectRes = await axios.get(`${API_URL}/project/${projectId}`);
+      const projectRes = await api.get(`/project/${projectId}`);
       setProgress(100);
       setProject(projectRes.data);
       
@@ -84,7 +123,11 @@ function App() {
     } catch (error) {
       console.error("Error generating map:", error);
       setProgress(0);
-      if (error.response) {
+      // Ошибки 401 теперь обрабатываются интерцептором, но можно оставить проверку для UI
+      if (error.response?.status === 401) {
+        setError('Сессия истекла. Пожалуйста, войдите снова.');
+        handleLogout();
+      } else if (error.response) {
         const detail = error.response.data?.detail || 'Неизвестная ошибка';
         setError(`Ошибка: ${detail}`);
       } else if (error.request) {
@@ -98,6 +141,11 @@ function App() {
       setTimeout(() => setProgress(0), 500);
     }
   };
+
+  // Если не авторизован, показываем форму входа
+  if (!token || !user) {
+    return <Auth onLogin={handleLogin} />;
+  }
 
   if (!project) {
     return (
@@ -186,24 +234,37 @@ function App() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">{project.name}</h1>
           <p className="text-sm text-gray-600 mt-1">User Story Map</p>
+          {user && (
+            <p className="text-xs text-gray-500 mt-1">
+              Пользователь: {user.email} {user.full_name && `(${user.full_name})`}
+            </p>
+          )}
         </div>
-        <button 
-          onClick={() => {
-            setProject(null);
-            setInput('');
-            setError(null);
-            setProgress(0);
-            localStorage.removeItem('draft_requirements');
-          }} 
-          className="text-blue-600 hover:underline font-medium"
-          aria-label="Создать новую карту"
-        >
-          ← Создать новую карту
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => {
+              setProject(null);
+              setInput('');
+              setError(null);
+              setProgress(0);
+              localStorage.removeItem('draft_requirements');
+            }} 
+            className="text-blue-600 hover:underline font-medium"
+            aria-label="Создать новую карту"
+          >
+            ← Создать новую карту
+          </button>
+          <button
+            onClick={handleLogout}
+            className="text-gray-600 hover:text-gray-800 font-medium"
+          >
+            Выйти
+          </button>
+        </div>
       </div>
       
       {/* Компонент Карты */}
-      <StoryMap project={project} onUpdate={setProject} />
+      <StoryMap project={project} onUpdate={setProject} onUnauthorized={handleLogout} />
     </div>
   );
 }
