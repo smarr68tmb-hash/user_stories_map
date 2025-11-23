@@ -1,14 +1,23 @@
 import os
 import json
 import logging
+from datetime import datetime, timedelta
 from typing import List, Optional
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, JSON
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel, EmailStr
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, JSON, DateTime, Boolean
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship, Session, joinedload
+from sqlalchemy.sql import func
 from openai import OpenAI, RateLimitError, APIError, APITimeoutError, APIConnectionError
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+import redis
 
 # Загрузка .env файла, если он существует
 try:
@@ -21,12 +30,35 @@ except ImportError:
     pass
 
 # --- 1. НАСТРОЙКА (Конфигурация) ---
-# Логирование
+# Логирование (инициализируем первым, чтобы использовать в Sentry)
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+# Инициализация Sentry (опционально)
+SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+        
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[
+                FastApiIntegration(),
+                SqlalchemyIntegration(),
+            ],
+            traces_sample_rate=0.1,
+            environment=os.getenv("ENVIRONMENT", "development"),
+        )
+        logger.info("Sentry initialized")
+    except ImportError:
+        logger.warning("Sentry SDK not installed. Error tracking disabled.")
+else:
+    logger.info("Sentry DSN not configured. Error tracking disabled.")
 
 # Поддержка как OpenAI, так и Perplexity API
 API_KEY = os.getenv("OPENAI_API_KEY", "") or os.getenv("PERPLEXITY_API_KEY", "")
@@ -34,6 +66,10 @@ API_PROVIDER = os.getenv("API_PROVIDER", "openai")  # "openai" или "perplexit
 API_MODEL = os.getenv("API_MODEL", "gpt-4o" if API_PROVIDER == "openai" else "sonar")
 API_TEMPERATURE = float(os.getenv("API_TEMPERATURE", os.getenv("OPENAI_TEMPERATURE", "0.7")))
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./usm.db")
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
 # CORS настройки - безопасные по умолчанию
 ALLOWED_ORIGINS: List[str] = os.getenv(
@@ -42,9 +78,29 @@ ALLOWED_ORIGINS: List[str] = os.getenv(
 ).split(",")
 
 # Инициализация DB
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Для PostgreSQL не нужен check_same_thread
+connect_args = {}
+if DATABASE_URL.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+
+engine = create_engine(DATABASE_URL, connect_args=connect_args, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+# Инициализация Redis
+try:
+    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+    redis_client.ping()
+    logger.info("Redis connected successfully")
+except Exception as e:
+    logger.warning(f"Redis connection failed: {e}. Caching will be disabled.")
+    redis_client = None
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# OAuth2
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # Инициализация AI клиента
 if API_KEY:
@@ -67,23 +123,42 @@ else:
 
 app = FastAPI(title="AI User Story Mapper", version="1.0.0")
 
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS для фронтенда - безопасная конфигурация
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
 # --- 2. БАЗА ДАННЫХ (SQLAlchemy Models) ---
 
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    full_name = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
+
 class Project(Base):
     __tablename__ = "projects"
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String, index=True)
     raw_requirements = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+    owner = relationship("User", back_populates="projects")
     activities = relationship("Activity", back_populates="project", cascade="all, delete-orphan", order_by="Activity.position")
     releases = relationship("Release", back_populates="project", cascade="all, delete-orphan", order_by="Release.position")
 
@@ -140,6 +215,27 @@ Base.metadata.create_all(bind=engine)
 
 # --- 3. СХЕМЫ ДАННЫХ (Pydantic) ---
 
+# Authentication schemas
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: Optional[str] = None
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    full_name: Optional[str]
+    is_active: bool
+    created_at: datetime
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    user_id: Optional[int] = None
+
+# Project schemas
 class RequirementsInput(BaseModel):
     text: str
 
@@ -205,7 +301,72 @@ def get_db():
     finally:
         db.close()
 
-def generate_ai_map(requirements_text: str) -> dict:
+# Authentication utilities
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return encoded_jwt
+
+def get_user_by_email(db: Session, email: str):
+    return db.query(User).filter(User.email == email).first()
+
+def authenticate_user(db: Session, email: str, password: str):
+    user = get_user_by_email(db, email)
+    if not user:
+        return False
+    if not verify_password(password, user.hashed_password):
+        return False
+    return user
+
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        user_id_str: str = payload.get("sub")
+        if user_id_str is None:
+            raise credentials_exception
+        user_id = int(user_id_str)
+        token_data = TokenData(user_id=user_id)
+    except ValueError:
+        raise credentials_exception
+    except JWTError as e:
+        logger.error(f"JWT validation error: {e}")
+        raise credentials_exception
+    except Exception as e:
+        logger.error(f"Unexpected error in get_current_user: {e}")
+        raise credentials_exception
+    user = db.query(User).filter(User.id == token_data.user_id).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+async def get_current_active_user(current_user: User = Depends(get_current_user)):
+    if not current_user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+def get_cache_key(requirements_text: str) -> str:
+    """Генерирует ключ для кеша на основе текста требований"""
+    import hashlib
+    text_hash = hashlib.sha256(requirements_text.encode()).hexdigest()
+    return f"ai_map:{text_hash}"
+
+def generate_ai_map(requirements_text: str, use_cache: bool = True) -> dict:
     """Отправляет запрос в AI API (OpenAI или Perplexity) и получает структурированную карту"""
     
     if not client:
@@ -227,6 +388,17 @@ def generate_ai_map(requirements_text: str) -> dict:
             status_code=400,
             detail="Requirements text is too long. Maximum 10000 characters allowed."
         )
+    
+    # Проверяем кеш перед запросом к AI
+    cache_key = get_cache_key(requirements_text)
+    if use_cache and redis_client:
+        try:
+            cached_result = redis_client.get(cache_key)
+            if cached_result:
+                logger.info("Using cached AI response")
+                return json.loads(cached_result)
+        except Exception as e:
+            logger.warning(f"Redis cache read failed: {e}")
     
     system_prompt = """You are an expert Product Manager and Business Analyst specializing in User Story Mapping (USM). 
 Your goal is to analyze unstructured product requirements and convert them into a structured User Story Map in JSON format.
@@ -310,7 +482,21 @@ Return ONLY valid JSON in this exact structure:
         response_text = response_text.strip()
         
         try:
-            return json.loads(response_text)
+            result = json.loads(response_text)
+            
+            # Сохранение в кеш Redis (TTL 24 часа)
+            if use_cache and redis_client:
+                try:
+                    redis_client.setex(
+                        cache_key,
+                        86400,  # 24 часа
+                        json.dumps(result)
+                    )
+                    logger.info("Result cached in Redis")
+                except Exception as e:
+                    logger.warning(f"Redis cache write failed: {e}")
+            
+            return result
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON response: {response_text[:200]}")
             raise HTTPException(
@@ -355,8 +541,97 @@ Return ONLY valid JSON in this exact structure:
             detail=f"Unexpected error: {str(e)}"
         )
 
+# --- Health Check Endpoints ---
+@app.get("/health")
+def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+
+@app.get("/ready")
+def readiness_check(db: Session = Depends(get_db)):
+    """Readiness check - проверяет подключение к БД"""
+    try:
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception as e:
+        logger.error(f"Database check failed: {e}")
+        db_status = "error"
+        raise HTTPException(status_code=503, detail="Database not ready")
+    
+    redis_status = "ok" if redis_client and redis_client.ping() else "unavailable"
+    
+    return {
+        "status": "ready" if db_status == "ok" else "not_ready",
+        "database": db_status,
+        "redis": redis_status,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+# --- Authentication Endpoints ---
+@app.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
+def register(user_data: UserCreate, request: Request, db: Session = Depends(get_db)):
+    """Регистрация нового пользователя"""
+    # Проверка существования пользователя
+    db_user = get_user_by_email(db, email=user_data.email)
+    if db_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Создание пользователя
+    hashed_password = get_password_hash(user_data.password)
+    db_user = User(
+        email=user_data.email,
+        hashed_password=hashed_password,
+        full_name=user_data.full_name
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    
+    return UserResponse(
+        id=db_user.id,
+        email=db_user.email,
+        full_name=db_user.full_name,
+        is_active=db_user.is_active,
+        created_at=db_user.created_at
+    )
+
+@app.post("/token", response_model=Token)
+@limiter.limit("10/minute")
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """Логин и получение JWT токена"""
+    user = authenticate_user(db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(user.id)}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/me", response_model=UserResponse)
+def read_users_me(current_user: User = Depends(get_current_active_user)):
+    """Получение информации о текущем пользователе"""
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        is_active=current_user.is_active,
+        created_at=current_user.created_at
+    )
+
+# --- Project Endpoints ---
 @app.post("/generate-map")
-def generate_map(req: RequirementsInput, db: Session = Depends(get_db)):
+@limiter.limit("10/hour")
+def generate_map(req: RequirementsInput, request: Request, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     """Генерирует карту пользовательских историй из текста требований"""
     
     # Валидация входных данных
@@ -372,8 +647,12 @@ def generate_map(req: RequirementsInput, db: Session = Depends(get_db)):
         logger.error(f"Unexpected error in generate_map: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate map")
     
-    # 2. Создаем проект
-    project = Project(name=ai_data.get("productName", "New Project"), raw_requirements=req.text)
+    # 2. Создаем проект (привязываем к текущему пользователю)
+    project = Project(
+        name=ai_data.get("productName", "New Project"),
+        raw_requirements=req.text,
+        user_id=current_user.id
+    )
     db.add(project)
     db.flush()
     
@@ -430,7 +709,7 @@ def generate_map(req: RequirementsInput, db: Session = Depends(get_db)):
     return {"status": "success", "project_id": project.id, "project_name": project.name}
 
 @app.get("/project/{project_id}", response_model=ProjectResponse)
-def get_project(project_id: int, db: Session = Depends(get_db)):
+def get_project(project_id: int, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     """Возвращает полную структуру проекта для отрисовки на фронтенде"""
     # Исправление N+1 проблемы через eager loading
     project = db.query(Project)\
@@ -441,6 +720,7 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
             joinedload(Project.releases)
         )\
         .filter(Project.id == project_id)\
+        .filter(Project.user_id == current_user.id)\
         .first()
     
     if not project:
@@ -493,24 +773,50 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
     )
 
 @app.get("/projects")
-def list_projects(db: Session = Depends(get_db)):
-    """Возвращает список всех проектов"""
-    projects = db.query(Project).all()
-    return [{"id": p.id, "name": p.name, "created_at": str(p.id)} for p in projects]
+def list_projects(
+    skip: int = 0,
+    limit: int = 100,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Возвращает список проектов пользователя с пагинацией"""
+    projects = db.query(Project)\
+        .filter(Project.user_id == current_user.id)\
+        .order_by(Project.created_at.desc())\
+        .offset(skip)\
+        .limit(limit)\
+        .all()
+    total = db.query(Project).filter(Project.user_id == current_user.id).count()
+    return {
+        "items": [{"id": p.id, "name": p.name, "created_at": p.created_at.isoformat()} for p in projects],
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
 
 @app.post("/story", response_model=StoryResponse)
-def create_story(story: StoryCreate, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+def create_story(story: StoryCreate, request: Request, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     """Создает новую пользовательскую историю"""
-    # Проверяем существование task
-    task = db.query(UserTask).filter(UserTask.id == story.task_id).first()
+    # Проверяем существование task и владельца проекта
+    task = db.query(UserTask)\
+        .join(Activity)\
+        .join(Project)\
+        .filter(UserTask.id == story.task_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Task not found or access denied")
     
-    # Если release_id указан, проверяем его существование
+    # Если release_id указан, проверяем его существование и владельца
     if story.release_id:
-        release = db.query(Release).filter(Release.id == story.release_id).first()
+        release = db.query(Release)\
+            .join(Project)\
+            .filter(Release.id == story.release_id)\
+            .filter(Project.user_id == current_user.id)\
+            .first()
         if not release:
-            raise HTTPException(status_code=404, detail="Release not found")
+            raise HTTPException(status_code=404, detail="Release not found or access denied")
     
     # Определяем позицию (в конец списка)
     max_position = db.query(UserStory)\
@@ -543,11 +849,19 @@ def create_story(story: StoryCreate, db: Session = Depends(get_db)):
     )
 
 @app.put("/story/{story_id}", response_model=StoryResponse)
-def update_story(story_id: int, story_update: StoryUpdate, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+def update_story(story_id: int, story_update: StoryUpdate, request: Request, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     """Обновляет существующую пользовательскую историю"""
-    story = db.query(UserStory).filter(UserStory.id == story_id).first()
+    # Проверяем владельца проекта
+    story = db.query(UserStory)\
+        .join(UserTask)\
+        .join(Activity)\
+        .join(Project)\
+        .filter(UserStory.id == story_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
     if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
+        raise HTTPException(status_code=404, detail="Story not found or access denied")
     
     # Обновляем только переданные поля
     if story_update.title is not None:
@@ -580,11 +894,19 @@ def update_story(story_id: int, story_update: StoryUpdate, db: Session = Depends
     )
 
 @app.delete("/story/{story_id}")
-def delete_story(story_id: int, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+def delete_story(story_id: int, request: Request, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     """Удаляет пользовательскую историю"""
-    story = db.query(UserStory).filter(UserStory.id == story_id).first()
+    # Проверяем владельца проекта
+    story = db.query(UserStory)\
+        .join(UserTask)\
+        .join(Activity)\
+        .join(Project)\
+        .filter(UserStory.id == story_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
     if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
+        raise HTTPException(status_code=404, detail="Story not found or access denied")
     
     task_id = story.task_id
     release_id = story.release_id
@@ -608,16 +930,29 @@ def delete_story(story_id: int, db: Session = Depends(get_db)):
     return {"status": "success", "message": "Story deleted"}
 
 @app.patch("/story/{story_id}/move")
-def move_story(story_id: int, move: StoryMove, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+def move_story(story_id: int, move: StoryMove, request: Request, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     """Перемещает пользовательскую историю в другую ячейку"""
-    story = db.query(UserStory).filter(UserStory.id == story_id).first()
+    # Проверяем владельца проекта для исходной истории
+    story = db.query(UserStory)\
+        .join(UserTask)\
+        .join(Activity)\
+        .join(Project)\
+        .filter(UserStory.id == story_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
     if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
+        raise HTTPException(status_code=404, detail="Story not found or access denied")
     
-    # Проверяем существование task
-    task = db.query(UserTask).filter(UserTask.id == move.task_id).first()
+    # Проверяем существование task и владельца для целевой ячейки
+    task = db.query(UserTask)\
+        .join(Activity)\
+        .join(Project)\
+        .filter(UserTask.id == move.task_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Task not found or access denied")
     
     # Если release_id указан, проверяем его существование
     if move.release_id:
