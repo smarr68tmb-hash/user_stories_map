@@ -74,15 +74,63 @@ def test_login(email, password):
             headers={"Content-Type": "application/x-www-form-urlencoded"}
         )
         if response.status_code == 200:
-            token = response.json()["access_token"]
-            print("✅ Логин успешен, получен токен")
-            return token
+            data = response.json()
+            token = data.get("access_token")
+            refresh_token = data.get("refresh_token")
+            print(f"✅ Логин успешен, получены токены: access и {'refresh' if refresh_token else 'NO refresh'}")
+            return token, refresh_token
         else:
             print(f"❌ Ошибка логина: {response.status_code} - {response.text}")
-            return None
+            return None, None
     except Exception as e:
         print(f"❌ Ошибка при логине: {e}")
-        return None
+        return None, None
+
+def test_refresh(access_token, refresh_token):
+    """Тест обновления токена"""
+    print("\n🔍 Тестирование обновления токена...")
+    if not refresh_token:
+        print("⚠️ Нет refresh токена для теста")
+        return None, None
+        
+    try:
+        response = requests.post(
+            f"{API_URL}/refresh",
+            json={"refresh_token": refresh_token},
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        if response.status_code == 200:
+            data = response.json()
+            print(f"✅ Токен обновлен успешно")
+            return data.get("access_token"), data.get("refresh_token")
+        else:
+            print(f"❌ Ошибка обновления токена: {response.status_code} - {response.text}")
+            return None, None
+    except Exception as e:
+        print(f"❌ Ошибка при обновлении токена: {e}")
+        return None, None
+
+def test_logout(refresh_token):
+    """Тест выхода (отзыва токена)"""
+    print("\n🔍 Тестирование выхода...")
+    if not refresh_token:
+        print("⚠️ Нет refresh токена для теста")
+        return False
+        
+    try:
+        response = requests.post(
+            f"{API_URL}/logout",
+            json={"refresh_token": refresh_token}
+        )
+        if response.status_code == 200:
+            print(f"✅ Выход успешен")
+            return True
+        else:
+            print(f"❌ Ошибка выхода: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        print(f"❌ Ошибка при выходе: {e}")
+        return False
 
 def test_me(token):
     """Тест получения информации о пользователе"""
@@ -159,7 +207,7 @@ def main():
         sys.exit(1)
     
     # Тест 4: Логин
-    token = test_login(email, password)
+    token, refresh_token = test_login(email, password)
     results.append(("Логин", token is not None))
     
     if not token:
@@ -174,6 +222,13 @@ def main():
     
     # Тест 7: Получение проектов
     results.append(("Получение списка проектов", test_projects(token)))
+    
+    # Тест 8: Обновление токена
+    new_access, new_refresh = test_refresh(token, refresh_token)
+    results.append(("Обновление токена", new_access is not None))
+    
+    # Тест 9: Выход
+    results.append(("Выход", test_logout(new_refresh if new_refresh else refresh_token)))
     
     # Итоги
     print("\n" + "=" * 60)

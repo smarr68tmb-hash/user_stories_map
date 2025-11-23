@@ -70,6 +70,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+JWT_REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
 # CORS настройки - безопасные по умолчанию
 ALLOWED_ORIGINS: List[str] = os.getenv(
@@ -149,6 +150,18 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token = Column(String, unique=True, index=True, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    revoked = Column(Boolean, default=False)
+    
+    user = relationship("User", back_populates="refresh_tokens")
 
 class Project(Base):
     __tablename__ = "projects"
@@ -230,7 +243,11 @@ class UserResponse(BaseModel):
 
 class Token(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str
+
+class TokenRefreshRequest(BaseModel):
+    refresh_token: str
 
 class TokenData(BaseModel):
     user_id: Optional[int] = None
@@ -317,6 +334,26 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     return encoded_jwt
+
+def create_refresh_token(user_id: int, db: Session) -> str:
+    """Создает refresh токен и сохраняет его в БД"""
+    expires_delta = timedelta(days=JWT_REFRESH_TOKEN_EXPIRE_DAYS)
+    expire = datetime.utcnow() + expires_delta
+    
+    # Генерируем случайный токен (можно использовать JWT, но random string безопаснее для revoke)
+    import secrets
+    token_str = secrets.token_urlsafe(64)
+    
+    refresh_token = RefreshToken(
+        user_id=user_id,
+        token=token_str,
+        expires_at=expire
+    )
+    db.add(refresh_token)
+    db.commit()
+    db.refresh(refresh_token)
+    
+    return token_str
 
 def get_user_by_email(db: Session, email: str):
     return db.query(User).filter(User.email == email).first()
@@ -615,7 +652,49 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
     access_token = create_access_token(
         data={"sub": str(user.id)}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    
+    refresh_token = create_refresh_token(user.id, db)
+    
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+@app.post("/refresh", response_model=Token)
+@limiter.limit("10/minute")
+def refresh_token_endpoint(request: Request, token_data: TokenRefreshRequest, db: Session = Depends(get_db)):
+    """Обновление access токена с помощью refresh токена"""
+    refresh_token = db.query(RefreshToken).filter(RefreshToken.token == token_data.refresh_token).first()
+    
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+        
+    if refresh_token.revoked:
+        # Возможно, попытка повторного использования - стоит бить тревогу
+        raise HTTPException(status_code=401, detail="Token revoked")
+        
+    if refresh_token.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Token expired")
+        
+    # Генерируем новый access token
+    access_token_expires = timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(refresh_token.user_id)}, expires_delta=access_token_expires
+    )
+    
+    # Ротация refresh токена (удаляем старый, создаем новый)
+    refresh_token.revoked = True
+    new_refresh_token = create_refresh_token(refresh_token.user_id, db)
+    
+    db.commit()
+    
+    return {"access_token": access_token, "refresh_token": new_refresh_token, "token_type": "bearer"}
+
+@app.post("/logout")
+def logout(token_data: TokenRefreshRequest, db: Session = Depends(get_db)):
+    """Отзыв refresh токена"""
+    refresh_token = db.query(RefreshToken).filter(RefreshToken.token == token_data.refresh_token).first()
+    if refresh_token:
+        refresh_token.revoked = True
+        db.commit()
+    return {"message": "Logged out successfully"}
 
 @app.get("/me", response_model=UserResponse)
 def read_users_me(current_user: User = Depends(get_current_active_user)):
