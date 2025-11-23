@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = "http://127.0.0.1:8000";
+// Используем переменную окружения для production, fallback на localhost для разработки
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 const api = axios.create({
   baseURL: API_URL,

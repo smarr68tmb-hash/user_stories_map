@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import api from './api';
 import {
   DndContext,
   closestCenter,
@@ -17,23 +17,13 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// Настройка axios для автоматического добавления токена
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('auth_token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
-const API_URL = "http://127.0.0.1:8000";
-
-// Функция для обработки ошибок с проверкой 401
+// Функция для обработки ошибок (упрощенная, так как api.js уже обрабатывает 401)
 const handleApiError = (error, onUnauthorized) => {
+  // api.js уже обработал 401 и попытался обновить токен
+  // Если мы здесь, значит токен не удалось обновить или другая ошибка
   if (error.response?.status === 401) {
-    // Токен истек или невалиден
-    localStorage.removeItem('auth_token');
     if (onUnauthorized) {
       onUnauthorized();
-    } else {
-      window.location.reload();
     }
     return 'Сессия истекла. Пожалуйста, войдите снова.';
   }
@@ -102,13 +92,13 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
 
   const moveStory = async (storyId, taskId, releaseId, position) => {
     try {
-      await axios.patch(`${API_URL}/story/${storyId}/move`, {
+      await api.patch(`/story/${storyId}/move`, {
         task_id: taskId,
         release_id: releaseId,
         position: position
-      }, { headers: getAuthHeaders() });
+      });
       // Обновляем проект
-      const res = await axios.get(`${API_URL}/project/${project.id}`, { headers: getAuthHeaders() });
+      const res = await api.get(`/project/${project.id}`);
       onUpdate(res.data);
     } catch (error) {
       console.error('Error moving story:', error);
@@ -121,13 +111,13 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     if (!newStoryTitle.trim()) return;
 
     try {
-      await axios.post(`${API_URL}/story`, {
+      await api.post('/story', {
         task_id: taskId,
         release_id: releaseId,
         title: newStoryTitle,
         description: newStoryDescription,
         priority: newStoryPriority
-      }, { headers: getAuthHeaders() });
+      });
       
       setNewStoryTitle('');
       setNewStoryDescription('');
@@ -135,7 +125,7 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
       setAddingToCell(null);
       
       // Обновляем проект
-      const res = await axios.get(`${API_URL}/project/${project.id}`, { headers: getAuthHeaders() });
+      const res = await api.get(`/project/${project.id}`);
       onUpdate(res.data);
     } catch (error) {
       console.error('Error adding story:', error);
@@ -146,12 +136,12 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
 
   const handleUpdateStory = async (storyId, updates) => {
     try {
-      await axios.put(`${API_URL}/story/${storyId}`, updates, { headers: getAuthHeaders() });
+      await api.put(`/story/${storyId}`, updates);
       
       setEditingStory(null);
       
       // Обновляем проект
-      const res = await axios.get(`${API_URL}/project/${project.id}`, { headers: getAuthHeaders() });
+      const res = await api.get(`/project/${project.id}`);
       onUpdate(res.data);
     } catch (error) {
       console.error('Error updating story:', error);
@@ -164,10 +154,10 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     if (!confirm('Удалить эту карточку?')) return;
 
     try {
-      await axios.delete(`${API_URL}/story/${storyId}`, { headers: getAuthHeaders() });
+      await api.delete(`/story/${storyId}`);
       
       // Обновляем проект
-      const res = await axios.get(`${API_URL}/project/${project.id}`, { headers: getAuthHeaders() });
+      const res = await api.get(`/project/${project.id}`);
       onUpdate(res.data);
     } catch (error) {
       console.error('Error deleting story:', error);
