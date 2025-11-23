@@ -62,10 +62,34 @@ else:
 
 # Поддержка как OpenAI, так и Perplexity API
 API_KEY = os.getenv("OPENAI_API_KEY", "") or os.getenv("PERPLEXITY_API_KEY", "")
-API_PROVIDER = os.getenv("API_PROVIDER", "openai")  # "openai" или "perplexity"
-API_MODEL = os.getenv("API_MODEL", "gpt-4o" if API_PROVIDER == "openai" else "sonar")
+
+# Определяем провайдера: сначала проверяем переменную, потом по формату ключа
+API_PROVIDER = os.getenv("API_PROVIDER", "")
+if not API_PROVIDER:
+    if API_KEY.startswith("pplx-"):
+        API_PROVIDER = "perplexity"
+    elif API_KEY.startswith("sk-"):
+        API_PROVIDER = "openai"
+    else:
+        API_PROVIDER = "openai"  # По умолчанию
+
+# Устанавливаем модель по умолчанию в зависимости от провайдера
+# Актуальные модели Perplexity (2025): sonar, sonar-pro, sonar-reasoning, llama-3.1-sonar-large-128k-online
+if API_PROVIDER == "perplexity":
+    DEFAULT_MODEL = "sonar"  # Базовая модель Perplexity, всегда доступна
+else:
+    DEFAULT_MODEL = "gpt-4o"  # OpenAI по умолчанию
+
+API_MODEL = os.getenv("API_MODEL", DEFAULT_MODEL)
 API_TEMPERATURE = float(os.getenv("API_TEMPERATURE", os.getenv("OPENAI_TEMPERATURE", "0.7")))
+# DATABASE_URL должен быть установлен в production (Supabase PostgreSQL)
+# Если не установлен, используем SQLite только для локальной разработки
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./usm.db")
+
+# Предупреждение, если используется SQLite в production-подобной среде
+if DATABASE_URL.startswith("sqlite"):
+    logger.warning("⚠️ SQLite используется! Для production установите DATABASE_URL на PostgreSQL (Supabase).")
+
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
