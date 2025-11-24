@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import api, { auth } from './api';
 import StoryMap from './StoryMap.jsx';
 import Auth from './Auth.jsx';
@@ -29,10 +29,14 @@ function App() {
           // Если не удалось получить пользователя - разлогиниваем
           // Интерцептор уже обработал обновление токена, если это было возможно
           // Если мы здесь, значит токен невалиден
-          handleLogout();
+          auth.logout();
+          setToken(null);
+          setUser(null);
+          setProject(null);
+          setInput('');
         });
     }
-  }, [token, handleLogout]);
+  }, [token]);
   
   // Автосохранение черновика
   useEffect(() => {
@@ -79,13 +83,13 @@ function App() {
     }
   };
 
-  const handleLogout = useCallback(async () => {
+  const handleLogout = async () => {
     await auth.logout();
     setToken(null);
     setUser(null);
     setProject(null);
     setInput('');
-  }, []);
+  };
 
   // 1. Отправка требований
   const handleGenerate = async () => {
