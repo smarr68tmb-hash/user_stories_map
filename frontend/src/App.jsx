@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api, { auth } from './api';
 import StoryMap from './StoryMap.jsx';
 import Auth from './Auth.jsx';
@@ -32,7 +32,7 @@ function App() {
           handleLogout();
         });
     }
-  }, [token]);
+  }, [token, handleLogout]);
   
   // Автосохранение черновика
   useEffect(() => {
@@ -79,13 +79,13 @@ function App() {
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await auth.logout();
     setToken(null);
     setUser(null);
     setProject(null);
     setInput('');
-  };
+  }, []);
 
   // 1. Отправка требований
   const handleGenerate = async () => {

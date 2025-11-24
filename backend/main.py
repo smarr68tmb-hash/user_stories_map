@@ -461,42 +461,45 @@ def generate_ai_map(requirements_text: str, use_cache: bool = True) -> dict:
         except Exception as e:
             logger.warning(f"Redis cache read failed: {e}")
     
-    system_prompt = """You are an expert Product Manager and Business Analyst specializing in User Story Mapping (USM). 
-Your goal is to analyze unstructured product requirements and convert them into a structured User Story Map in JSON format.
+    system_prompt = """Ты — эксперт Product Manager и Business Analyst, специализирующийся на User Story Mapping (USM). 
+Твоя задача — анализировать неструктурированные требования к продукту и преобразовывать их в структурированную User Story Map в формате JSON.
 
-Strictly follow this JSON structure for the output. Do not add any conversational text, only the JSON object."""
+ВАЖНО: Все тексты должны быть на РУССКОМ языке.
+Строго следуй структуре JSON для вывода. Не добавляй никакого разговорного текста, только JSON объект."""
 
-    user_prompt = f"""Analyze the following product requirements provided within the triple quotes:
+    user_prompt = f"""Проанализируй следующие требования к продукту, указанные в тройных кавычках:
 
 \"\"\"
 {requirements_text}
 \"\"\"
 
-Your task is to:
-1. Identify the main User Personas.
-2. Create a "Backbone" of the map consisting of high-level "Activities" (User Goals) and sequential "User Tasks" (Steps to achieve goals).
-3. Break down each User Task into specific "User Stories".
-4. Assign a priority to each story: "MVP", "Release 1", or "Later".
-5. Generate basic Acceptance Criteria (AC) for each story.
+Твоя задача:
+1. Определить основные User Personas (роли пользователей).
+2. Создать "Backbone" (основу) карты, состоящую из высокоуровневых "Activities" (Активностей/Целей пользователя) и последовательных "User Tasks" (Шагов для достижения целей).
+3. Разбить каждую User Task на конкретные "User Stories" (Пользовательские истории).
+4. Назначить приоритет каждой истории: "MVP", "Release 1" или "Later".
+5. Сгенерировать базовые Acceptance Criteria (Критерии приемки) для каждой истории.
 
-Return ONLY valid JSON in this exact structure:
+ВАЖНО: Все названия, описания и критерии должны быть на РУССКОМ языке.
+
+Верни ТОЛЬКО валидный JSON в точно такой структуре:
 {{
-  "productName": "Suggested product name",
-  "personas": ["List of personas identified"],
+  "productName": "Предложенное название продукта",
+  "personas": ["Список выявленных персон"],
   "map": [
     {{
-      "activity": "High-level activity (e.g., Account Management)",
+      "activity": "Высокоуровневая активность (например, Управление аккаунтом)",
       "tasks": [
         {{
-          "taskTitle": "Specific user step (e.g., Sign Up)",
+          "taskTitle": "Конкретный шаг пользователя (например, Регистрация)",
           "stories": [
             {{
-              "title": "User story title (e.g., Sign up via Email)",
-              "description": "As a [persona], I want to..., so that...",
+              "title": "Название пользовательской истории (например, Регистрация через Email)",
+              "description": "Как [персона], я хочу..., чтобы...",
               "priority": "MVP",
               "acceptanceCriteria": [
-                "Criterion 1",
-                "Criterion 2"
+                "Критерий 1",
+                "Критерий 2"
               ]
             }}
           ]
