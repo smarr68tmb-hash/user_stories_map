@@ -2,25 +2,43 @@
 
 ## [Unreleased]
 
-### Добавлено (Added) - 2025-11-23
-- **Русский язык**: AI теперь генерирует карты на русском языке
+## [1.1.0] - 2025-11-24 - Production Deployment
+
+### Добавлено (Added)
+- **Production Deployment**: Приложение развёрнуто на Render.com + Supabase
+  - Backend: https://user-stories-map.onrender.com
+  - Frontend: https://user-stories-map-ab.onrender.com
+  - База данных: Supabase PostgreSQL (персистентная)
 - **Архитектурная документация**: Добавлен файл `ARCHITECTURE.md` с PlantUML диаграммами
   - Общая архитектура системы
   - Модель данных
-  - Поток аутентификации
+  - Поток аутентификации с Refresh Tokens
   - Поток генерации User Story Map
   - Компонентная архитектура Frontend
   - Последовательность Drag & Drop
   - Rate Limiting и Безопасность
+  - Deployment Architecture (Render + Supabase)
+- **Русский язык**: AI теперь генерирует карты на русском языке
+- **Environment Variables**: Полная конфигурация через переменные окружения
+  - `DATABASE_URL` для подключения к Supabase
+  - `VITE_API_URL` для связи фронтенда с бэкендом
+  - `ALLOWED_ORIGINS` для CORS безопасности
 
-### Изменено (Changed) - 2025-11-23
+### Изменено (Changed)
 - **AI промпт**: Обновлен для генерации контента на русском языке
 - **Perplexity модель**: Автоматический выбор модели `sonar` для Perplexity API
 - **Определение провайдера**: Улучшена логика автоопределения OpenAI/Perplexity по формату ключа
+- **Frontend API**: Использует `import.meta.env.VITE_API_URL` для production
+- **Docker**: Обновлены Dockerfile для production деплоя
 
-### Исправлено (Fixed) - 2025-11-23
+### Исправлено (Fixed)
+- **DATABASE_URL опечатка**: Исправлена критическая опечатка `DATABASE_UR` → `DATABASE_URL` в Render Environment
+- **ReferenceError в App.jsx**: Убран `useCallback` из `handleLogout`, вызывавший ошибку инициализации
+  - Встроена логика logout в `useEffect` для избежания циклической зависимости
+  - Удален неиспользуемый импорт `useCallback`
 - **База данных**: Добавлено предупреждение при использовании SQLite в production
 - **Автоопределение провайдера**: Исправлена логика определения OpenAI/Perplexity по ключу
+- **Белый экран**: Исправлена критическая ошибка, блокировавшая загрузку UI
 
 ## [1.0.0] - 2025-11-23 - Фаза 1: Безопасность и Инфраструктура
 
