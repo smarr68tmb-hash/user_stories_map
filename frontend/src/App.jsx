@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api, { auth } from './api';
 import StoryMap from './StoryMap.jsx';
 import Auth from './Auth.jsx';
+import ProjectList from './ProjectList.jsx';
 
 const MAX_CHARS = 10000;
 const MIN_CHARS = 10;
@@ -18,6 +19,7 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
+  const [view, setView] = useState('list'); // 'list' или 'create'
   
   // Проверка токена при загрузке
   useEffect(() => {
@@ -89,6 +91,7 @@ function App() {
     setUser(null);
     setProject(null);
     setInput('');
+    setView('list');
   };
 
   // 1. Отправка требований
@@ -146,17 +149,96 @@ function App() {
     }
   };
 
+  const handleSelectProject = (projectData) => {
+    setProject(projectData);
+  };
+
+  const handleCreateNew = () => {
+    setView('create');
+    setProject(null);
+    setInput('');
+    setError(null);
+  };
+
+  const handleBackToList = () => {
+    setView('list');
+    setProject(null);
+    setInput('');
+    setError(null);
+    localStorage.removeItem('draft_requirements');
+  };
+
   // Если не авторизован, показываем форму входа
   if (!token || !user) {
     return <Auth onLogin={handleLogin} />;
   }
 
-  if (!project) {
+  // Если есть выбранный проект, показываем карту
+  if (project) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="min-h-screen p-4 md:p-8 overflow-x-auto bg-gray-50">
+        <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">{project.name}</h1>
+            <p className="text-sm text-gray-600 mt-1">User Story Map</p>
+            {user && (
+              <p className="text-xs text-gray-500 mt-1">
+                Пользователь: {user.email} {user.full_name && `(${user.full_name})`}
+              </p>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <button 
+              onClick={handleBackToList}
+              className="text-blue-600 hover:underline font-medium"
+              aria-label="Вернуться к списку проектов"
+            >
+              ← К списку проектов
+            </button>
+            <button
+              onClick={handleLogout}
+              className="text-gray-600 hover:text-gray-800 font-medium"
+            >
+              Выйти
+            </button>
+          </div>
+        </div>
+        
+        {/* Компонент Карты */}
+        <StoryMap project={project} onUpdate={setProject} onUnauthorized={handleLogout} />
+      </div>
+    );
+  }
+
+  // Если нет проекта и view === 'list', показываем список проектов
+  if (view === 'list') {
+    return (
+      <ProjectList
+        onSelectProject={handleSelectProject}
+        onCreateNew={handleCreateNew}
+        onLogout={handleLogout}
+        user={user}
+      />
+    );
+  }
+
+  // Если view === 'create', показываем форму создания нового проекта
+  if (view === 'create') {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
         <div className="bg-white p-8 rounded-xl shadow-lg max-w-2xl w-full">
-          <h1 className="text-3xl font-bold mb-2 text-gray-800">AI User Story Mapper</h1>
-          <p className="text-gray-600 mb-6">Превратите ваши требования в структурированную карту пользовательских историй</p>
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <h1 className="text-3xl font-bold mb-2 text-gray-800">Создать новый проект</h1>
+              <p className="text-gray-600">Превратите ваши требования в структурированную карту пользовательских историй</p>
+            </div>
+            <button
+              onClick={handleBackToList}
+              className="text-gray-500 hover:text-gray-700 text-sm font-medium"
+            >
+              ✕
+            </button>
+          </div>
           
           <div className="mb-2">
             <textarea
@@ -218,10 +300,17 @@ function App() {
           <button
             onClick={handleGenerate}
             disabled={loading || !isValidInput || !input.trim()}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed mb-3"
             aria-label="Сгенерировать карту пользовательских историй"
           >
             {loading ? "Генерация карты..." : "Сгенерировать карту"}
+          </button>
+          
+          <button
+            onClick={handleBackToList}
+            className="w-full text-gray-600 hover:text-gray-800 py-2 rounded-lg font-medium border border-gray-300 hover:border-gray-400 transition"
+          >
+            ← Назад к списку проектов
           </button>
           
           <p className="mt-4 text-xs text-gray-500 text-center">
@@ -232,45 +321,8 @@ function App() {
     );
   }
 
-  return (
-    <div className="min-h-screen p-4 md:p-8 overflow-x-auto bg-gray-50">
-      <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">{project.name}</h1>
-          <p className="text-sm text-gray-600 mt-1">User Story Map</p>
-          {user && (
-            <p className="text-xs text-gray-500 mt-1">
-              Пользователь: {user.email} {user.full_name && `(${user.full_name})`}
-            </p>
-          )}
-        </div>
-        <div className="flex gap-3">
-          <button 
-            onClick={() => {
-              setProject(null);
-              setInput('');
-              setError(null);
-              setProgress(0);
-              localStorage.removeItem('draft_requirements');
-            }} 
-            className="text-blue-600 hover:underline font-medium"
-            aria-label="Создать новую карту"
-          >
-            ← Создать новую карту
-          </button>
-          <button
-            onClick={handleLogout}
-            className="text-gray-600 hover:text-gray-800 font-medium"
-          >
-            Выйти
-          </button>
-        </div>
-      </div>
-      
-      {/* Компонент Карты */}
-      <StoryMap project={project} onUpdate={setProject} onUnauthorized={handleLogout} />
-    </div>
-  );
+  // По умолчанию возвращаемся к списку (не должно быть достигнуто)
+  return null;
 }
 
 export default App;
