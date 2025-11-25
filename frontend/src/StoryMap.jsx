@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from './api';
+import AIAssistant from './AIAssistant';
 import {
   DndContext,
   closestCenter,
@@ -49,9 +50,17 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
   const [newStoryTitle, setNewStoryTitle] = useState('');
   const [newStoryDescription, setNewStoryDescription] = useState('');
   const [newStoryPriority, setNewStoryPriority] = useState('MVP');
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
+  const [aiAssistantStory, setAiAssistantStory] = useState(null);
+  const [aiAssistantTaskId, setAiAssistantTaskId] = useState(null);
+  const [aiAssistantReleaseId, setAiAssistantReleaseId] = useState(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Минимальное расстояние перемещения для активации
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -166,6 +175,30 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     }
   };
 
+  const handleOpenAIAssistant = (story, taskId, releaseId) => {
+    setAiAssistantStory(story);
+    setAiAssistantTaskId(taskId);
+    setAiAssistantReleaseId(releaseId);
+    setAiAssistantOpen(true);
+  };
+
+  const handleCloseAIAssistant = () => {
+    setAiAssistantOpen(false);
+    setAiAssistantStory(null);
+    setAiAssistantTaskId(null);
+    setAiAssistantReleaseId(null);
+  };
+
+  const handleStoryImproved = async () => {
+    // Обновляем проект после улучшения истории
+    try {
+      const res = await api.get(`/project/${project.id}`);
+      onUpdate(res.data);
+    } catch (error) {
+      console.error('Error refreshing project:', error);
+    }
+  };
+
   return (
     <DndContext
       sensors={sensors}
@@ -241,6 +274,7 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
                             onSave={(updates) => handleUpdateStory(story.id, updates)}
                             onCancel={() => setEditingStory(null)}
                             onDelete={() => handleDeleteStory(story.id)}
+                            onOpenAI={() => handleOpenAIAssistant(story, task.id, release.id)}
                           />
                         ))}
                         
@@ -306,11 +340,23 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
           ))}
         </div>
       </div>
+
+      {/* AI Assistant Modal */}
+      {aiAssistantOpen && aiAssistantStory && (
+        <AIAssistant
+          story={aiAssistantStory}
+          taskId={aiAssistantTaskId}
+          releaseId={aiAssistantReleaseId}
+          isOpen={aiAssistantOpen}
+          onClose={handleCloseAIAssistant}
+          onStoryImproved={handleStoryImproved}
+        />
+      )}
     </DndContext>
   );
 }
 
-function StoryCard({ story, taskId, releaseId, isEditing, onEdit, onSave, onCancel, onDelete }) {
+function StoryCard({ story, taskId, releaseId, isEditing, onEdit, onSave, onCancel, onDelete, onOpenAI }) {
   const [editTitle, setEditTitle] = useState(story.title);
   const [editDescription, setEditDescription] = useState(story.description || '');
   const [editPriority, setEditPriority] = useState(story.priority || 'MVP');
@@ -331,6 +377,7 @@ function StoryCard({ story, taskId, releaseId, isEditing, onEdit, onSave, onCanc
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
+    cursor: isDragging ? 'grabbing' : 'default',
   };
 
   if (isEditing) {
@@ -399,11 +446,21 @@ function StoryCard({ story, taskId, releaseId, isEditing, onEdit, onSave, onCanc
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className="bg-yellow-200 p-3 rounded shadow-sm hover:shadow-md transition cursor-move text-sm border border-yellow-300 group"
+      className="bg-yellow-200 p-3 rounded shadow-sm hover:shadow-md transition text-sm border border-yellow-300 group relative"
     >
-      <div className="font-medium mb-1 text-gray-800">{story.title}</div>
+      {/* Drag Handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="absolute top-2 right-2 cursor-grab active:cursor-grabbing p-1 hover:bg-yellow-300 rounded opacity-50 hover:opacity-100 transition"
+        title="Перетащить карточку"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-700" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+        </svg>
+      </div>
+
+      <div className="font-medium mb-1 text-gray-800 pr-6">{story.title}</div>
       {story.description && (
         <div className="text-xs text-gray-600 line-clamp-2 mb-2">{story.description}</div>
       )}
@@ -419,15 +476,29 @@ function StoryCard({ story, taskId, releaseId, isEditing, onEdit, onSave, onCanc
           </span>
         )}
       </div>
-      <div className="hidden group-hover:flex gap-1 mt-2">
+      <div className="flex gap-1 mt-2">
         <button
           onClick={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             onEdit();
           }}
-          className="text-[10px] bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
+          className="text-[10px] bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 transition cursor-pointer"
+          type="button"
         >
           Редактировать
+        </button>
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onOpenAI();
+          }}
+          className="text-[10px] bg-gradient-to-r from-purple-500 to-blue-500 text-white px-2 py-1 rounded hover:from-purple-600 hover:to-blue-600 transition cursor-pointer"
+          type="button"
+          title="AI Assistant - улучшить карточку"
+        >
+          ✨ AI
         </button>
       </div>
       {story.acceptance_criteria && story.acceptance_criteria.length > 0 && (
