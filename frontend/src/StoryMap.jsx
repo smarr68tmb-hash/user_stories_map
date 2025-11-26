@@ -17,6 +17,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
+import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 
 // Функция для обработки ошибок (упрощенная, так как api.js уже обрабатывает 401)
@@ -76,21 +77,39 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     
     if (!over || active.id === over.id) return;
 
-    const [storyId, sourceTaskId, sourceReleaseId] = active.id.split('-').map(Number);
-    const [targetStoryId, targetTaskId, targetReleaseId] = over.id.split('-').map(Number);
+    // Парсим ID активного элемента (карточки): storyId-taskId-releaseId
+    const activeParts = String(active.id).split('-');
+    const storyId = Number(activeParts[0]);
+    const sourceTaskId = Number(activeParts[1]);
+    const sourceReleaseId = Number(activeParts[2]);
 
-    // Если перетаскиваем на другую карточку, перемещаем в ту же ячейку
-    if (targetStoryId && targetStoryId !== storyId) {
-      const targetStory = findStory(targetTaskId, targetReleaseId, targetStoryId);
-      if (targetStory) {
-        await moveStory(storyId, targetTaskId, targetReleaseId, targetStory.position);
-      }
+    // Проверяем куда бросаем
+    const overId = String(over.id);
+    
+    // Если бросаем на ячейку (cell-taskId-releaseId)
+    if (overId.startsWith('cell-')) {
+      const cellParts = overId.replace('cell-', '').split('-');
+      const targetTaskId = Number(cellParts[0]);
+      const targetReleaseId = Number(cellParts[1]);
+      
+      // Перемещаем в эту ячейку
+      await moveStory(storyId, targetTaskId, targetReleaseId, 0);
       return;
     }
 
-    // Если перетаскиваем в ячейку
-    if (!targetStoryId && targetTaskId && targetReleaseId !== undefined) {
-      await moveStory(storyId, targetTaskId, targetReleaseId, 0);
+    // Если бросаем на другую карточку
+    const overParts = overId.split('-');
+    if (overParts.length === 3) {
+      const targetStoryId = Number(overParts[0]);
+      const targetTaskId = Number(overParts[1]);
+      const targetReleaseId = Number(overParts[2]);
+
+      if (targetStoryId !== storyId) {
+        const targetStory = findStory(targetTaskId, targetReleaseId, targetStoryId);
+        if (targetStory) {
+          await moveStory(storyId, targetTaskId, targetReleaseId, targetStory.position);
+        }
+      }
     }
   };
 
@@ -248,10 +267,11 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
                 const isAdding = addingToCell === cellId;
 
                 return (
-                  <div 
-                    key={`${task.id}-${release.id}`} 
-                    className="w-[220px] flex-shrink-0 p-2 border-r border-dashed border-gray-300 bg-white"
-                    id={cellId}
+                  <DroppableCell
+                    key={`${task.id}-${release.id}`}
+                    cellId={cellId}
+                    taskId={task.id}
+                    releaseId={release.id}
                   >
                     <SortableContext 
                       items={storiesInCell.map(s => `${s.id}-${task.id}-${release.id}`)}
@@ -324,7 +344,7 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
                         )}
                       </div>
                     </SortableContext>
-                  </div>
+                  </DroppableCell>
                 );
               })}
             </div>
@@ -335,6 +355,7 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
       {/* Edit Story Modal */}
       <EditStoryModal
         story={editingStory}
+        releases={project.releases}
         isOpen={!!editingStory}
         onClose={() => setEditingStory(null)}
         onSave={handleUpdateStory}
@@ -353,6 +374,29 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
         />
       )}
     </DndContext>
+  );
+}
+
+// Компонент для droppable ячейки
+function DroppableCell({ cellId, taskId, releaseId, children }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: cellId,
+    data: {
+      type: 'cell',
+      taskId,
+      releaseId,
+    },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`w-[220px] flex-shrink-0 p-2 border-r border-dashed border-gray-300 transition-colors ${
+        isOver ? 'bg-blue-50 border-blue-400' : 'bg-white'
+      }`}
+    >
+      {children}
+    </div>
   );
 }
 

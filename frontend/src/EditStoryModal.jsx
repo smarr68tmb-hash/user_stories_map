@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 
-function EditStoryModal({ story, isOpen, onClose, onSave, onDelete }) {
+function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) {
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
-  const [editPriority, setEditPriority] = useState('MVP');
+  const [editReleaseId, setEditReleaseId] = useState(null);
   const [editAC, setEditAC] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -12,10 +12,13 @@ function EditStoryModal({ story, isOpen, onClose, onSave, onDelete }) {
     if (story && isOpen) {
       setEditTitle(story.title || '');
       setEditDescription(story.description || '');
-      setEditPriority(story.priority || 'MVP');
+      setEditReleaseId(story.release_id);
       setEditAC((story.acceptance_criteria || []).join('\n'));
     }
   }, [story, isOpen]);
+
+  // Получаем название текущего release для отображения
+  const currentRelease = releases?.find(r => r.id === editReleaseId);
 
   const handleSave = async () => {
     if (!editTitle.trim()) return;
@@ -25,7 +28,8 @@ function EditStoryModal({ story, isOpen, onClose, onSave, onDelete }) {
       await onSave({
         title: editTitle.trim(),
         description: editDescription.trim(),
-        priority: editPriority,
+        release_id: editReleaseId,
+        priority: currentRelease?.title || 'Later', // Синхронизируем priority с release
         acceptance_criteria: editAC.split('\n').filter(l => l.trim())
       });
       onClose();
@@ -62,6 +66,24 @@ function EditStoryModal({ story, isOpen, onClose, onSave, onDelete }) {
   }, [isOpen, onClose]);
 
   if (!isOpen || !story) return null;
+
+  // Цвета для release/priority
+  const getReleaseStyle = (releaseTitle, isSelected) => {
+    const baseStyles = 'p-3 rounded-lg border-2 font-medium transition';
+    
+    if (!isSelected) {
+      return `${baseStyles} border-gray-200 bg-white text-gray-600 hover:border-gray-300`;
+    }
+    
+    switch (releaseTitle) {
+      case 'MVP':
+        return `${baseStyles} border-red-500 bg-red-50 text-red-700`;
+      case 'Release 1':
+        return `${baseStyles} border-orange-500 bg-orange-50 text-orange-700`;
+      default:
+        return `${baseStyles} border-gray-500 bg-gray-50 text-gray-700`;
+    }
+  };
 
   return (
     <div 
@@ -118,32 +140,31 @@ function EditStoryModal({ story, isOpen, onClose, onSave, onDelete }) {
             />
           </div>
 
-          {/* Priority */}
+          {/* Release/Priority - теперь выбирает строку куда переместить */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Приоритет
+              Релиз
+              <span className="text-gray-400 font-normal ml-2">(строка на карте)</span>
             </label>
             <div className="grid grid-cols-3 gap-3">
-              {['MVP', 'Release 1', 'Later'].map((priority) => (
+              {releases?.map((release) => (
                 <button
-                  key={priority}
+                  key={release.id}
                   type="button"
-                  onClick={() => setEditPriority(priority)}
+                  onClick={() => setEditReleaseId(release.id)}
                   disabled={saving}
-                  className={`p-3 rounded-lg border-2 font-medium transition ${
-                    editPriority === priority
-                      ? priority === 'MVP'
-                        ? 'border-red-500 bg-red-50 text-red-700'
-                        : priority === 'Release 1'
-                        ? 'border-orange-500 bg-orange-50 text-orange-700'
-                        : 'border-gray-500 bg-gray-50 text-gray-700'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                  }`}
+                  className={getReleaseStyle(release.title, editReleaseId === release.id)}
                 >
-                  {priority}
+                  {release.title}
                 </button>
               ))}
             </div>
+            {editReleaseId !== story.release_id && (
+              <p className="text-xs text-orange-600 mt-2 flex items-center gap-1">
+                <span>⚠️</span>
+                <span>Карточка будет перемещена в строку "{currentRelease?.title}"</span>
+              </p>
+            )}
           </div>
 
           {/* Acceptance Criteria */}
@@ -208,4 +229,3 @@ function EditStoryModal({ story, isOpen, onClose, onSave, onDelete }) {
 }
 
 export default EditStoryModal;
-
