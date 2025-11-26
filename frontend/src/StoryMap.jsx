@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import api from './api';
 import AIAssistant from './AIAssistant';
+import EditStoryModal from './EditStoryModal';
 import {
   DndContext,
   closestCenter,
@@ -143,36 +144,30 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     }
   };
 
-  const handleUpdateStory = async (storyId, updates) => {
-    try {
-      await api.put(`/story/${storyId}`, updates);
-      
-      setEditingStory(null);
-      
-      // Обновляем проект
-      const res = await api.get(`/project/${project.id}`);
-      onUpdate(res.data);
-    } catch (error) {
-      console.error('Error updating story:', error);
-      const errorMsg = handleApiError(error, onUnauthorized);
-      alert(errorMsg);
-    }
+  const handleUpdateStory = async (updates) => {
+    if (!editingStory) return;
+    
+    await api.put(`/story/${editingStory.id}`, updates);
+    
+    // Обновляем проект
+    const res = await api.get(`/project/${project.id}`);
+    onUpdate(res.data);
+    setEditingStory(null);
   };
 
-  const handleDeleteStory = async (storyId) => {
-    if (!confirm('Удалить эту карточку?')) return;
+  const handleDeleteStory = async () => {
+    if (!editingStory) return;
 
-    try {
-      await api.delete(`/story/${storyId}`);
-      
-      // Обновляем проект
-      const res = await api.get(`/project/${project.id}`);
-      onUpdate(res.data);
-    } catch (error) {
-      console.error('Error deleting story:', error);
-      const errorMsg = handleApiError(error, onUnauthorized);
-      alert(errorMsg);
-    }
+    await api.delete(`/story/${editingStory.id}`);
+    
+    // Обновляем проект
+    const res = await api.get(`/project/${project.id}`);
+    onUpdate(res.data);
+    setEditingStory(null);
+  };
+
+  const handleOpenEditModal = (story) => {
+    setEditingStory(story);
   };
 
   const handleOpenAIAssistant = (story, taskId, releaseId) => {
@@ -269,11 +264,7 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
                             story={story}
                             taskId={task.id}
                             releaseId={release.id}
-                            isEditing={editingStory === story.id}
-                            onEdit={() => setEditingStory(story.id)}
-                            onSave={(updates) => handleUpdateStory(story.id, updates)}
-                            onCancel={() => setEditingStory(null)}
-                            onDelete={() => handleDeleteStory(story.id)}
+                            onEdit={() => handleOpenEditModal(story)}
                             onOpenAI={() => handleOpenAIAssistant(story, task.id, release.id)}
                           />
                         ))}
@@ -341,6 +332,15 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
         </div>
       </div>
 
+      {/* Edit Story Modal */}
+      <EditStoryModal
+        story={editingStory}
+        isOpen={!!editingStory}
+        onClose={() => setEditingStory(null)}
+        onSave={handleUpdateStory}
+        onDelete={handleDeleteStory}
+      />
+
       {/* AI Assistant Modal */}
       {aiAssistantOpen && aiAssistantStory && (
         <AIAssistant
@@ -356,12 +356,7 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
   );
 }
 
-function StoryCard({ story, taskId, releaseId, isEditing, onEdit, onSave, onCancel, onDelete, onOpenAI }) {
-  const [editTitle, setEditTitle] = useState(story.title);
-  const [editDescription, setEditDescription] = useState(story.description || '');
-  const [editPriority, setEditPriority] = useState(story.priority || 'MVP');
-  const [editAC, setEditAC] = useState((story.acceptance_criteria || []).join('\n'));
-
+function StoryCard({ story, taskId, releaseId, onEdit, onOpenAI }) {
   const {
     attributes,
     listeners,
@@ -377,146 +372,72 @@ function StoryCard({ story, taskId, releaseId, isEditing, onEdit, onSave, onCanc
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-    cursor: isDragging ? 'grabbing' : 'default',
   };
 
-  if (isEditing) {
-    return (
-      <div className="bg-blue-50 p-3 rounded shadow-sm border border-blue-300">
-        <input
-          type="text"
-          value={editTitle}
-          onChange={(e) => setEditTitle(e.target.value)}
-          className="w-full mb-2 p-2 text-sm border rounded font-medium"
-          autoFocus
-        />
-        <textarea
-          value={editDescription}
-          onChange={(e) => setEditDescription(e.target.value)}
-          className="w-full mb-2 p-2 text-xs border rounded resize-none"
-          rows="2"
-          placeholder="Описание"
-        />
-        <select
-          value={editPriority}
-          onChange={(e) => setEditPriority(e.target.value)}
-          className="w-full mb-2 p-1 text-xs border rounded"
-        >
-          <option value="MVP">MVP</option>
-          <option value="Release 1">Release 1</option>
-          <option value="Later">Later</option>
-        </select>
-        <textarea
-          value={editAC}
-          onChange={(e) => setEditAC(e.target.value)}
-          className="w-full mb-2 p-1 text-xs border rounded resize-none"
-          rows="2"
-          placeholder="Acceptance Criteria (каждая строка - отдельный критерий)"
-        />
-        <div className="flex gap-2">
-          <button
-            onClick={() => onSave({
-              title: editTitle,
-              description: editDescription,
-              priority: editPriority,
-              acceptance_criteria: editAC.split('\n').filter(l => l.trim())
-            })}
-            className="flex-1 bg-blue-600 text-white text-xs py-1 px-2 rounded hover:bg-blue-700"
-          >
-            Сохранить
-          </button>
-          <button
-            onClick={onCancel}
-            className="flex-1 bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded hover:bg-gray-400"
-          >
-            Отмена
-          </button>
-          <button
-            onClick={onDelete}
-            className="bg-red-500 text-white text-xs py-1 px-2 rounded hover:bg-red-600"
-          >
-            Удалить
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Цвет приоритета
+  const priorityColors = {
+    'MVP': 'bg-red-100 text-red-700 border-red-200',
+    'Release 1': 'bg-orange-100 text-orange-700 border-orange-200',
+    'Later': 'bg-gray-100 text-gray-600 border-gray-200',
+  };
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="bg-yellow-200 p-3 rounded shadow-sm hover:shadow-md transition text-sm border border-yellow-300 group relative"
+      className="bg-yellow-100 p-3 rounded-lg shadow-sm hover:shadow-md transition-all text-sm border border-yellow-300 group relative cursor-pointer"
+      onClick={onEdit}
     >
       {/* Drag Handle */}
       <div
         {...attributes}
         {...listeners}
-        className="absolute top-2 right-2 cursor-grab active:cursor-grabbing p-1 hover:bg-yellow-300 rounded opacity-50 hover:opacity-100 transition"
-        title="Перетащить карточку"
+        onClick={(e) => e.stopPropagation()}
+        className="absolute top-2 right-2 cursor-grab active:cursor-grabbing p-1.5 hover:bg-yellow-200 rounded-md opacity-40 hover:opacity-100 transition z-10"
+        title="Перетащить"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-700" viewBox="0 0 20 20" fill="currentColor">
-          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z" />
         </svg>
       </div>
 
-      <div className="font-medium mb-1 text-gray-800 pr-6">{story.title}</div>
+      {/* Title */}
+      <div className="font-medium text-gray-800 pr-7 leading-snug mb-1.5 line-clamp-2">
+        {story.title}
+      </div>
+
+      {/* Description */}
       {story.description && (
         <div className="text-xs text-gray-600 line-clamp-2 mb-2">{story.description}</div>
       )}
-      <div className="flex items-center justify-between mt-2">
+
+      {/* Footer: Priority + AC count */}
+      <div className="flex items-center gap-2 mt-auto pt-1">
         {story.priority && (
-          <span className="text-[10px] uppercase px-2 py-0.5 bg-white/70 rounded font-semibold text-gray-700">
+          <span className={`text-[10px] uppercase px-2 py-0.5 rounded border font-semibold ${priorityColors[story.priority] || priorityColors['Later']}`}>
             {story.priority}
           </span>
         )}
         {story.acceptance_criteria && story.acceptance_criteria.length > 0 && (
-          <span className="text-[10px] text-gray-500">
+          <span className="text-[10px] text-gray-500 bg-white/60 px-1.5 py-0.5 rounded">
             {story.acceptance_criteria.length} AC
           </span>
         )}
-      </div>
-      <div className="flex gap-1 mt-2">
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onEdit();
-          }}
-          className="text-[10px] bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 transition cursor-pointer"
-          type="button"
-        >
-          Редактировать
-        </button>
+        
+        {/* AI Button - показывается при hover */}
         <button
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
             onOpenAI();
           }}
-          className="text-[10px] bg-gradient-to-r from-purple-500 to-blue-500 text-white px-2 py-1 rounded hover:from-purple-600 hover:to-blue-600 transition cursor-pointer"
+          className="ml-auto text-[10px] bg-gradient-to-r from-purple-500 to-blue-500 text-white px-2 py-1 rounded hover:from-purple-600 hover:to-blue-600 transition opacity-0 group-hover:opacity-100"
           type="button"
-          title="AI Assistant - улучшить карточку"
+          title="AI Assistant"
         >
           ✨ AI
         </button>
       </div>
-      {story.acceptance_criteria && story.acceptance_criteria.length > 0 && (
-        <div className="hidden group-hover:block mt-2 pt-2 border-t border-yellow-300">
-          <div className="text-[10px] font-semibold text-gray-700 mb-1">Acceptance Criteria:</div>
-          <ul className="text-[10px] text-gray-600 space-y-1">
-            {story.acceptance_criteria.slice(0, 3).map((ac, idx) => (
-              <li key={idx} className="flex items-start">
-                <span className="mr-1">•</span>
-                <span>{ac}</span>
-              </li>
-            ))}
-            {story.acceptance_criteria.length > 3 && (
-              <li className="text-gray-500">+{story.acceptance_criteria.length - 3} more</li>
-            )}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }
