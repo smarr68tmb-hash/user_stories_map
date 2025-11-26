@@ -78,10 +78,26 @@ function Auth({ onLogin }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={6}
+              minLength={8}
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-              placeholder="Минимум 6 символов"
+              placeholder="Минимум 8 символов"
             />
+            {!isLogin && password && (
+              <div className="mt-2 text-xs space-y-1">
+                <p className={password.length >= 8 ? "text-green-600" : "text-gray-400"}>
+                  ✓ Минимум 8 символов
+                </p>
+                <p className={/[A-Z]/.test(password) ? "text-green-600" : "text-gray-400"}>
+                  ✓ Минимум 1 заглавная буква
+                </p>
+                <p className={/[a-z]/.test(password) ? "text-green-600" : "text-gray-400"}>
+                  ✓ Минимум 1 строчная буква
+                </p>
+                <p className={/\d/.test(password) ? "text-green-600" : "text-gray-400"}>
+                  ✓ Минимум 1 цифра
+                </p>
+              </div>
+            )}
           </div>
 
           {error && (

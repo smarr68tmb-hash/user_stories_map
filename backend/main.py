@@ -23,6 +23,9 @@ except ImportError:
 # Импорт конфигурации (валидация происходит здесь)
 from config import settings
 
+# Импорт утилит безопасности
+from utils.security import SecureLoggingMiddleware
+
 # Настройка логирования
 logging.basicConfig(
     level=settings.LOG_LEVEL,
@@ -69,12 +72,16 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS настройки
+# Secure logging middleware - маскирует пароли и токены в логах
+# ВАЖНО: добавляется ДО CORS, чтобы CORS обрабатывался первым
+app.add_middleware(SecureLoggingMiddleware)
+
+# CORS настройки (должен быть последним из middleware для правильной обработки OPTIONS)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.get_allowed_origins_list(),
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -90,6 +97,15 @@ logger.info(f"✅ Application started successfully")
 logger.info(f"📦 Database: {settings.DATABASE_URL.split('@')[0] if '@' in settings.DATABASE_URL else settings.DATABASE_URL.split('///')[0]}")
 logger.info(f"🤖 AI Provider: {settings.API_PROVIDER}")
 logger.info(f"🌍 Environment: {settings.ENVIRONMENT}")
+logger.info(f"🔒 Secure logging: enabled (sensitive data masked)")
+
+# Предупреждения о безопасности
+if settings.ENVIRONMENT == "production":
+    logger.warning("⚠️ PRODUCTION MODE: Убедитесь что используется HTTPS!")
+    logger.warning("⚠️ Проверьте настройки reverse proxy (nginx/traefik) для SSL/TLS")
+else:
+    logger.warning("⚠️ DEVELOPMENT MODE: Не используйте HTTP в production!")
+    logger.warning("⚠️ Токены и пароли передаются по сети. В production нужен HTTPS!")
 
 if __name__ == "__main__":
     import uvicorn
