@@ -60,7 +60,7 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Минимальное расстояние перемещения для активации
+        distance: 3, // Минимальное расстояние для активации (уменьшено для быстрого отклика)
       },
     }),
     useSensor(KeyboardSensor, {

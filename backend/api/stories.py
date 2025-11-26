@@ -255,6 +255,10 @@ def move_story(
     story.release_id = move.release_id
     story.position = move.position
     
+    # Синхронизируем priority с названием release
+    if move.release_id and release:
+        story.priority = release.title
+    
     db.commit()
     db.refresh(story)
     
