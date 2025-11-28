@@ -20,6 +20,10 @@ class Settings:
         self.API_MODEL = os.getenv("API_MODEL", "")
         self.API_TEMPERATURE = float(os.getenv("API_TEMPERATURE", "0.7"))
         
+        # Two-Stage AI Processing: модель для улучшения требований (Stage 1)
+        # Если не указана, используется основная модель (API_MODEL)
+        self.ENHANCEMENT_MODEL = os.getenv("ENHANCEMENT_MODEL", "")
+        
         # Database
         self.DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./usm.db")
         
@@ -94,6 +98,10 @@ class Settings:
     def get_api_key(self) -> str:
         """Возвращает активный API ключ"""
         return self.OPENAI_API_KEY or self.PERPLEXITY_API_KEY
+    
+    def get_enhancement_model(self) -> str:
+        """Возвращает модель для Stage 1 (улучшение требований)"""
+        return self.ENHANCEMENT_MODEL or self.API_MODEL
     
     def get_allowed_origins_list(self) -> List[str]:
         """Преобразует ALLOWED_ORIGINS в список"""

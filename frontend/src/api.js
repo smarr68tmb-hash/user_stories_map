@@ -67,6 +67,30 @@ api.interceptors.response.use(
   }
 );
 
+// AI Enhancement API
+export const enhancement = {
+  /**
+   * Stage 1: Улучшает требования перед генерацией карты
+   * @param {string} text - Исходный текст требований
+   * @returns {Promise} - Улучшенные требования
+   */
+  enhance: (text) => api.post('/enhance-requirements', { text }),
+  
+  /**
+   * Генерирует карту с возможностью пропуска enhancement
+   * @param {string} text - Текст требований
+   * @param {boolean} skipEnhancement - Пропустить Stage 1
+   * @param {boolean} useEnhancedText - Использовать улучшенный текст
+   * @returns {Promise} - Результат генерации
+   */
+  generateMap: (text, skipEnhancement = false, useEnhancedText = true) => 
+    api.post('/generate-map', { 
+      text, 
+      skip_enhancement: skipEnhancement,
+      use_enhanced_text: useEnhancedText
+    }),
+};
+
 export const auth = {
   login: async (username, password) => {
     const formData = new FormData();

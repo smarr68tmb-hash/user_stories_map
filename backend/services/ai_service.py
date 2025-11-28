@@ -28,10 +28,215 @@ else:
     logger.warning("AI API key not configured")
 
 
-def get_cache_key(requirements_text: str) -> str:
+def get_cache_key(requirements_text: str, prefix: str = "ai_map") -> str:
     """Генерирует ключ для кеша на основе текста требований"""
     text_hash = hashlib.sha256(requirements_text.encode()).hexdigest()
-    return f"ai_map:{text_hash}"
+    return f"{prefix}:{text_hash}"
+
+
+def enhance_requirements(raw_text: str, redis_client=None, use_cache: bool = True) -> dict:
+    """
+    Stage 1: Улучшает пользовательские требования перед генерацией карты
+    
+    Принимает неструктурированный текст и возвращает:
+    - enhanced_text: улучшенный, структурированный текст
+    - added_aspects: что было добавлено
+    - missing_info: что всё ещё не хватает
+    - confidence: уверенность в улучшении (0-1)
+    
+    Args:
+        raw_text: Исходный текст требований от пользователя
+        redis_client: Redis клиент для кеширования
+        use_cache: Использовать ли кеш
+    
+    Returns:
+        dict: Результат улучшения
+    """
+    
+    if not client:
+        raise HTTPException(
+            status_code=503,
+            detail="AI API key not configured. Set OPENAI_API_KEY or PERPLEXITY_API_KEY environment variable."
+        )
+    
+    # Валидация размера входных данных
+    if len(raw_text.strip()) < 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Requirements text is too short. Please provide at least 10 characters."
+        )
+    
+    if len(raw_text) > 10000:
+        raise HTTPException(
+            status_code=400,
+            detail="Requirements text is too long. Maximum 10000 characters allowed."
+        )
+    
+    # Проверяем кеш перед запросом к AI
+    cache_key = get_cache_key(raw_text, prefix="enhance")
+    if use_cache and redis_client:
+        try:
+            cached_result = redis_client.get(cache_key)
+            if cached_result:
+                logger.info("Using cached enhancement response")
+                return json.loads(cached_result)
+        except Exception as e:
+            logger.warning(f"Redis cache read failed: {e}")
+    
+    system_prompt = """Ты — эксперт по написанию product requirements для IT-продуктов.
+Твоя задача: улучшить неструктурированные требования пользователя, добавив недостающие детали и структуру, НО не выдумывая лишнего.
+
+Что добавить (если применимо и очевидно из контекста):
+1. Чёткое описание типа продукта (web/mobile/desktop/SaaS)
+2. Полный список ролей пользователей с их основными задачами
+3. Основные функции, которые логически следуют из описания
+4. Типичные нефункциональные требования:
+   - Платформы (iOS/Android/Web)
+   - Уведомления (push, email, SMS)
+   - Офлайн режим (для mobile)
+   - Оплата (для e-commerce, marketplace)
+   - Безопасность (для sensitive data)
+
+Что НЕ добавлять:
+- Специфичные бизнес-правила (если не указаны пользователем)
+- Конкретные технологии (React, PostgreSQL и т.д.)
+- Детали UI/UX дизайна
+- Функции, которые не очевидны из контекста
+
+ВАЖНО: Все тексты должны быть на РУССКОМ языке.
+Возвращай ТОЛЬКО валидный JSON без дополнительного текста."""
+
+    user_prompt = f"""Исходные требования пользователя:
+\"\"\"
+{raw_text}
+\"\"\"
+
+Улучши эти требования, добавив структуру и недостающие стандартные детали.
+Сохрани ВСЕ специфичные детали, которые указал пользователь.
+
+Верни JSON в точно таком формате:
+{{
+  "enhanced_text": "Улучшенный структурированный текст требований (1-2 абзаца)",
+  "added_aspects": ["Список добавленных аспектов, например: 'Добавлены роли: Администратор'"],
+  "missing_info": ["Список того, что рекомендуется уточнить, например: 'Не указан способ оплаты'"],
+  "detected_product_type": "web/mobile/desktop/saas/other",
+  "detected_roles": ["Список выявленных ролей"],
+  "confidence": 0.85
+}}
+
+confidence должен быть от 0.5 до 1.0:
+- 0.9-1.0: требования понятны, добавлены только стандартные детали
+- 0.7-0.9: требования понятны, но пришлось сделать предположения
+- 0.5-0.7: требования размытые, много предположений"""
+
+    try:
+        # Получаем модель для enhancement (может быть отдельная или основная)
+        enhancement_model = settings.get_enhancement_model()
+        logger.info(f"Enhancing requirements (length: {len(raw_text)} chars) using model: {enhancement_model}")
+        
+        request_params = {
+            "model": enhancement_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.5,  # Меньше креатива, больше точности
+            "timeout": 30.0,  # 30 секунд должно хватить
+        }
+        
+        # JSON mode только для OpenAI (Perplexity может не поддерживать)
+        if settings.API_PROVIDER == "openai":
+            request_params["response_format"] = {"type": "json_object"}
+        else:
+            # Для Perplexity и других провайдеров добавляем инструкцию в промпт
+            request_params["messages"][1]["content"] += "\n\nIMPORTANT: Return ONLY valid JSON, no additional text or markdown formatting."
+        
+        completion = client.chat.completions.create(**request_params)
+        response_text = completion.choices[0].message.content
+        logger.info("Successfully received enhancement response")
+        
+        # Очистка ответа от markdown
+        response_text = response_text.strip()
+        if response_text.startswith("```json"):
+            response_text = response_text[7:]
+        if response_text.startswith("```"):
+            response_text = response_text[3:]
+        if response_text.endswith("```"):
+            response_text = response_text[:-3]
+        response_text = response_text.strip()
+        
+        result = json.loads(response_text)
+        
+        # Добавляем оригинальный текст для сравнения
+        result["original_text"] = raw_text
+        
+        # Кешируем результат на 24 часа
+        if use_cache and redis_client:
+            try:
+                redis_client.setex(
+                    cache_key,
+                    86400,  # 24 часа
+                    json.dumps(result)
+                )
+                logger.info("Enhancement result cached in Redis")
+            except Exception as e:
+                logger.warning(f"Redis cache write failed: {e}")
+        
+        logger.info(f"Requirements enhanced. Confidence: {result.get('confidence', 'N/A')}")
+        return result
+        
+    except RateLimitError:
+        logger.error(f"{settings.API_PROVIDER.upper()} rate limit exceeded")
+        raise HTTPException(
+            status_code=429,
+            detail=f"{settings.API_PROVIDER.upper()} rate limit exceeded. Please try again later."
+        )
+    except APITimeoutError:
+        logger.error(f"{settings.API_PROVIDER.upper()} request timeout")
+        raise HTTPException(
+            status_code=504,
+            detail="Request to AI service timed out. Please try again."
+        )
+    except APIConnectionError as e:
+        logger.error(f"{settings.API_PROVIDER.upper()} connection error: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to connect to AI service. Please check your internet connection."
+        )
+    except APIError as e:
+        logger.error(f"{settings.API_PROVIDER.upper()} API error: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI service error: {str(e)}"
+        )
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON response from AI enhancement: {e}")
+        # Fallback: возвращаем оригинал если AI вернул невалидный JSON
+        return {
+            "enhanced_text": raw_text,
+            "original_text": raw_text,
+            "added_aspects": [],
+            "missing_info": [],
+            "detected_product_type": "unknown",
+            "detected_roles": [],
+            "confidence": 1.0,
+            "fallback": True,
+            "error": "Failed to parse AI response"
+        }
+    except Exception as e:
+        logger.error(f"Unexpected error in requirements enhancement: {e}", exc_info=True)
+        # Fallback: возвращаем оригинал
+        return {
+            "enhanced_text": raw_text,
+            "original_text": raw_text,
+            "added_aspects": [],
+            "missing_info": [],
+            "detected_product_type": "unknown",
+            "detected_roles": [],
+            "confidence": 1.0,
+            "fallback": True,
+            "error": str(e)
+        }
 
 
 def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool = True) -> dict:

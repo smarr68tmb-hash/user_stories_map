@@ -14,6 +14,8 @@ from .story import (
 )
 from .project import (
     RequirementsInput,
+    EnhancementRequest,
+    EnhancementResponse,
     TaskResponse,
     ActivityResponse,
     ReleaseResponse,
@@ -38,6 +40,8 @@ __all__ = [
     "AIBulkImproveResponse",
     # Project schemas
     "RequirementsInput",
+    "EnhancementRequest",
+    "EnhancementResponse",
     "TaskResponse",
     "ActivityResponse",
     "ReleaseResponse",

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import api, { auth } from './api';
+import api, { auth, enhancement } from './api';
 import StoryMap from './StoryMap.jsx';
 import Auth from './Auth.jsx';
 import ProjectList from './ProjectList.jsx';
+import EnhancementPreview from './EnhancementPreview.jsx';
 
 const MAX_CHARS = 10000;
 const MIN_CHARS = 10;
@@ -20,6 +21,12 @@ function App() {
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
   const [view, setView] = useState('list'); // 'list' или 'create'
+  
+  // Two-Stage AI Processing состояния
+  const [enhancementData, setEnhancementData] = useState(null);
+  const [showEnhancementPreview, setShowEnhancementPreview] = useState(false);
+  const [enhancementLoading, setEnhancementLoading] = useState(false);
+  const [stage, setStage] = useState(null); // 'enhancing' | 'generating' | null
   
   // Проверка токена при загрузке
   useEffect(() => {
@@ -94,8 +101,8 @@ function App() {
     setView('list');
   };
 
-  // 1. Отправка требований
-  const handleGenerate = async () => {
+  // Stage 1: Улучшение требований
+  const handleEnhanceRequirements = async () => {
     if (!input.trim()) {
       setError('Пожалуйста, введите описание продукта');
       return;
@@ -110,14 +117,48 @@ function App() {
       return;
     }
     
-    setLoading(true);
+    setEnhancementLoading(true);
+    setStage('enhancing');
     setError(null);
     setProgress(10);
     
     try {
-      // Генерируем карту
-      const res = await api.post('/generate-map', { text: input });
-      setProgress(70);
+      // Stage 1: Улучшаем требования
+      const enhanceRes = await enhancement.enhance(input);
+      setProgress(40);
+      setEnhancementData(enhanceRes.data);
+      setShowEnhancementPreview(true);
+    } catch (error) {
+      console.error("Error enhancing requirements:", error);
+      setProgress(0);
+      if (error.response?.status === 401) {
+        setError('Сессия истекла. Пожалуйста, войдите снова.');
+        handleLogout();
+      } else if (error.response) {
+        const detail = error.response.data?.detail || 'Неизвестная ошибка';
+        setError(`Ошибка улучшения: ${detail}`);
+      } else if (error.request) {
+        setError('Не удалось подключиться к серверу. Убедитесь, что backend запущен на порту 8000');
+      } else {
+        setError(`Ошибка: ${error.message}`);
+      }
+    } finally {
+      setEnhancementLoading(false);
+      setStage(null);
+    }
+  };
+  
+  // Stage 2: Генерация карты (после выбора текста)
+  const handleGenerateWithText = async (textToUse, skipEnhancement = true) => {
+    setShowEnhancementPreview(false);
+    setLoading(true);
+    setStage('generating');
+    setProgress(50);
+    
+    try {
+      // Генерируем карту с выбранным текстом
+      const res = await enhancement.generateMap(textToUse, skipEnhancement);
+      setProgress(80);
       const projectId = res.data.project_id;
       
       // Забираем полные данные
@@ -127,10 +168,10 @@ function App() {
       
       // Очищаем сохраненный черновик после успешной генерации
       localStorage.removeItem('draft_requirements');
+      setEnhancementData(null);
     } catch (error) {
       console.error("Error generating map:", error);
       setProgress(0);
-      // Ошибки 401 теперь обрабатываются интерцептором, но можно оставить проверку для UI
       if (error.response?.status === 401) {
         setError('Сессия истекла. Пожалуйста, войдите снова.');
         handleLogout();
@@ -144,10 +185,51 @@ function App() {
       }
     } finally {
       setLoading(false);
-      // Сбрасываем прогресс через небольшую задержку
+      setStage(null);
       setTimeout(() => setProgress(0), 500);
     }
   };
+  
+  // Обработчики выбора в EnhancementPreview
+  const handleUseOriginal = () => {
+    handleGenerateWithText(input, true);
+  };
+  
+  const handleUseEnhanced = (enhancedText) => {
+    handleGenerateWithText(enhancedText, true);
+  };
+  
+  const handleEditEnhanced = (editedText) => {
+    handleGenerateWithText(editedText, true);
+  };
+  
+  const handleCloseEnhancementPreview = () => {
+    setShowEnhancementPreview(false);
+    setEnhancementData(null);
+    setProgress(0);
+  };
+  
+  // Старый метод для совместимости (прямая генерация без улучшения)
+  const handleDirectGenerate = async () => {
+    if (!input.trim()) {
+      setError('Пожалуйста, введите описание продукта');
+      return;
+    }
+    
+    if (!isValidInput) {
+      if (input.trim().length < MIN_CHARS) {
+        setError(`Текст слишком короткий. Минимум ${MIN_CHARS} символов.`);
+      } else {
+        setError(`Текст слишком длинный. Максимум ${MAX_CHARS} символов.`);
+      }
+      return;
+    }
+    
+    handleGenerateWithText(input, true);
+  };
+  
+  // Основной метод генерации (с Two-Stage Processing)
+  const handleGenerate = handleEnhanceRequirements;
 
   const handleSelectProject = (projectData) => {
     setProject(projectData);
@@ -272,12 +354,14 @@ function App() {
             </div>
           </div>
           
-          {/* Прогресс-бар */}
-          {loading && (
+          {/* Прогресс-бар с этапами */}
+          {(loading || enhancementLoading) && (
             <div className="mb-4">
               <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
                 <div 
-                  className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                  className={`h-2.5 rounded-full transition-all duration-300 ${
+                    stage === 'enhancing' ? 'bg-indigo-500' : 'bg-blue-600'
+                  }`}
                   style={{ width: `${progress}%` }}
                   role="progressbar"
                   aria-valuenow={progress}
@@ -286,7 +370,19 @@ function App() {
                 ></div>
               </div>
               <p className="text-xs text-gray-600 text-center">
-                AI анализирует требования... {Math.round(progress)}%
+                {stage === 'enhancing' && (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="inline-block w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
+                    Stage 1: AI улучшает требования... {Math.round(progress)}%
+                  </span>
+                )}
+                {stage === 'generating' && (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="inline-block w-2 h-2 bg-blue-600 rounded-full animate-pulse"></span>
+                    Stage 2: Генерация карты... {Math.round(progress)}%
+                  </span>
+                )}
+                {!stage && `Обработка... ${Math.round(progress)}%`}
               </p>
             </div>
           )}
@@ -297,13 +393,39 @@ function App() {
             </div>
           )}
           
+          {/* Основная кнопка - с улучшением */}
           <button
             onClick={handleGenerate}
-            disabled={loading || !isValidInput || !input.trim()}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed mb-3"
-            aria-label="Сгенерировать карту пользовательских историй"
+            disabled={loading || enhancementLoading || !isValidInput || !input.trim()}
+            className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed mb-2 shadow-lg shadow-indigo-200"
+            aria-label="Сгенерировать карту с улучшением требований"
           >
-            {loading ? "Генерация карты..." : "Сгенерировать карту"}
+            {enhancementLoading ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                Анализируем требования...
+              </span>
+            ) : loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                Генерация карты...
+              </span>
+            ) : (
+              <span className="flex items-center justify-center gap-2">
+                <span>✨</span>
+                Сгенерировать с улучшением (рекомендуется)
+              </span>
+            )}
+          </button>
+          
+          {/* Альтернативная кнопка - без улучшения */}
+          <button
+            onClick={handleDirectGenerate}
+            disabled={loading || enhancementLoading || !isValidInput || !input.trim()}
+            className="w-full text-gray-600 hover:text-gray-800 py-2 rounded-lg font-medium border border-gray-300 hover:border-gray-400 transition disabled:opacity-50 disabled:cursor-not-allowed mb-3 text-sm"
+            aria-label="Сгенерировать карту без улучшения требований"
+          >
+            Сгенерировать без улучшения
           </button>
           
           <button
@@ -314,8 +436,19 @@ function App() {
           </button>
           
           <p className="mt-4 text-xs text-gray-500 text-center">
-            Для работы требуется OpenAI API ключ. Установите переменную окружения OPENAI_API_KEY
+            💡 Two-Stage AI: сначала AI улучшает требования, затем генерирует качественную карту
           </p>
+          
+          {/* EnhancementPreview Modal */}
+          <EnhancementPreview
+            originalText={input}
+            enhancementData={enhancementData}
+            isOpen={showEnhancementPreview}
+            onClose={handleCloseEnhancementPreview}
+            onUseOriginal={handleUseOriginal}
+            onUseEnhanced={handleUseEnhanced}
+            onEdit={handleEditEnhanced}
+          />
         </div>
       </div>
     );

@@ -9,13 +9,81 @@ from slowapi.util import get_remote_address
 
 from utils.database import get_db
 from models import User, Project, Activity, UserTask, Release, UserStory
-from schemas import RequirementsInput, ProjectResponse, ActivityResponse, TaskResponse, StoryResponse, ReleaseResponse
-from services.ai_service import generate_ai_map
+from schemas import (
+    RequirementsInput, 
+    EnhancementRequest,
+    EnhancementResponse,
+    ProjectResponse, 
+    ActivityResponse, 
+    TaskResponse, 
+    StoryResponse, 
+    ReleaseResponse
+)
+from services.ai_service import generate_ai_map, enhance_requirements
 from dependencies import get_current_active_user
 
 router = APIRouter(prefix="", tags=["projects"])
 limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
+
+
+def get_redis_client():
+    """Получает Redis клиент или возвращает None если недоступен"""
+    try:
+        import redis
+        from config import settings
+        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        redis_client.ping()
+        return redis_client
+    except Exception as e:
+        logger.warning(f"Redis not available: {e}")
+        return None
+
+
+@router.post("/enhance-requirements", response_model=EnhancementResponse)
+@limiter.limit("30/hour")
+def enhance_requirements_endpoint(
+    req: EnhancementRequest,
+    request: Request,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Stage 1: Улучшает требования пользователя перед генерацией карты
+    
+    Используется для:
+    - Показа улучшений пользователю перед генерацией
+    - Добавления недостающих стандартных деталей
+    - Структурирования неформального текста
+    
+    Rate limit: 30 запросов в час
+    """
+    
+    # Валидация входных данных
+    if not req.text or not req.text.strip():
+        raise HTTPException(status_code=400, detail="Requirements text cannot be empty")
+    
+    try:
+        redis_client = get_redis_client()
+        result = enhance_requirements(req.text, redis_client=redis_client)
+        
+        logger.info(f"Requirements enhanced for user {current_user.id}. Confidence: {result.get('confidence', 'N/A')}")
+        
+        return EnhancementResponse(
+            original_text=result.get("original_text", req.text),
+            enhanced_text=result.get("enhanced_text", req.text),
+            added_aspects=result.get("added_aspects", []),
+            missing_info=result.get("missing_info", []),
+            detected_product_type=result.get("detected_product_type", "unknown"),
+            detected_roles=result.get("detected_roles", []),
+            confidence=result.get("confidence", 1.0),
+            fallback=result.get("fallback", False)
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in enhance_requirements: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to enhance requirements")
 
 
 @router.post("/generate-map")
@@ -26,26 +94,53 @@ def generate_map(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Генерирует карту пользовательских историй из текста требований"""
+    """
+    Генерирует карту пользовательских историй из текста требований
+    
+    Two-Stage Processing:
+    - Stage 1 (Enhancement): Улучшение требований через gpt-4o-mini (если не skip_enhancement)
+    - Stage 2 (Generation): Генерация карты через gpt-4o
+    
+    Rate limit: 10 запросов в час
+    """
     
     # Валидация входных данных
     if not req.text or not req.text.strip():
         raise HTTPException(status_code=400, detail="Requirements text cannot be empty")
     
-    # 1. Получаем данные от AI
-    try:
-        # Попробуем использовать Redis если доступен
-        redis_client = None
+    # Получаем Redis клиент
+    redis_client = get_redis_client()
+    
+    # Текст для генерации (может быть улучшен на Stage 1)
+    generation_text = req.text
+    enhancement_data = None
+    
+    # Stage 1: Enhancement (если не пропущен)
+    if not req.skip_enhancement:
         try:
-            import redis
-            from config import settings
-            redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
-            redis_client.ping()
+            logger.info(f"Stage 1: Enhancing requirements for user {current_user.id}")
+            enhancement_data = enhance_requirements(req.text, redis_client=redis_client)
+            
+            # Используем улучшенный текст если confidence достаточно высокий
+            if (req.use_enhanced_text and 
+                enhancement_data.get("confidence", 0) >= 0.7 and 
+                not enhancement_data.get("fallback", False)):
+                generation_text = enhancement_data.get("enhanced_text", req.text)
+                logger.info(f"Using enhanced requirements. Confidence: {enhancement_data.get('confidence')}")
+            else:
+                logger.info(f"Using original requirements. Confidence: {enhancement_data.get('confidence', 'N/A')}")
+                
         except Exception as e:
-            logger.warning(f"Redis not available: {e}")
-            redis_client = None
-        
-        ai_data = generate_ai_map(req.text, redis_client=redis_client)
+            # Если enhancement упал - продолжаем с оригинальным текстом
+            logger.warning(f"Enhancement failed, using original text: {e}")
+            generation_text = req.text
+    else:
+        logger.info(f"Stage 1 skipped (skip_enhancement=True)")
+    
+    # Stage 2: Generation
+    try:
+        logger.info(f"Stage 2: Generating map for user {current_user.id}")
+        ai_data = generate_ai_map(generation_text, redis_client=redis_client)
     except HTTPException:
         raise
     except Exception as e:
