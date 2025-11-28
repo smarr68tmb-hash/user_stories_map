@@ -2,6 +2,7 @@ import { useState } from 'react';
 import api from './api';
 import AIAssistant from './AIAssistant';
 import EditStoryModal from './EditStoryModal';
+import AnalysisPanel from './AnalysisPanel';
 import {
   DndContext,
   closestCenter,
@@ -56,6 +57,7 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
   const [aiAssistantStory, setAiAssistantStory] = useState(null);
   const [aiAssistantTaskId, setAiAssistantTaskId] = useState(null);
   const [aiAssistantReleaseId, setAiAssistantReleaseId] = useState(null);
+  const [analysisPanelOpen, setAnalysisPanelOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -219,6 +221,17 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
       collisionDetection={closestCenter}
       onDragEnd={handleDragEnd}
     >
+      {/* Analysis Button - Floating */}
+      <div className="mb-4 flex justify-end">
+        <button
+          onClick={() => setAnalysisPanelOpen(true)}
+          className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-4 py-2 rounded-lg font-medium shadow-lg hover:from-indigo-600 hover:to-purple-600 transition flex items-center gap-2"
+        >
+          <span>📊</span>
+          Анализ карты
+        </button>
+      </div>
+
       <div className="inline-block min-w-full bg-white rounded-lg shadow-sm border border-gray-200">
         {/* BACKBONE */}
         <div className="sticky top-0 z-10 bg-gray-50 border-b-2 border-gray-300">
@@ -373,6 +386,13 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
           onStoryImproved={handleStoryImproved}
         />
       )}
+
+      {/* Analysis Panel Modal */}
+      <AnalysisPanel
+        projectId={project.id}
+        isOpen={analysisPanelOpen}
+        onClose={() => setAnalysisPanelOpen(false)}
+      />
     </DndContext>
   );
 }

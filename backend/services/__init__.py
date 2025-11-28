@@ -11,6 +11,8 @@ from .auth_service import (
     decode_access_token
 )
 from .ai_service import generate_ai_map, get_cache_key, ai_improve_story_content
+from .validation_service import validate_project_map, get_validation_summary
+from .similarity_service import analyze_similarity, get_similarity_summary
 
 __all__ = [
     # Auth service
@@ -25,5 +27,10 @@ __all__ = [
     "generate_ai_map",
     "get_cache_key",
     "ai_improve_story_content",
+    # Analysis services
+    "validate_project_map",
+    "get_validation_summary",
+    "analyze_similarity",
+    "get_similarity_summary",
 ]
 

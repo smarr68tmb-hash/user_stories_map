@@ -21,6 +21,19 @@ from .project import (
     ReleaseResponse,
     ProjectResponse
 )
+from .analysis import (
+    IssueSeverity,
+    IssueType,
+    ValidationIssue,
+    ValidationResult,
+    SimilarStory,
+    SimilarityGroup,
+    ConflictType,
+    StoryConflict,
+    SimilarityResult,
+    FullAnalysisResult,
+    AnalysisRequest
+)
 
 __all__ = [
     # User schemas
@@ -46,5 +59,17 @@ __all__ = [
     "ActivityResponse",
     "ReleaseResponse",
     "ProjectResponse",
+    # Analysis schemas
+    "IssueSeverity",
+    "IssueType",
+    "ValidationIssue",
+    "ValidationResult",
+    "SimilarStory",
+    "SimilarityGroup",
+    "ConflictType",
+    "StoryConflict",
+    "SimilarityResult",
+    "FullAnalysisResult",
+    "AnalysisRequest",
 ]
 

@@ -86,12 +86,13 @@ app.add_middleware(
 )
 
 # Подключение роутеров
-from api import health, auth, projects, stories
+from api import health, auth, projects, stories, analysis
 
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(stories.router)
+app.include_router(analysis.router)
 
 logger.info(f"✅ Application started successfully")
 logger.info(f"📦 Database: {settings.DATABASE_URL.split('@')[0] if '@' in settings.DATABASE_URL else settings.DATABASE_URL.split('///')[0]}")

@@ -66,6 +66,11 @@ backend/
 │  │  - authenticate_user │   - generate_ai_map      │   │
 │  │  - create_tokens     │   - cache_results        │   │
 │  │  - verify_password   │   - parse_ai_response    │   │
+│  ├──────────────────────┼──────────────────────────┤   │
+│  │  similarity_service  │   validation_service     │   │
+│  │  - analyze_similarity│   - validate_project_map │   │
+│  │  - TF-IDF vectors    │   - calculate_score      │   │
+│  │  - find_duplicates   │   - get_recommendations  │   │
 │  └──────────┬───────────┴──────────┬───────────────┘   │
 └─────────────┼──────────────────────┼───────────────────┘
               │                      │
@@ -106,7 +111,8 @@ backend/
 ├── schemas/                   # Pydantic схемы (API validation)
 │   ├── user.py               # UserCreate, UserResponse, Token
 │   ├── project.py            # ProjectResponse, RequirementsInput
-│   └── story.py              # StoryCreate, StoryUpdate, StoryMove
+│   ├── story.py              # StoryCreate, StoryUpdate, StoryMove
+│   └── analysis.py           # ValidationResult, SimilarityResult (v2.3.0)
 │
 ├── services/                  # Бизнес-логика (Service Layer)
 │   ├── auth_service.py       # JWT, password hashing, authentication
@@ -115,22 +121,38 @@ backend/
 │   │   ├── create_refresh_token()
 │   │   └── authenticate_user()
 │   │
-│   └── ai_service.py         # AI генерация карт
-│       ├── generate_ai_map()
-│       ├── get_cache_key()
-│       └── OpenAI/Perplexity клиент
+│   ├── ai_service.py         # AI генерация карт
+│   │   ├── generate_ai_map()
+│   │   ├── enhance_requirements()
+│   │   ├── get_cache_key()
+│   │   └── OpenAI/Perplexity клиент
+│   │
+│   ├── similarity_service.py # Анализ схожести историй (v2.3.0)
+│   │   ├── analyze_similarity()
+│   │   ├── calculate_similarity_tfidf()
+│   │   ├── find_similar_groups()
+│   │   └── get_similarity_summary()
+│   │
+│   └── validation_service.py # Валидация структуры карты (v2.3.0)
+│       ├── validate_project_map()
+│       ├── calculate_validation_score()
+│       └── get_validation_summary()
 │
 ├── api/                       # API роуты (Endpoint handlers)
 │   ├── auth.py               # POST /register, /token, /refresh, /logout
 │   │                         # GET /me
 │   │
-│   ├── projects.py           # POST /generate-map
+│   ├── projects.py           # POST /generate-map, /enhance-requirements
 │   │                         # GET /project/{id}, /projects
 │   │
-│   ├── stories.py            # POST /story
+│   ├── stories.py            # POST /story, /story/{id}/ai-improve
 │   │                         # PUT /story/{id}
 │   │                         # DELETE /story/{id}
 │   │                         # PATCH /story/{id}/move
+│   │
+│   ├── analysis.py           # GET /project/{id}/validate (v2.3.0)
+│   │                         # GET /project/{id}/analyze/similarity
+│   │                         # POST /project/{id}/analyze/full
 │   │
 │   └── health.py             # GET /health, /ready
 │
@@ -791,3 +813,112 @@ end note
 - ELK Stack для централизованного логирования
 - Uptime monitoring (Pingdom, UptimeRobot)
 - Performance monitoring (New Relic, DataDog)
+
+---
+
+## Анализ схожести и валидация (v2.3.0)
+
+### Поток анализа схожести
+
+```plantuml
+@startuml
+actor User
+participant "Frontend" as FE
+participant "AnalysisPanel" as Panel
+participant "Backend API" as BE
+participant "similarity_service" as SIM
+
+User -> FE: Нажимает "📊 Анализ карты"
+FE -> Panel: Открывает модальное окно
+User -> Panel: Выбирает "🔍 Схожесть"
+
+Panel -> BE: GET /project/{id}/analyze/similarity
+BE -> BE: Загружает все истории проекта
+BE -> SIM: analyze_similarity(project)
+
+SIM -> SIM: Собирает тексты историй\n(title + description + acceptance_criteria)
+SIM -> SIM: Предобработка текста\n(lowercase, remove punctuation)
+SIM -> SIM: TF-IDF векторизация
+SIM -> SIM: Cosine Similarity матрица
+SIM -> SIM: Union-Find группировка\n(threshold >= 0.7)
+SIM -> SIM: Классификация:\n- duplicate (>=0.9)\n- similar (>=0.7)
+
+SIM --> BE: SimilarityResult
+BE --> Panel: JSON response
+Panel -> Panel: Отображает группы\nс рекомендациями
+Panel --> User: Результат анализа
+@enduml
+```
+
+### Поток валидации карты
+
+```plantuml
+@startuml
+actor User
+participant "Frontend" as FE
+participant "AnalysisPanel" as Panel
+participant "Backend API" as BE
+participant "validation_service" as VAL
+
+User -> Panel: Выбирает "✅ Валидация"
+
+Panel -> BE: GET /project/{id}/validate
+BE -> BE: Загружает проект с eager loading
+BE -> VAL: validate_project_map(project)
+
+VAL -> VAL: Проверка Activities
+VAL -> VAL: Проверка Tasks
+VAL -> VAL: Проверка Stories:\n- description\n- acceptance_criteria\n- title length
+VAL -> VAL: Проверка дубликатов названий
+VAL -> VAL: Проверка баланса релизов
+VAL -> VAL: Расчет оценки (0-100)
+VAL -> VAL: Генерация рекомендаций
+
+VAL --> BE: ValidationResult
+BE --> Panel: JSON response
+Panel -> Panel: Группировка по severity:\n- error (красный)\n- warning (желтый)\n- info (синий)
+Panel --> User: Результат валидации
+@enduml
+```
+
+### Алгоритм TF-IDF + Cosine Similarity
+
+```
+1. Preprocessing:
+   - Приведение к нижнему регистру
+   - Удаление пунктуации
+   - Токенизация
+   - Удаление стоп-слов (русские + специфичные для User Stories)
+
+2. TF-IDF Vectorization:
+   - Term Frequency: TF(t,d) = count(t in d) / total_words(d)
+   - Inverse Document Frequency: IDF(t) = log(N / df(t))
+   - TF-IDF(t,d) = TF(t,d) × IDF(t)
+
+3. Cosine Similarity:
+   - similarity(A,B) = (A · B) / (||A|| × ||B||)
+   - Результат: матрица NxN со значениями 0.0 - 1.0
+
+4. Grouping (Union-Find):
+   - Для каждой пары с similarity >= threshold: union(i, j)
+   - Группировка компонент связности
+   - Классификация: duplicate (>=0.9) или similar (>=0.7)
+```
+
+### Формула расчета качества карты
+
+```
+score = 100 - penalties + bonuses
+
+Penalties:
+- ERROR: -20 баллов (критические проблемы)
+- WARNING: -5 баллов (предупреждения)
+- INFO: -1 балл (информация)
+- Duplicate in similarity: -10 баллов (макс. -30)
+
+Bonuses:
+- % историй с описанием × 5 (макс. +5)
+- % историй с AC × 5 (макс. +5)
+
+score = max(0, min(100, score))
+```
