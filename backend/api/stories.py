@@ -11,7 +11,8 @@ from utils.database import get_db
 from models import User, UserStory, UserTask, Activity, Project, Release
 from schemas import (
     StoryCreate, 
-    StoryUpdate, 
+    StoryUpdate,
+    StoryStatusUpdate,
     StoryMove, 
     StoryResponse,
     AIImproveRequest,
@@ -71,7 +72,8 @@ def create_story(
         description=story.description,
         priority=story.priority or "Later",
         acceptance_criteria=story.acceptance_criteria or [],
-        position=max_position
+        position=max_position,
+        status=story.status or "todo"
     )
     
     db.add(new_story)
@@ -85,7 +87,8 @@ def create_story(
         priority=new_story.priority,
         acceptance_criteria=new_story.acceptance_criteria or [],
         release_id=new_story.release_id,
-        position=new_story.position
+        position=new_story.position,
+        status=new_story.status or "todo"
     )
 
 
@@ -127,6 +130,8 @@ def update_story(
             if not release:
                 raise HTTPException(status_code=404, detail="Release not found")
         story.release_id = story_update.release_id
+    if story_update.status is not None:
+        story.status = story_update.status
     
     db.commit()
     db.refresh(story)
@@ -138,7 +143,8 @@ def update_story(
         priority=story.priority,
         acceptance_criteria=story.acceptance_criteria or [],
         release_id=story.release_id,
-        position=story.position
+        position=story.position,
+        status=story.status or "todo"
     )
 
 
@@ -269,7 +275,46 @@ def move_story(
         priority=story.priority,
         acceptance_criteria=story.acceptance_criteria or [],
         release_id=story.release_id,
-        position=story.position
+        position=story.position,
+        status=story.status or "todo"
+    )
+
+
+@router.patch("/story/{story_id}/status", response_model=StoryResponse)
+@limiter.limit("60/minute")
+def update_story_status(
+    story_id: int,
+    status_update: StoryStatusUpdate,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Быстрое обновление статуса истории (todo -> in_progress -> done)"""
+    # Проверяем владельца проекта
+    story = db.query(UserStory)\
+        .join(UserTask)\
+        .join(Activity)\
+        .join(Project)\
+        .filter(UserStory.id == story_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
+    
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found or access denied")
+    
+    story.status = status_update.status
+    db.commit()
+    db.refresh(story)
+    
+    return StoryResponse(
+        id=story.id,
+        title=story.title,
+        description=story.description,
+        priority=story.priority,
+        acceptance_criteria=story.acceptance_criteria or [],
+        release_id=story.release_id,
+        position=story.position,
+        status=story.status or "todo"
     )
 
 
@@ -361,7 +406,8 @@ def ai_improve_story(
                     priority=story.priority,
                     acceptance_criteria=story.acceptance_criteria or [],
                     release_id=story.release_id,
-                    position=story.position
+                    position=story.position,
+                    status=story.status or "todo"
                 ),
                 additional_stories=None,
                 suggestion=ai_result.get('suggestion', '')

@@ -1,8 +1,12 @@
 """
 User Story schemas
 """
-from typing import Optional, List
-from pydantic import BaseModel
+from typing import Optional, List, Literal
+from pydantic import BaseModel, field_validator
+
+
+# Допустимые статусы
+StoryStatus = Literal['todo', 'in_progress', 'done']
 
 
 class StoryCreate(BaseModel):
@@ -13,6 +17,7 @@ class StoryCreate(BaseModel):
     description: Optional[str] = None
     priority: Optional[str] = "Later"
     acceptance_criteria: Optional[List[str]] = []
+    status: Optional[StoryStatus] = "todo"
 
 
 class StoryUpdate(BaseModel):
@@ -22,6 +27,12 @@ class StoryUpdate(BaseModel):
     priority: Optional[str] = None
     acceptance_criteria: Optional[List[str]] = None
     release_id: Optional[int] = None
+    status: Optional[StoryStatus] = None
+
+
+class StoryStatusUpdate(BaseModel):
+    """Схема для быстрого обновления статуса истории"""
+    status: StoryStatus
 
 
 class StoryMove(BaseModel):
@@ -40,6 +51,7 @@ class StoryResponse(BaseModel):
     acceptance_criteria: Optional[List[str]]
     release_id: Optional[int]
     position: int
+    status: Optional[str] = "todo"
     
     class Config:
         from_attributes = True

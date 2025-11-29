@@ -215,6 +215,36 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     }
   };
 
+  const handleStatusChange = async (storyId, newStatus) => {
+    try {
+      await api.patch(`/story/${storyId}/status`, { status: newStatus });
+      // Обновляем проект
+      const res = await api.get(`/project/${project.id}`);
+      onUpdate(res.data);
+    } catch (error) {
+      console.error('Error updating status:', error);
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
+    }
+  };
+
+  // Подсчет прогресса по релизу
+  const calculateReleaseProgress = (releaseId) => {
+    let total = 0;
+    let done = 0;
+    
+    allTasks.forEach(task => {
+      task.stories.forEach(story => {
+        if (story.release_id === releaseId) {
+          total++;
+          if (story.status === 'done') done++;
+        }
+      });
+    });
+    
+    return { total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 };
+  };
+
   return (
     <DndContext
       sensors={sensors}
@@ -268,10 +298,28 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
 
         {/* BODY */}
         <div>
-          {project.releases.map(release => (
+          {project.releases.map(release => {
+            const progress = calculateReleaseProgress(release.id);
+            return (
             <div key={release.id} className="flex border-b border-gray-200 min-h-[180px] hover:bg-gray-50 transition">
-              <div className="w-32 flex-shrink-0 bg-gray-100 p-3 font-bold flex items-center justify-center text-gray-700 border-r-2 border-gray-300">
+              <div className="w-32 flex-shrink-0 bg-gray-100 p-3 font-bold flex flex-col items-center justify-center text-gray-700 border-r-2 border-gray-300 gap-2">
                 <span className="text-sm text-center">{release.title}</span>
+                {/* Progress bar */}
+                {progress.total > 0 && (
+                  <div className="w-full px-1">
+                    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          progress.percent === 100 ? 'bg-green-500' : 'bg-blue-500'
+                        }`}
+                        style={{ width: `${progress.percent}%` }}
+                      />
+                    </div>
+                    <div className="text-[10px] text-gray-500 text-center mt-1">
+                      {progress.done}/{progress.total}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {allTasks.map(task => {
@@ -299,6 +347,7 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
                             releaseId={release.id}
                             onEdit={() => handleOpenEditModal(story)}
                             onOpenAI={() => handleOpenAIAssistant(story, task.id, release.id)}
+                            onStatusChange={handleStatusChange}
                           />
                         ))}
                         
@@ -361,7 +410,8 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
                 );
               })}
             </div>
-          ))}
+          );
+          })}
         </div>
       </div>
 
@@ -420,7 +470,7 @@ function DroppableCell({ cellId, taskId, releaseId, children }) {
   );
 }
 
-function StoryCard({ story, taskId, releaseId, onEdit, onOpenAI }) {
+function StoryCard({ story, taskId, releaseId, onEdit, onOpenAI, onStatusChange }) {
   const {
     attributes,
     listeners,
@@ -445,19 +495,57 @@ function StoryCard({ story, taskId, releaseId, onEdit, onOpenAI }) {
     'Later': 'bg-gray-100 text-gray-600 border-gray-200',
   };
 
+  // Цвета статуса для левой полоски
+  const statusColors = {
+    'todo': 'bg-gray-300',
+    'in_progress': 'bg-blue-500',
+    'done': 'bg-green-500',
+  };
+
+  // Иконки статуса
+  const statusIcons = {
+    'todo': '○',
+    'in_progress': '◐',
+    'done': '✓',
+  };
+
+  const currentStatus = story.status || 'todo';
+  
+  // Следующий статус при клике
+  const getNextStatus = (current) => {
+    const cycle = ['todo', 'in_progress', 'done'];
+    const idx = cycle.indexOf(current);
+    return cycle[(idx + 1) % cycle.length];
+  };
+
+  const handleStatusClick = (e) => {
+    e.stopPropagation();
+    const nextStatus = getNextStatus(currentStatus);
+    onStatusChange(story.id, nextStatus);
+  };
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="bg-yellow-100 p-3 rounded-lg shadow-sm hover:shadow-md transition-all text-sm border border-yellow-300 group relative cursor-pointer"
+      className={`relative p-3 rounded-lg shadow-sm hover:shadow-md transition-all text-sm border group cursor-pointer overflow-hidden ${
+        currentStatus === 'done' 
+          ? 'bg-green-50 border-green-200' 
+          : currentStatus === 'in_progress'
+          ? 'bg-blue-50 border-blue-200'
+          : 'bg-yellow-100 border-yellow-300'
+      }`}
       onClick={onEdit}
     >
+      {/* Status indicator bar (left side) */}
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${statusColors[currentStatus]}`} />
+
       {/* Drag Handle */}
       <div
         {...attributes}
         {...listeners}
         onClick={(e) => e.stopPropagation()}
-        className="absolute top-2 right-2 cursor-grab active:cursor-grabbing p-1.5 hover:bg-yellow-200 rounded-md opacity-40 hover:opacity-100 transition z-10"
+        className="absolute top-2 right-2 cursor-grab active:cursor-grabbing p-1.5 hover:bg-white/50 rounded-md opacity-40 hover:opacity-100 transition z-10"
         title="Перетащить"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
@@ -465,18 +553,35 @@ function StoryCard({ story, taskId, releaseId, onEdit, onOpenAI }) {
         </svg>
       </div>
 
-      {/* Title */}
-      <div className="font-medium text-gray-800 pr-7 leading-snug mb-1.5 line-clamp-2">
-        {story.title}
+      {/* Title with status toggle */}
+      <div className="flex items-start gap-2 pr-7">
+        <button
+          onClick={handleStatusClick}
+          className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all hover:scale-110 ${
+            currentStatus === 'done' 
+              ? 'bg-green-500 border-green-500 text-white' 
+              : currentStatus === 'in_progress'
+              ? 'bg-blue-500 border-blue-500 text-white'
+              : 'bg-white border-gray-300 text-gray-400 hover:border-gray-400'
+          }`}
+          title={currentStatus === 'todo' ? 'Начать' : currentStatus === 'in_progress' ? 'Завершить' : 'Вернуть в работу'}
+        >
+          {statusIcons[currentStatus]}
+        </button>
+        <div className={`font-medium leading-snug mb-1.5 line-clamp-2 ${currentStatus === 'done' ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
+          {story.title}
+        </div>
       </div>
 
       {/* Description */}
       {story.description && (
-        <div className="text-xs text-gray-600 line-clamp-2 mb-2">{story.description}</div>
+        <div className={`text-xs line-clamp-2 mb-2 ml-7 ${currentStatus === 'done' ? 'text-gray-400' : 'text-gray-600'}`}>
+          {story.description}
+        </div>
       )}
 
       {/* Footer: Priority + AC count */}
-      <div className="flex items-center gap-2 mt-auto pt-1">
+      <div className="flex items-center gap-2 mt-auto pt-1 ml-7">
         {story.priority && (
           <span className={`text-[10px] uppercase px-2 py-0.5 rounded border font-semibold ${priorityColors[story.priority] || priorityColors['Later']}`}>
             {story.priority}

@@ -4,7 +4,8 @@ Pydantic schemas for API validation
 from .user import UserCreate, UserResponse, Token, TokenRefreshRequest, TokenData
 from .story import (
     StoryCreate, 
-    StoryUpdate, 
+    StoryUpdate,
+    StoryStatusUpdate,
     StoryMove, 
     StoryResponse,
     AIImproveRequest,
@@ -45,6 +46,7 @@ __all__ = [
     # Story schemas
     "StoryCreate",
     "StoryUpdate",
+    "StoryStatusUpdate",
     "StoryMove",
     "StoryResponse",
     "AIImproveRequest",

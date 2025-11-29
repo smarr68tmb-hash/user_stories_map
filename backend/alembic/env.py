@@ -10,8 +10,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Импортируем Base и модели
-from main import Base
-from main import User, Project, Activity, UserTask, Release, UserStory, RefreshToken
+from utils.database import Base
+from models import User, Project, Activity, UserTask, Release, UserStory, RefreshToken
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
