@@ -4,6 +4,7 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editReleaseId, setEditReleaseId] = useState(null);
+  const [editStatus, setEditStatus] = useState('todo');
   const [editAC, setEditAC] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -13,6 +14,7 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
       setEditTitle(story.title || '');
       setEditDescription(story.description || '');
       setEditReleaseId(story.release_id);
+      setEditStatus(story.status || 'todo');
       setEditAC((story.acceptance_criteria || []).join('\n'));
     }
   }, [story, isOpen]);
@@ -30,6 +32,7 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
         description: editDescription.trim(),
         release_id: editReleaseId,
         priority: currentRelease?.title || 'Later', // Синхронизируем priority с release
+        status: editStatus,
         acceptance_criteria: editAC.split('\n').filter(l => l.trim())
       });
       onClose();
@@ -165,6 +168,54 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
                 <span>Карточка будет перемещена в строку "{currentRelease?.title}"</span>
               </p>
             )}
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Статус
+            </label>
+            <div className="grid grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => setEditStatus('todo')}
+                disabled={saving}
+                className={`p-3 rounded-lg border-2 font-medium transition flex items-center justify-center gap-2 ${
+                  editStatus === 'todo'
+                    ? 'border-gray-500 bg-gray-50 text-gray-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                <span className="text-lg">○</span>
+                <span>To Do</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditStatus('in_progress')}
+                disabled={saving}
+                className={`p-3 rounded-lg border-2 font-medium transition flex items-center justify-center gap-2 ${
+                  editStatus === 'in_progress'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                <span className="text-lg">◐</span>
+                <span>In Progress</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditStatus('done')}
+                disabled={saving}
+                className={`p-3 rounded-lg border-2 font-medium transition flex items-center justify-center gap-2 ${
+                  editStatus === 'done'
+                    ? 'border-green-500 bg-green-50 text-green-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                <span className="text-lg">✓</span>
+                <span>Done</span>
+              </button>
+            </div>
           </div>
 
           {/* Acceptance Criteria */}
