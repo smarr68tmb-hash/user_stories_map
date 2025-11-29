@@ -249,7 +249,8 @@ def get_project(
                     priority=story.priority,
                     acceptance_criteria=story.acceptance_criteria or [],
                     release_id=story.release_id,
-                    position=story.position
+                    position=story.position,
+                    status=story.status or "todo"
                 ))
             tasks_data.append(TaskResponse(
                 id=task.id,
