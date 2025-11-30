@@ -391,7 +391,10 @@ confidence должен быть от 0.5 до 1.0:
             "error": "Failed to parse AI response"
         }
     except Exception as e:
-        logger.error(f"Unexpected error in requirements enhancement: {e}", exc_info=True)
+        error_msg = str(e) if str(e) else repr(e)
+        if not error_msg:
+            error_msg = f"{type(e).__name__}: An unexpected error occurred"
+        logger.error(f"Unexpected error in requirements enhancement: {error_msg}", exc_info=True)
         # Fallback: возвращаем оригинал
         return {
             "enhanced_text": raw_text,
@@ -402,7 +405,7 @@ confidence должен быть от 0.5 до 1.0:
             "detected_roles": [],
             "confidence": 1.0,
             "fallback": True,
-            "error": str(e)
+            "error": error_msg
         }
 
 
@@ -522,7 +525,45 @@ def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool =
             response_text = response_text[:-3]  # Убираем закрывающий ```
         response_text = response_text.strip()
         
-        result = json.loads(response_text)
+        # Проверяем, что ответ не пустой
+        if not response_text:
+            logger.error("Empty response from AI service")
+            raise HTTPException(
+                status_code=502,
+                detail="AI service returned an empty response. Please try again."
+            )
+        
+        try:
+            result = json.loads(response_text)
+        except json.JSONDecodeError as json_err:
+            logger.error(f"Failed to parse AI response as JSON. Response preview: {response_text[:200]}")
+            logger.error(f"JSON decode error: {json_err}")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Invalid JSON response from AI service: {str(json_err)}"
+            )
+        
+        # Валидация структуры ответа
+        if not isinstance(result, dict):
+            logger.error(f"AI response is not a dictionary: {type(result)}")
+            raise HTTPException(
+                status_code=502,
+                detail="AI service returned invalid response format. Expected a JSON object."
+            )
+        
+        if "map" not in result:
+            logger.error(f"AI response missing 'map' field. Keys: {list(result.keys())}")
+            raise HTTPException(
+                status_code=502,
+                detail="AI service response is missing required 'map' field."
+            )
+        
+        if not isinstance(result.get("map"), list):
+            logger.error(f"AI response 'map' field is not a list: {type(result.get('map'))}")
+            raise HTTPException(
+                status_code=502,
+                detail="AI service response 'map' field must be a list."
+            )
         
         # Сохранение в кеш Redis (TTL 24 часа)
         if use_cache and redis_client:
@@ -544,17 +585,17 @@ def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool =
             status_code=504,
             detail="Request to AI service timed out. Please try again."
         )
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON response from AI: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail="Invalid response format from AI service. Please try again."
-        )
+    except HTTPException:
+        # Re-raise HTTPExceptions (from validation or inner handlers)
+        raise
     except Exception as e:
-        logger.error(f"Unexpected error in AI generation: {e}", exc_info=True)
+        error_msg = str(e) if str(e) else repr(e)
+        if not error_msg:
+            error_msg = f"{type(e).__name__}: An unexpected error occurred"
+        logger.error(f"Unexpected error in AI generation: {error_msg}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Unexpected error: {str(e)}"
+            detail=f"Unexpected error: {error_msg}"
         )
 
 
@@ -733,9 +774,12 @@ Acceptance Criteria: {json.dumps(story_data.get('acceptance_criteria', []), ensu
             detail="Invalid response format from AI service. Please try again."
         )
     except Exception as e:
-        logger.error(f"Unexpected error in AI improvement: {e}", exc_info=True)
+        error_msg = str(e) if str(e) else repr(e)
+        if not error_msg:
+            error_msg = f"{type(e).__name__}: An unexpected error occurred"
+        logger.error(f"Unexpected error in AI improvement: {error_msg}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Unexpected error: {str(e)}"
+            detail=f"Unexpected error: {error_msg}"
         )
 

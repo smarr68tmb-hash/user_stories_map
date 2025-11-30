@@ -82,8 +82,11 @@ def enhance_requirements_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in enhance_requirements: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to enhance requirements")
+        error_msg = str(e) if str(e) else repr(e)
+        if not error_msg:
+            error_msg = f"{type(e).__name__}: An unexpected error occurred"
+        logger.error(f"Unexpected error in enhance_requirements: {error_msg}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to enhance requirements: {error_msg}")
 
 
 @router.post("/generate-map")
@@ -141,70 +144,122 @@ def generate_map(
     try:
         logger.info(f"Stage 2: Generating map for user {current_user.id}")
         ai_data = generate_ai_map(generation_text, redis_client=redis_client)
-    except HTTPException:
+    except HTTPException as e:
+        # Сохраняем оригинальное сообщение об ошибке
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in generate_map: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to generate map")
+        error_msg = str(e) if str(e) else repr(e)
+        if not error_msg:
+            error_msg = f"{type(e).__name__}: An unexpected error occurred during map generation"
+        logger.error(f"Unexpected error in generate_map: {error_msg}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate map: {error_msg}")
+    
+    # Валидация структуры данных от AI
+    if not ai_data or not isinstance(ai_data, dict):
+        logger.error(f"Invalid AI response structure: {type(ai_data)}")
+        raise HTTPException(
+            status_code=502,
+            detail="Invalid response format from AI service. Expected a dictionary with 'productName' and 'map' fields."
+        )
+    
+    if "map" not in ai_data or not isinstance(ai_data.get("map"), list):
+        logger.error(f"Invalid AI response: missing or invalid 'map' field")
+        raise HTTPException(
+            status_code=502,
+            detail="Invalid response format from AI service. Missing or invalid 'map' field."
+        )
     
     # 2. Создаем проект (привязываем к текущему пользователю)
-    project = Project(
-        name=ai_data.get("productName", "New Project"),
-        raw_requirements=req.text,
-        user_id=current_user.id
-    )
-    db.add(project)
-    db.flush()
-    
-    # 3. Создаем стандартные релизы
-    mvp_release = Release(project_id=project.id, title="MVP", position=0)
-    release1 = Release(project_id=project.id, title="Release 1", position=1)
-    later_release = Release(project_id=project.id, title="Later", position=2)
-    db.add_all([mvp_release, release1, later_release])
-    db.flush()
-    
-    # 4. Сохраняем структуру карты
-    for act_idx, activity_item in enumerate(ai_data.get("map", [])):
-        activity = Activity(
-            project_id=project.id,
-            title=activity_item.get("activity", ""),
-            position=act_idx
+    try:
+        project = Project(
+            name=ai_data.get("productName", "New Project"),
+            raw_requirements=req.text,
+            user_id=current_user.id
         )
-        db.add(activity)
+        db.add(project)
         db.flush()
         
-        for task_idx, task_item in enumerate(activity_item.get("tasks", [])):
-            task = UserTask(
-                activity_id=activity.id,
-                title=task_item.get("taskTitle", ""),
-                position=task_idx
+        # 3. Создаем стандартные релизы
+        mvp_release = Release(project_id=project.id, title="MVP", position=0)
+        release1 = Release(project_id=project.id, title="Release 1", position=1)
+        later_release = Release(project_id=project.id, title="Later", position=2)
+        db.add_all([mvp_release, release1, later_release])
+        db.flush()
+        
+        # 4. Сохраняем структуру карты
+        for act_idx, activity_item in enumerate(ai_data.get("map", [])):
+            if not isinstance(activity_item, dict):
+                logger.warning(f"Skipping invalid activity item at index {act_idx}: {type(activity_item)}")
+                continue
+                
+            activity = Activity(
+                project_id=project.id,
+                title=activity_item.get("activity", ""),
+                position=act_idx
             )
-            db.add(task)
+            db.add(activity)
             db.flush()
             
-            for story_idx, story_item in enumerate(task_item.get("stories", [])):
-                # Определяем релиз по приоритету
-                priority = story_item.get("priority", "Later").upper()
-                if "MVP" in priority:
-                    target_release = mvp_release
-                elif "RELEASE" in priority or "1" in priority:
-                    target_release = release1
-                else:
-                    target_release = later_release
+            tasks = activity_item.get("tasks", [])
+            if not isinstance(tasks, list):
+                logger.warning(f"Invalid tasks format for activity {act_idx}")
+                continue
                 
-                story = UserStory(
-                    task_id=task.id,
-                    release_id=target_release.id,
-                    title=story_item.get("title", ""),
-                    description=story_item.get("description", ""),
-                    priority=story_item.get("priority", "Later"),
-                    acceptance_criteria=story_item.get("acceptanceCriteria", []),
-                    position=story_idx
+            for task_idx, task_item in enumerate(tasks):
+                if not isinstance(task_item, dict):
+                    logger.warning(f"Skipping invalid task item at activity {act_idx}, task {task_idx}")
+                    continue
+                    
+                task = UserTask(
+                    activity_id=activity.id,
+                    title=task_item.get("taskTitle", ""),
+                    position=task_idx
                 )
-                db.add(story)
-    
-    db.commit()
-    db.refresh(project)
+                db.add(task)
+                db.flush()
+                
+                stories = task_item.get("stories", [])
+                if not isinstance(stories, list):
+                    logger.warning(f"Invalid stories format for task {task_idx}")
+                    continue
+                    
+                for story_idx, story_item in enumerate(stories):
+                    if not isinstance(story_item, dict):
+                        logger.warning(f"Skipping invalid story item at activity {act_idx}, task {task_idx}, story {story_idx}")
+                        continue
+                    
+                    # Определяем релиз по приоритету
+                    priority = story_item.get("priority", "Later").upper()
+                    if "MVP" in priority:
+                        target_release = mvp_release
+                    elif "RELEASE" in priority or "1" in priority:
+                        target_release = release1
+                    else:
+                        target_release = later_release
+                    
+                    story = UserStory(
+                        task_id=task.id,
+                        release_id=target_release.id,
+                        title=story_item.get("title", ""),
+                        description=story_item.get("description", ""),
+                        priority=story_item.get("priority", "Later"),
+                        acceptance_criteria=story_item.get("acceptanceCriteria", []),
+                        position=story_idx
+                    )
+                    db.add(story)
+        
+        db.commit()
+        db.refresh(project)
+    except Exception as e:
+        db.rollback()
+        error_msg = str(e) if str(e) else repr(e)
+        if not error_msg:
+            error_msg = f"{type(e).__name__}: Database error occurred"
+        logger.error(f"Database error while saving project: {error_msg}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save project to database: {error_msg}"
+        )
     
     return {
         "status": "success",
