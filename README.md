@@ -13,7 +13,7 @@
 - Backend: FastAPI + PostgreSQL (Supabase)
 - Frontend: React + Vite
 - Deployment: Render.com
-- AI: Perplexity API
+- AI: Groq (приоритет) → Perplexity → OpenAI с автоматическим fallback
 
 ## 🚀 Быстрый старт
 
@@ -35,10 +35,19 @@ source venv/bin/activate  # На Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Установите OpenAI API ключ:
+4. Установите API ключ (рекомендуется Groq - бесплатный):
 ```bash
+# Groq (рекомендуется - бесплатный и быстрый)
+export GROQ_API_KEY=gsk-your-api-key-here
+
+# Или Perplexity (резервный)
+export PERPLEXITY_API_KEY=pplx-your-api-key-here
+
+# Или OpenAI (резервный)
 export OPENAI_API_KEY=sk-your-api-key-here
 ```
+
+Система автоматически переключается между провайдерами при ошибках.
 
 5. Запустите сервер:
 ```bash
@@ -181,7 +190,7 @@ backend/
 - **SQLAlchemy** — ORM для работы с БД
 - **PostgreSQL (Supabase)** — облачная база данных
 - **Alembic** — миграции БД
-- **Perplexity/OpenAI API** — генерация карты через AI
+- **Groq/Perplexity/OpenAI API** — генерация карты через AI с автоматическим fallback
 - **Redis** — кеширование AI ответов
 - **JWT** — аутентификация
 - **Slowapi** — rate limiting
