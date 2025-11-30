@@ -99,7 +99,7 @@ class Settings:
         
         # Устанавливаем модель только если провайдер определен
         if self.API_PROVIDER == "groq":
-            self.API_MODEL = "llama-3.1-70b-versatile"
+            self.API_MODEL = "llama-3.3-70b-versatile"
         elif self.API_PROVIDER == "perplexity":
             self.API_MODEL = "sonar"
         elif self.API_PROVIDER == "openai":

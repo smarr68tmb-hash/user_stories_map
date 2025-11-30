@@ -66,7 +66,7 @@ pytest test_main.py -v
 - `API_PROVIDER` - Явное указание основного провайдера (опционально, для обратной совместимости)
 
 ### Модели (опционально, есть умолчания)
-- `GROQ_MODEL` - Модель Groq для генерации (по умолчанию: `llama-3.1-70b-versatile`)
+- `GROQ_MODEL` - Модель Groq для генерации (по умолчанию: `llama-3.3-70b-versatile`)
 - `GROQ_ENHANCEMENT_MODEL` - Модель Groq для предобработки (по умолчанию: `llama-3.1-8b-instant`)
 - `PERPLEXITY_MODEL` - Модель Perplexity (по умолчанию: `llama-3.1-sonar-large-128k-online`)
 - `PERPLEXITY_ENHANCEMENT_MODEL` - Модель Perplexity для предобработки

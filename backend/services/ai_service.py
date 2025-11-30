@@ -85,7 +85,7 @@ def _get_model_for_provider(provider: str, is_enhancement: bool = False) -> str:
     else:
         # Для основной генерации
         if provider == "groq":
-            return os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
+            return os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
         elif provider == "perplexity":
             return os.getenv("PERPLEXITY_MODEL", "llama-3.1-sonar-large-128k-online")
         elif provider == "openai":
