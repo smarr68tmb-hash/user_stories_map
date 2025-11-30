@@ -1,0 +1,189 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # ============================================
+  # Backend Tests
+  # ============================================
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run tests
+        working-directory: ./backend
+        env:
+          DATABASE_URL: "sqlite:///:memory:"
+          JWT_SECRET_KEY: "test-secret-key-for-ci-minimum-32-characters-long"
+          ALLOWED_ORIGINS: "http://localhost:5173"
+          LOG_LEVEL: "INFO"
+        run: |
+          pytest test_main.py -v --tb=short
+      
+      - name: Check imports
+        working-directory: ./backend
+        run: |
+          python -c "from main import app; print('✅ All imports successful')"
+  
+  # ============================================
+  # Backend Linting
+  # ============================================
+  lint-backend:
+    name: Backend Linting
+    runs-on: ubuntu-latest
+    continue-on-error: true  # Не блокируем merge, только предупреждаем
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: 'pip'
+      
+      - name: Install linting tools
+        run: |
+          pip install black flake8
+      
+      - name: Check code formatting with Black
+        working-directory: ./backend
+        run: |
+          black --check --diff .
+        continue-on-error: true
+      
+      - name: Lint with flake8
+        working-directory: ./backend
+        run: |
+          # Игнорируем некоторые ошибки для совместимости
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        continue-on-error: true
+  
+  # ============================================
+  # Frontend Build
+  # ============================================
+  build-frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+      
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+        env:
+          VITE_API_URL: http://localhost:8000
+      
+      - name: Check build output
+        working-directory: ./frontend
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "❌ Build failed: dist directory not found"
+            exit 1
+          fi
+          echo "✅ Build successful: dist directory created"
+  
+  # ============================================
+  # Database Migrations Check
+  # ============================================
+  check-migrations:
+    name: Check Database Migrations
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: 'pip'
+      
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Check Alembic migrations
+        working-directory: ./backend
+        env:
+          DATABASE_URL: "sqlite:///:memory:"
+        run: |
+          # Проверяем что миграции можно загрузить и они синтаксически корректны
+          python -c "from alembic import script; from alembic.config import Config; cfg = Config('alembic.ini'); script_dir = script.ScriptDirectory.from_config(cfg); print(f'✅ Found {len(list(script_dir.walk_revisions()))} migration(s)')"
+        continue-on-error: true
+  
+  # ============================================
+  # Security Check (опционально)
+  # ============================================
+  security-check:
+    name: Security Check
+    runs-on: ubuntu-latest
+    continue-on-error: true  # Не блокируем, только предупреждаем
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      
+      - name: Install safety
+        run: |
+          pip install safety
+      
+      - name: Check for security vulnerabilities
+        working-directory: ./backend
+        run: |
+          safety check -r requirements.txt --json || true
+        continue-on-error: true
+      
+      - name: Check Node.js dependencies
+        working-directory: ./frontend
+        run: |
+          npm audit --audit-level=moderate || true
+        continue-on-error: true
+
