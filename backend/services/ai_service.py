@@ -1,10 +1,13 @@
 """
 AI service - генерация User Story Map через AI API
+Поддерживает fallback между провайдерами: Groq → Perplexity → OpenAI
 """
 import json
 import hashlib
 import logging
-from typing import Optional
+import os
+import copy
+from typing import Optional, Dict, List
 from fastapi import HTTPException
 from openai import OpenAI, RateLimitError, APIError, APITimeoutError, APIConnectionError
 
@@ -12,26 +15,210 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-# Инициализация AI клиента
+# Инициализация AI клиентов для всех доступных провайдеров
+clients: Dict[str, OpenAI] = {}
+
+def _initialize_clients():
+    """Инициализирует клиенты для всех доступных провайдеров"""
+    global clients
+    
+    # Groq
+    if settings.GROQ_API_KEY:
+        try:
+            clients["groq"] = OpenAI(
+                api_key=settings.GROQ_API_KEY,
+                base_url="https://api.groq.com/openai/v1"
+            )
+            logger.info("✅ Initialized Groq API client")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Groq client: {e}")
+    
+    # Perplexity
+    if settings.PERPLEXITY_API_KEY:
+        try:
+            clients["perplexity"] = OpenAI(
+                api_key=settings.PERPLEXITY_API_KEY,
+                base_url="https://api.perplexity.ai"
+            )
+            logger.info("✅ Initialized Perplexity API client")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Perplexity client: {e}")
+    
+    # OpenAI
+    if settings.OPENAI_API_KEY:
+        try:
+            clients["openai"] = OpenAI(api_key=settings.OPENAI_API_KEY)
+            logger.info("✅ Initialized OpenAI API client")
+        except Exception as e:
+            logger.warning(f"Failed to initialize OpenAI client: {e}")
+    
+    if not clients:
+        logger.warning("⚠️ No AI API clients configured. AI functions will be unavailable.")
+
+# Инициализируем клиенты при импорте модуля
+_initialize_clients()
+
+# Обратная совместимость: один клиент для старого кода
 client: Optional[OpenAI] = None
-if settings.get_api_key():
-    if settings.API_PROVIDER == "perplexity":
-        client = OpenAI(
-            api_key=settings.get_api_key(),
-            base_url="https://api.perplexity.ai"
-        )
-        logger.info("Initialized Perplexity API client")
-    else:
-        client = OpenAI(api_key=settings.get_api_key())
-        logger.info("Initialized OpenAI API client")
-else:
-    logger.warning("AI API key not configured")
+available_providers = settings.get_available_providers()
+if available_providers:
+    primary_provider = available_providers[0]
+    client = clients.get(primary_provider)
 
 
 def get_cache_key(requirements_text: str, prefix: str = "ai_map") -> str:
     """Генерирует ключ для кеша на основе текста требований"""
     text_hash = hashlib.sha256(requirements_text.encode()).hexdigest()
     return f"{prefix}:{text_hash}"
+
+
+def _get_model_for_provider(provider: str, is_enhancement: bool = False) -> str:
+    """Возвращает модель для конкретного провайдера"""
+    if is_enhancement:
+        # Для enhancement используем более быстрые модели
+        if provider == "groq":
+            return os.getenv("GROQ_ENHANCEMENT_MODEL", "llama-3.1-8b-instant")
+        elif provider == "perplexity":
+            return os.getenv("PERPLEXITY_ENHANCEMENT_MODEL", "llama-3.1-sonar-small-32k-online")
+        elif provider == "openai":
+            return os.getenv("OPENAI_ENHANCEMENT_MODEL", "gpt-4o-mini")
+    else:
+        # Для основной генерации
+        if provider == "groq":
+            return os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
+        elif provider == "perplexity":
+            return os.getenv("PERPLEXITY_MODEL", "llama-3.1-sonar-large-128k-online")
+        elif provider == "openai":
+            return os.getenv("OPENAI_MODEL", "gpt-4o")
+    
+    # Fallback на настройки из settings
+    if is_enhancement:
+        return settings.get_enhancement_model()
+    return settings.API_MODEL
+
+
+def _should_retry_error(error: Exception, provider: str) -> bool:
+    """Определяет, стоит ли повторять запрос с другим провайдером при этой ошибке"""
+    if isinstance(error, RateLimitError):
+        return True  # Лимиты - переключаемся
+    if isinstance(error, APIConnectionError):
+        return True  # Проблемы с сетью - переключаемся
+    if isinstance(error, APIError):
+        # Проверяем код ошибки
+        error_str = str(error).lower()
+        if "429" in error_str or "rate limit" in error_str or "quota" in error_str:
+            return True
+        if "503" in error_str or "service unavailable" in error_str:
+            return True
+    # Timeout и JSON ошибки не переключаем - это может быть проблема запроса
+    return False
+
+
+def _make_request_with_fallback(
+    request_params: dict,
+    providers: Optional[List[str]] = None,
+    is_enhancement: bool = False
+) -> tuple:
+    """
+    Выполняет запрос к AI API с автоматическим fallback между провайдерами
+    
+    Args:
+        request_params: Параметры запроса (model будет заменен для каждого провайдера)
+        providers: Список провайдеров для попыток (по умолчанию из настроек)
+        is_enhancement: Используется ли для enhancement (влияет на выбор модели)
+    
+    Returns:
+        tuple: (completion, provider_name) - результат и имя провайдера, который ответил
+    
+    Raises:
+        HTTPException: Если все провайдеры недоступны
+    """
+    if providers is None:
+        providers = settings.get_available_providers()
+    
+    if not providers:
+        raise HTTPException(
+            status_code=503,
+            detail="No AI providers configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY."
+        )
+    
+    last_error = None
+    last_provider = None
+    
+    for provider in providers:
+        if provider not in clients:
+            logger.debug(f"Skipping {provider} - client not initialized")
+            continue
+        
+        try:
+            # Получаем модель для этого провайдера
+            model = _get_model_for_provider(provider, is_enhancement)
+            
+            # Создаем deep copy параметров запроса, чтобы не модифицировать оригинал
+            # Особенно важно для messages списка, который может быть изменен
+            provider_params = copy.deepcopy(request_params)
+            provider_params["model"] = model
+            
+            # JSON mode только для OpenAI (Groq и Perplexity могут не поддерживать)
+            if provider == "openai":
+                # Для OpenAI добавляем response_format если его нет
+                if "response_format" not in provider_params:
+                    provider_params["response_format"] = {"type": "json_object"}
+            else:
+                # Для не-OpenAI провайдеров (Groq, Perplexity):
+                # 1. Убираем response_format если он есть
+                provider_params.pop("response_format", None)
+                # 2. Всегда добавляем инструкцию в промпт для JSON
+                # (messages уже скопированы через deepcopy выше, можно безопасно модифицировать)
+                if len(provider_params["messages"]) > 0:
+                    last_msg = provider_params["messages"][-1]
+                    if isinstance(last_msg, dict) and "content" in last_msg:
+                        # Проверяем, не добавлена ли уже инструкция
+                        if "IMPORTANT: Return ONLY valid JSON" not in last_msg["content"]:
+                            provider_params["messages"][-1]["content"] += "\n\nIMPORTANT: Return ONLY valid JSON, no additional text or markdown formatting."
+            
+            logger.info(f"Trying {provider.upper()} with model {model}")
+            completion = clients[provider].chat.completions.create(**provider_params)
+            
+            logger.info(f"✅ Successfully got response from {provider.upper()}")
+            return completion, provider
+            
+        except (RateLimitError, APIConnectionError) as e:
+            last_error = e
+            last_provider = provider
+            logger.warning(f"❌ {provider.upper()} failed ({type(e).__name__}): {e}. Trying next provider...")
+            continue
+        except APIError as e:
+            if _should_retry_error(e, provider):
+                last_error = e
+                last_provider = provider
+                logger.warning(f"❌ {provider.upper()} failed (APIError): {e}. Trying next provider...")
+                continue
+            else:
+                # Не переключаемся на другие провайдеры для этой ошибки
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"{provider.upper()} API error: {str(e)}"
+                )
+        except Exception as e:
+            last_error = e
+            last_provider = provider
+            logger.warning(f"❌ {provider.upper()} failed (unexpected): {e}. Trying next provider...")
+            continue
+    
+    # Все провайдеры не сработали
+    if last_error and last_provider:
+        error_msg = f"All AI providers failed. Last error from {last_provider.upper()}: {str(last_error)}"
+    elif last_error:
+        error_msg = f"All AI providers failed. Last error: {str(last_error)}"
+    else:
+        error_msg = "All AI providers unavailable"
+    
+    logger.error(f"❌ {error_msg}")
+    raise HTTPException(
+        status_code=503,
+        detail=error_msg
+    )
 
 
 def enhance_requirements(raw_text: str, redis_client=None, use_cache: bool = True) -> dict:
@@ -53,10 +240,12 @@ def enhance_requirements(raw_text: str, redis_client=None, use_cache: bool = Tru
         dict: Результат улучшения
     """
     
-    if not client:
+    # Проверяем наличие доступных провайдеров
+    available_providers = settings.get_available_providers()
+    if not available_providers:
         raise HTTPException(
             status_code=503,
-            detail="AI API key not configured. Set OPENAI_API_KEY or PERPLEXITY_API_KEY environment variable."
+            detail="AI API key not configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY environment variable."
         )
     
     # Валидация размера входных данных
@@ -130,12 +319,9 @@ confidence должен быть от 0.5 до 1.0:
 - 0.5-0.7: требования размытые, много предположений"""
 
     try:
-        # Получаем модель для enhancement (может быть отдельная или основная)
-        enhancement_model = settings.get_enhancement_model()
-        logger.info(f"Enhancing requirements (length: {len(raw_text)} chars) using model: {enhancement_model}")
+        logger.info(f"Enhancing requirements (length: {len(raw_text)} chars)")
         
         request_params = {
-            "model": enhancement_model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -144,16 +330,15 @@ confidence должен быть от 0.5 до 1.0:
             "timeout": 30.0,  # 30 секунд должно хватить
         }
         
-        # JSON mode только для OpenAI (Perplexity может не поддерживать)
-        if settings.API_PROVIDER == "openai":
-            request_params["response_format"] = {"type": "json_object"}
-        else:
-            # Для Perplexity и других провайдеров добавляем инструкцию в промпт
-            request_params["messages"][1]["content"] += "\n\nIMPORTANT: Return ONLY valid JSON, no additional text or markdown formatting."
+        # Используем fallback механизм
+        completion, used_provider = _make_request_with_fallback(
+            request_params,
+            providers=available_providers,
+            is_enhancement=True
+        )
         
-        completion = client.chat.completions.create(**request_params)
         response_text = completion.choices[0].message.content
-        logger.info("Successfully received enhancement response")
+        logger.info(f"Successfully received enhancement response from {used_provider.upper()}")
         
         # Очистка ответа от markdown
         response_text = response_text.strip()
@@ -185,29 +370,11 @@ confidence должен быть от 0.5 до 1.0:
         logger.info(f"Requirements enhanced. Confidence: {result.get('confidence', 'N/A')}")
         return result
         
-    except RateLimitError:
-        logger.error(f"{settings.API_PROVIDER.upper()} rate limit exceeded")
-        raise HTTPException(
-            status_code=429,
-            detail=f"{settings.API_PROVIDER.upper()} rate limit exceeded. Please try again later."
-        )
-    except APITimeoutError:
-        logger.error(f"{settings.API_PROVIDER.upper()} request timeout")
+    except APITimeoutError as e:
+        logger.error(f"Request timeout: {e}")
         raise HTTPException(
             status_code=504,
             detail="Request to AI service timed out. Please try again."
-        )
-    except APIConnectionError as e:
-        logger.error(f"{settings.API_PROVIDER.upper()} connection error: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail="Unable to connect to AI service. Please check your internet connection."
-        )
-    except APIError as e:
-        logger.error(f"{settings.API_PROVIDER.upper()} API error: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail=f"AI service error: {str(e)}"
         )
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON response from AI enhancement: {e}")
@@ -242,10 +409,12 @@ confidence должен быть от 0.5 до 1.0:
 def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool = True) -> dict:
     """Отправляет запрос в AI API и получает структурированную User Story Map"""
     
-    if not client:
+    # Проверяем наличие доступных провайдеров
+    available_providers = settings.get_available_providers()
+    if not available_providers:
         raise HTTPException(
             status_code=503,
-            detail="AI API key not configured. Set OPENAI_API_KEY or PERPLEXITY_API_KEY environment variable."
+            detail="AI API key not configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY environment variable."
         )
     
     # Валидация размера входных данных
@@ -321,11 +490,10 @@ def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool =
 }}"""
 
     try:
-        logger.info(f"Generating map for requirements (length: {len(requirements_text)} chars) using {settings.API_PROVIDER}")
+        logger.info(f"Generating map for requirements (length: {len(requirements_text)} chars)")
         
         # Подготовка параметров запроса
         request_params = {
-            "model": settings.API_MODEL,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -334,17 +502,15 @@ def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool =
             "timeout": 60.0,  # 60 секунд таймаут
         }
         
-        # Perplexity поддерживает JSON mode, но может требовать другой формат
-        if settings.API_PROVIDER == "openai":
-            request_params["response_format"] = {"type": "json_object"}
-        else:
-            # Для Perplexity добавляем инструкцию в промпт для JSON
-            user_prompt = user_prompt + "\n\nIMPORTANT: Return ONLY valid JSON, no additional text or markdown formatting."
-        
-        completion = client.chat.completions.create(**request_params)
+        # Используем fallback механизм
+        completion, used_provider = _make_request_with_fallback(
+            request_params,
+            providers=available_providers,
+            is_enhancement=False
+        )
         
         response_text = completion.choices[0].message.content
-        logger.info("Successfully received AI response")
+        logger.info(f"Successfully received AI response from {used_provider.upper()}")
         
         # Очистка ответа от возможных markdown форматирования (для Perplexity)
         response_text = response_text.strip()
@@ -372,29 +538,11 @@ def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool =
         
         return result
         
-    except RateLimitError:
-        logger.error(f"{settings.API_PROVIDER.upper()} rate limit exceeded")
-        raise HTTPException(
-            status_code=429,
-            detail=f"{settings.API_PROVIDER.upper()} rate limit exceeded. Please try again later."
-        )
-    except APITimeoutError:
-        logger.error(f"{settings.API_PROVIDER.upper()} request timeout")
+    except APITimeoutError as e:
+        logger.error(f"Request timeout: {e}")
         raise HTTPException(
             status_code=504,
             detail="Request to AI service timed out. Please try again."
-        )
-    except APIConnectionError as e:
-        logger.error(f"{settings.API_PROVIDER.upper()} connection error: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail="Unable to connect to AI service. Please check your internet connection."
-        )
-    except APIError as e:
-        logger.error(f"{settings.API_PROVIDER.upper()} API error: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail=f"AI service error: {str(e)}"
         )
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON response from AI: {e}")
@@ -431,10 +579,12 @@ def ai_improve_story_content(
         dict: Улучшенные данные истории
     """
     
-    if not client:
+    # Проверяем наличие доступных провайдеров
+    available_providers = settings.get_available_providers()
+    if not available_providers:
         raise HTTPException(
             status_code=503,
-            detail="AI API key not configured. Set OPENAI_API_KEY or PERPLEXITY_API_KEY environment variable."
+            detail="AI API key not configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY environment variable."
         )
     
     # Валидация промпта
@@ -526,7 +676,6 @@ Acceptance Criteria: {json.dumps(story_data.get('acceptance_criteria', []), ensu
         logger.info(f"Improving story with prompt length: {len(user_prompt)} chars, action: {action}")
         
         request_params = {
-            "model": settings.API_MODEL,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_full_prompt},
@@ -535,12 +684,15 @@ Acceptance Criteria: {json.dumps(story_data.get('acceptance_criteria', []), ensu
             "timeout": 30.0,
         }
         
-        if settings.API_PROVIDER == "openai":
-            request_params["response_format"] = {"type": "json_object"}
+        # Используем fallback механизм
+        completion, used_provider = _make_request_with_fallback(
+            request_params,
+            providers=available_providers,
+            is_enhancement=False
+        )
         
-        completion = client.chat.completions.create(**request_params)
         response_text = completion.choices[0].message.content
-        logger.info("Successfully received AI improvement response")
+        logger.info(f"Successfully received AI improvement response from {used_provider.upper()}")
         
         # Очистка ответа от markdown
         response_text = response_text.strip()
@@ -568,29 +720,11 @@ Acceptance Criteria: {json.dumps(story_data.get('acceptance_criteria', []), ensu
         
         return result
         
-    except RateLimitError:
-        logger.error(f"{settings.API_PROVIDER.upper()} rate limit exceeded")
-        raise HTTPException(
-            status_code=429,
-            detail=f"{settings.API_PROVIDER.upper()} rate limit exceeded. Please try again later."
-        )
-    except APITimeoutError:
-        logger.error(f"{settings.API_PROVIDER.upper()} request timeout")
+    except APITimeoutError as e:
+        logger.error(f"Request timeout: {e}")
         raise HTTPException(
             status_code=504,
             detail="Request to AI service timed out. Please try again."
-        )
-    except APIConnectionError as e:
-        logger.error(f"{settings.API_PROVIDER.upper()} connection error: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail="Unable to connect to AI service. Please check your internet connection."
-        )
-    except APIError as e:
-        logger.error(f"{settings.API_PROVIDER.upper()} API error: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail=f"AI service error: {str(e)}"
         )
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON response from AI: {e}")

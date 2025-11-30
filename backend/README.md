@@ -19,20 +19,24 @@ cp .env.example .env
 # Отредактируйте .env и добавьте ваш API ключ
 ```
 
-Или установите переменную окружения:
+Или установите переменные окружения:
 ```bash
-# Для OpenAI
-export OPENAI_API_KEY=sk-your-key-here
+# Для Groq (рекомендуется - бесплатный и быстрый)
+export GROQ_API_KEY=gsk-your-key-here
 
-# Или для Perplexity
-export OPENAI_API_KEY=pplx-your-key-here
-# или
+# Для Perplexity (резервный)
 export PERPLEXITY_API_KEY=pplx-your-key-here
+
+# Для OpenAI (резервный)
+export OPENAI_API_KEY=sk-your-key-here
 ```
 
-**Поддерживаются два провайдера:**
-- **OpenAI** - ключ вида `sk-...`
-- **Perplexity** - ключ вида `pplx-...` (автоопределяется)
+**Поддерживаются три провайдера с автоматическим fallback:**
+- **Groq** (приоритет 1) - ключ вида `gsk_...` - бесплатный, быстрый
+- **Perplexity** (приоритет 2) - ключ вида `pplx-...` - резервный
+- **OpenAI** (приоритет 3) - ключ вида `sk-...` - резервный
+
+Система автоматически переключается между провайдерами при ошибках или исчерпании лимитов.
 
 4. Запустите сервер:
 ```bash
@@ -52,14 +56,24 @@ pytest test_main.py -v
 
 ## Переменные окружения
 
-- `OPENAI_API_KEY` - API ключ (обязательно, поддерживает OpenAI и Perplexity)
-  - OpenAI: ключ вида `sk-...`
-  - Perplexity: ключ вида `pplx-...` (автоопределяется)
-- `PERPLEXITY_API_KEY` - Альтернативный способ указать Perplexity ключ
-- `API_PROVIDER` - Явное указание провайдера: `"openai"` или `"perplexity"` (опционально)
-- `API_MODEL` - Модель для использования:
-  - OpenAI: `gpt-4o` (по умолчанию)
-  - Perplexity: `llama-3.1-sonar-large-128k-online` (рекомендуется)
+### API Ключи (хотя бы один обязателен)
+- `GROQ_API_KEY` - API ключ Groq (формат: `gsk_...`) - **рекомендуется для начала**
+- `PERPLEXITY_API_KEY` - API ключ Perplexity (формат: `pplx-...`)
+- `OPENAI_API_KEY` - API ключ OpenAI (формат: `sk-...`)
+
+### Настройки провайдеров
+- `AI_PROVIDER_PRIORITY` - Порядок приоритета провайдеров (по умолчанию: `groq,perplexity,openai`)
+- `API_PROVIDER` - Явное указание основного провайдера (опционально, для обратной совместимости)
+
+### Модели (опционально, есть умолчания)
+- `GROQ_MODEL` - Модель Groq для генерации (по умолчанию: `llama-3.1-70b-versatile`)
+- `GROQ_ENHANCEMENT_MODEL` - Модель Groq для предобработки (по умолчанию: `llama-3.1-8b-instant`)
+- `PERPLEXITY_MODEL` - Модель Perplexity (по умолчанию: `llama-3.1-sonar-large-128k-online`)
+- `PERPLEXITY_ENHANCEMENT_MODEL` - Модель Perplexity для предобработки
+- `OPENAI_MODEL` - Модель OpenAI (по умолчанию: `gpt-4o`)
+- `OPENAI_ENHANCEMENT_MODEL` - Модель OpenAI для предобработки
+- `API_MODEL` - Общая модель (используется если не указана модель для провайдера)
+- `ENHANCEMENT_MODEL` - Общая модель для предобработки
 - `API_TEMPERATURE` - Температура для генерации (по умолчанию: 0.7)
 - `DATABASE_URL` - URL базы данных (по умолчанию: sqlite:///./usm.db)
 - `ALLOWED_ORIGINS` - Разрешенные домены для CORS (через запятую)

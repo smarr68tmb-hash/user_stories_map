@@ -12,7 +12,13 @@ source venv/bin/activate  # На Windows: venv\Scripts\activate
 # Установите зависимости
 pip install -r requirements.txt
 
-# Установите OpenAI API ключ
+# Установите API ключ (рекомендуется Groq - бесплатный и быстрый)
+export GROQ_API_KEY=gsk-your-api-key-here
+
+# Или используйте Perplexity (резервный)
+export PERPLEXITY_API_KEY=pplx-your-api-key-here
+
+# Или OpenAI (резервный)
 export OPENAI_API_KEY=sk-your-api-key-here
 
 # Запустите сервер
@@ -79,9 +85,13 @@ Frontend будет доступен на **http://localhost:5173**
 - Убедитесь, что Node.js и npm установлены
 - Проверьте, что зависимости установлены: `npm install`
 
-### Ошибка "OpenAI API key not configured"
-- Установите переменную окружения: `export OPENAI_API_KEY=sk-your-key`
-- Или создайте файл `.env` в папке backend с содержимым: `OPENAI_API_KEY=sk-your-key`
+### Ошибка "AI API key not configured"
+- Установите хотя бы один API ключ:
+  - `export GROQ_API_KEY=gsk-your-key` (рекомендуется - бесплатный)
+  - `export PERPLEXITY_API_KEY=pplx-your-key` (резервный)
+  - `export OPENAI_API_KEY=sk-your-key` (резервный)
+- Или создайте файл `.env` в папке backend с содержимым: `GROQ_API_KEY=gsk-your-key`
+- Система автоматически переключается между провайдерами при ошибках
 
 ### Ошибка подключения к backend
 - Убедитесь, что backend запущен на порту 8000

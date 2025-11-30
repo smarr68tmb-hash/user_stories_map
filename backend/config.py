@@ -3,7 +3,7 @@
 """
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -16,9 +16,16 @@ class Settings:
         # API Keys
         self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
         self.PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
+        self.GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
         self.API_PROVIDER = os.getenv("API_PROVIDER", "")
         self.API_MODEL = os.getenv("API_MODEL", "")
         self.API_TEMPERATURE = float(os.getenv("API_TEMPERATURE", "0.7"))
+        
+        # Приоритет провайдеров для fallback (через запятую: "groq,perplexity,openai")
+        self.AI_PROVIDER_PRIORITY = [
+            p.strip() for p in os.getenv("AI_PROVIDER_PRIORITY", "groq,perplexity,openai").split(",")
+            if p.strip()
+        ]
         
         # Two-Stage AI Processing: модель для улучшения требований (Stage 1)
         # Если не указана, используется основная модель (API_MODEL)
@@ -59,23 +66,46 @@ class Settings:
         if self.API_PROVIDER:
             return
         
+        # Определяем провайдера по первому доступному ключу в порядке приоритета
+        for provider in self.AI_PROVIDER_PRIORITY:
+            if provider == "groq" and self.GROQ_API_KEY:
+                self.API_PROVIDER = "groq"
+                return
+            elif provider == "perplexity" and self.PERPLEXITY_API_KEY:
+                self.API_PROVIDER = "perplexity"
+                return
+            elif provider == "openai" and self.OPENAI_API_KEY:
+                self.API_PROVIDER = "openai"
+                return
+        
+        # Fallback: определяем по формату ключа (для обратной совместимости)
         api_key = self.get_api_key()
-        if api_key.startswith("pplx-"):
-            self.API_PROVIDER = "perplexity"
-        elif api_key.startswith("sk-"):
-            self.API_PROVIDER = "openai"
-        else:
-            self.API_PROVIDER = "openai"
+        if api_key:
+            # Только если ключ существует, определяем провайдера по формату
+            if api_key.startswith("gsk_"):
+                self.API_PROVIDER = "groq"
+            elif api_key.startswith("pplx-"):
+                self.API_PROVIDER = "perplexity"
+            elif api_key.startswith("sk-"):
+                self.API_PROVIDER = "openai"
+            # Если ключ есть, но формат не распознан, не устанавливаем провайдера
+            # (оставляем пустую строку, что означает "не определен")
+        # Если ключа нет, оставляем API_PROVIDER пустым (не устанавливаем по умолчанию)
     
     def _set_default_model(self):
         """Установка модели по умолчанию"""
         if self.API_MODEL:
             return
         
-        if self.API_PROVIDER == "perplexity":
+        # Устанавливаем модель только если провайдер определен
+        if self.API_PROVIDER == "groq":
+            self.API_MODEL = "llama-3.1-70b-versatile"
+        elif self.API_PROVIDER == "perplexity":
             self.API_MODEL = "sonar"
-        else:
+        elif self.API_PROVIDER == "openai":
             self.API_MODEL = "gpt-4o"
+        # Если провайдер не определен (нет ключей), оставляем API_MODEL пустым
+        # Это предотвращает вводящее в заблуждение состояние
     
     def _validate_settings(self):
         """Валидация настроек при запуске"""
@@ -92,12 +122,41 @@ class Settings:
         if self.is_sqlite():
             logger.warning("⚠️ SQLite используется! Для production установите DATABASE_URL на PostgreSQL.")
         
-        if not self.get_api_key():
+        available_providers = self.get_available_providers()
+        if not available_providers:
             logger.warning("⚠️ AI API key не настроен. AI функции будут недоступны.")
+        else:
+            logger.info(f"✅ Настроены AI провайдеры (в порядке приоритета): {', '.join(available_providers)}")
     
     def get_api_key(self) -> str:
-        """Возвращает активный API ключ"""
-        return self.OPENAI_API_KEY or self.PERPLEXITY_API_KEY
+        """Возвращает активный API ключ (для обратной совместимости)"""
+        # Возвращаем первый доступный ключ в порядке приоритета
+        for provider in self.AI_PROVIDER_PRIORITY:
+            if provider == "groq" and self.GROQ_API_KEY:
+                return self.GROQ_API_KEY
+            elif provider == "perplexity" and self.PERPLEXITY_API_KEY:
+                return self.PERPLEXITY_API_KEY
+            elif provider == "openai" and self.OPENAI_API_KEY:
+                return self.OPENAI_API_KEY
+        return self.OPENAI_API_KEY or self.PERPLEXITY_API_KEY or self.GROQ_API_KEY
+    
+    def get_api_key_for_provider(self, provider: str) -> Optional[str]:
+        """Возвращает API ключ для конкретного провайдера"""
+        if provider == "groq":
+            return self.GROQ_API_KEY
+        elif provider == "perplexity":
+            return self.PERPLEXITY_API_KEY
+        elif provider == "openai":
+            return self.OPENAI_API_KEY
+        return None
+    
+    def get_available_providers(self) -> List[str]:
+        """Возвращает список доступных провайдеров в порядке приоритета"""
+        available = []
+        for provider in self.AI_PROVIDER_PRIORITY:
+            if self.get_api_key_for_provider(provider):
+                available.append(provider)
+        return available
     
     def get_enhancement_model(self) -> str:
         """Возвращает модель для Stage 1 (улучшение требований)"""
