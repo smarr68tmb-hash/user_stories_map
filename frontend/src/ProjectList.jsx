@@ -9,9 +9,16 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
   const [sortBy, setSortBy] = useState('newest'); // newest, oldest, name
   const [projectToDelete, setProjectToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [rememberCredentials, setRememberCredentials] = useState(false);
 
   useEffect(() => {
     loadProjects();
+  }, []);
+
+  useEffect(() => {
+    const remember = localStorage.getItem('remember_credentials') === 'true';
+    setRememberCredentials(remember);
   }, []);
 
   const loadProjects = async () => {
@@ -133,6 +140,22 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
     }
   };
 
+  const handleToggleRememberCredentials = (value) => {
+    setRememberCredentials(value);
+    if (value) {
+      localStorage.setItem('remember_credentials', 'true');
+    } else {
+      localStorage.removeItem('remember_credentials');
+      localStorage.removeItem('remembered_login');
+    }
+  };
+
+  const handleClearSavedCredentials = () => {
+    localStorage.removeItem('remembered_login');
+    localStorage.removeItem('remember_credentials');
+    setRememberCredentials(false);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
@@ -146,6 +169,12 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
               </p>
             </div>
             <div className="flex gap-3">
+              <button
+                onClick={() => setShowSettings(true)}
+                className="text-gray-600 hover:text-gray-800 font-medium px-4 py-2 rounded-lg border border-gray-300 hover:border-gray-400 transition"
+              >
+                Настройки
+              </button>
               <button
                 onClick={onCreateNew}
                 className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition shadow-sm"
@@ -394,6 +423,80 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
                     </svg>
                   )}
                   {deleting ? 'Удаление...' : 'Удалить'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Settings Modal */}
+        {showSettings && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Настройки аккаунта
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Управление сохранением логина и пароля на этом устройстве
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                  aria-label="Закрыть настройки"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <input
+                    id="remember-credentials"
+                    type="checkbox"
+                    checked={rememberCredentials}
+                    onChange={(e) => handleToggleRememberCredentials(e.target.checked)}
+                    className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label
+                    htmlFor="remember-credentials"
+                    className="text-sm text-gray-800 cursor-pointer"
+                  >
+                    <span className="font-medium block">
+                      Запоминать логин (email) на этом устройстве
+                    </span>
+                    <span className="text-gray-600">
+                      При включении логин будет предзаполняться при следующем входе
+                      в этом браузере.
+                    </span>
+                  </label>
+                </div>
+
+                <div className="border-t border-gray-200 pt-4 mt-2">
+                  <p className="text-sm text-gray-700 mb-2 font-medium">
+                    Управление сохранёнными данными
+                  </p>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Вы можете в любой момент удалить сохранённый логин с этого устройства.
+                    Это не повлияет на ваш аккаунт или сессию на сервере.
+                  </p>
+                  <button
+                    onClick={handleClearSavedCredentials}
+                    className="px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition font-medium"
+                  >
+                    Удалить сохранённый логин
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition font-medium"
+                >
+                  Закрыть
                 </button>
               </div>
             </div>

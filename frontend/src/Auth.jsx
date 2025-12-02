@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { auth } from './api';
 
 function Auth({ onLogin }) {
@@ -8,6 +8,31 @@ function Auth({ onLogin }) {
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [rememberCredentials, setRememberCredentials] = useState(false);
+
+  // Инициализируем состояние "запоминания" из пользовательской настройки
+  useEffect(() => {
+    const remember = localStorage.getItem('remember_credentials') === 'true';
+    setRememberCredentials(remember);
+
+    if (remember) {
+      const savedEmail = localStorage.getItem('remembered_login') || '';
+      if (savedEmail) {
+        setEmail(savedEmail);
+      }
+    }
+  }, []);
+
+  // Сохраняем только логин, пароль никогда не храним на клиенте
+  const saveCredentials = (shouldRemember, currentEmail) => {
+    if (shouldRemember) {
+      localStorage.setItem('remember_credentials', 'true');
+      localStorage.setItem('remembered_login', currentEmail);
+    } else {
+      localStorage.removeItem('remember_credentials');
+      localStorage.removeItem('remembered_login');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -22,6 +47,8 @@ function Auth({ onLogin }) {
         // После регистрации автоматически логинимся
         await auth.login(email, password);
       }
+      // Сохраняем или очищаем сохраненный логин в зависимости от выбора пользователя
+      saveCredentials(rememberCredentials, email);
       // Токены уже сохранены в localStorage внутри auth.login
       onLogin();
     } catch (err) {
@@ -98,6 +125,18 @@ function Auth({ onLogin }) {
                 </p>
               </div>
             )}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="flex items-center text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={rememberCredentials}
+                onChange={(e) => setRememberCredentials(e.target.checked)}
+                className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              Запомнить логин (email) на этом устройстве
+            </label>
           </div>
 
           {error && (
