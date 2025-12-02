@@ -31,20 +31,69 @@ const handleApiError = (error, onUnauthorized) => {
     }
     return 'Сессия истекла. Пожалуйста, войдите снова.';
   }
-  
+
   if (error.response?.data?.detail) {
     return error.response.data.detail;
   }
-  
+
   if (error.response) {
     return `Ошибка сервера: ${error.response.status}`;
   }
-  
+
   if (error.request) {
     return 'Не удалось подключиться к серверу';
   }
-  
+
   return 'Произошла неизвестная ошибка';
+};
+
+// Вспомогательная функция для обновления истории в проекте (локально)
+const updateStoryInProject = (project, storyId, updatedStory) => {
+  return {
+    ...project,
+    activities: project.activities.map(activity => ({
+      ...activity,
+      tasks: activity.tasks.map(task => ({
+        ...task,
+        stories: task.stories.map(story =>
+          story.id === storyId ? { ...story, ...updatedStory } : story
+        )
+      }))
+    }))
+  };
+};
+
+// Вспомогательная функция для добавления новой истории в проект (локально)
+const addStoryToProject = (project, taskId, releaseId, newStory) => {
+  return {
+    ...project,
+    activities: project.activities.map(activity => ({
+      ...activity,
+      tasks: activity.tasks.map(task => {
+        if (task.id === taskId) {
+          return {
+            ...task,
+            stories: [...task.stories, newStory]
+          };
+        }
+        return task;
+      })
+    }))
+  };
+};
+
+// Вспомогательная функция для удаления истории из проекта (локально)
+const removeStoryFromProject = (project, storyId) => {
+  return {
+    ...project,
+    activities: project.activities.map(activity => ({
+      ...activity,
+      tasks: activity.tasks.map(task => ({
+        ...task,
+        stories: task.stories.filter(story => story.id !== storyId)
+      }))
+    }))
+  };
 };
 
 function StoryMap({ project, onUpdate, onUnauthorized }) {
@@ -152,22 +201,22 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     if (!newStoryTitle.trim()) return;
 
     try {
-      await api.post('/story', {
+      const response = await api.post('/story', {
         task_id: taskId,
         release_id: releaseId,
         title: newStoryTitle,
         description: newStoryDescription,
         priority: newStoryPriority
       });
-      
+
       setNewStoryTitle('');
       setNewStoryDescription('');
       setNewStoryPriority('MVP');
       setAddingToCell(null);
-      
-      // Обновляем проект
-      const res = await api.get(`/project/${project.id}`);
-      onUpdate(res.data);
+
+      // Локальное обновление проекта (оптимизация)
+      const updatedProject = addStoryToProject(project, taskId, releaseId, response.data);
+      onUpdate(updatedProject);
     } catch (error) {
       console.error('Error adding story:', error);
       const errorMsg = handleApiError(error, onUnauthorized);
@@ -177,24 +226,40 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
 
   const handleUpdateStory = async (updates) => {
     if (!editingStory) return;
-    
-    await api.put(`/story/${editingStory.id}`, updates);
-    
-    // Обновляем проект
-    const res = await api.get(`/project/${project.id}`);
-    onUpdate(res.data);
-    setEditingStory(null);
+
+    try {
+      const response = await api.put(`/story/${editingStory.id}`, updates);
+
+      // Локальное обновление проекта (оптимизация)
+      const updatedProject = updateStoryInProject(project, editingStory.id, response.data);
+      onUpdate(updatedProject);
+      setEditingStory(null);
+    } catch (error) {
+      console.error('Error updating story:', error);
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
+      // При ошибке всё равно закрываем модал
+      setEditingStory(null);
+    }
   };
 
   const handleDeleteStory = async () => {
     if (!editingStory) return;
 
-    await api.delete(`/story/${editingStory.id}`);
-    
-    // Обновляем проект
-    const res = await api.get(`/project/${project.id}`);
-    onUpdate(res.data);
-    setEditingStory(null);
+    try {
+      await api.delete(`/story/${editingStory.id}`);
+
+      // Локальное обновление проекта (оптимизация)
+      const updatedProject = removeStoryFromProject(project, editingStory.id);
+      onUpdate(updatedProject);
+      setEditingStory(null);
+    } catch (error) {
+      console.error('Error deleting story:', error);
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
+      // При ошибке всё равно закрываем модал
+      setEditingStory(null);
+    }
   };
 
   const handleOpenEditModal = (story) => {
@@ -227,10 +292,11 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
 
   const handleStatusChange = async (storyId, newStatus) => {
     try {
-      await api.patch(`/story/${storyId}/status`, { status: newStatus });
-      // Обновляем проект
-      const res = await api.get(`/project/${project.id}`);
-      onUpdate(res.data);
+      const response = await api.patch(`/story/${storyId}/status`, { status: newStatus });
+
+      // Локальное обновление проекта (оптимизация)
+      const updatedProject = updateStoryInProject(project, storyId, response.data);
+      onUpdate(updatedProject);
     } catch (error) {
       console.error('Error updating status:', error);
       const errorMsg = handleApiError(error, onUnauthorized);

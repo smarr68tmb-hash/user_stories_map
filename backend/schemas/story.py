@@ -19,6 +19,28 @@ class StoryCreate(BaseModel):
     acceptance_criteria: Optional[List[str]] = []
     status: Optional[StoryStatus] = "todo"
 
+    @field_validator('acceptance_criteria')
+    @classmethod
+    def validate_acceptance_criteria(cls, v):
+        """Валидация acceptance criteria"""
+        if v is None:
+            return []
+
+        # Проверка количества критериев
+        if len(v) > 50:
+            raise ValueError('Maximum 50 acceptance criteria allowed')
+
+        # Проверка длины каждого критерия
+        for idx, criterion in enumerate(v):
+            if not isinstance(criterion, str):
+                raise ValueError(f'Acceptance criterion at index {idx} must be a string')
+            if len(criterion) > 500:
+                raise ValueError(f'Acceptance criterion at index {idx} exceeds 500 characters')
+            if not criterion.strip():
+                raise ValueError(f'Acceptance criterion at index {idx} cannot be empty')
+
+        return v
+
 
 class StoryUpdate(BaseModel):
     """Схема для обновления пользовательской истории"""
@@ -28,6 +50,28 @@ class StoryUpdate(BaseModel):
     acceptance_criteria: Optional[List[str]] = None
     release_id: Optional[int] = None
     status: Optional[StoryStatus] = None
+
+    @field_validator('acceptance_criteria')
+    @classmethod
+    def validate_acceptance_criteria(cls, v):
+        """Валидация acceptance criteria"""
+        if v is None:
+            return None
+
+        # Проверка количества критериев
+        if len(v) > 50:
+            raise ValueError('Maximum 50 acceptance criteria allowed')
+
+        # Проверка длины каждого критерия
+        for idx, criterion in enumerate(v):
+            if not isinstance(criterion, str):
+                raise ValueError(f'Acceptance criterion at index {idx} must be a string')
+            if len(criterion) > 500:
+                raise ValueError(f'Acceptance criterion at index {idx} exceeds 500 characters')
+            if not criterion.strip():
+                raise ValueError(f'Acceptance criterion at index {idx} cannot be empty')
+
+        return v
 
 
 class StoryStatusUpdate(BaseModel):

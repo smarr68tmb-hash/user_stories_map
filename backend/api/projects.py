@@ -32,6 +32,64 @@ limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
 
 
+def format_project_response(project: Project) -> ProjectResponse:
+    """
+    Форматирует проект в ProjectResponse (DRY принцип)
+
+    Args:
+        project: Project объект с загруженными отношениями (activities, tasks, stories, releases)
+
+    Returns:
+        ProjectResponse с полной структурой проекта
+    """
+    activities_data = []
+    for activity in project.activities:
+        tasks_data = []
+        for task in activity.tasks:
+            stories_data = [
+                StoryResponse(
+                    id=story.id,
+                    title=story.title,
+                    description=story.description,
+                    priority=story.priority,
+                    acceptance_criteria=story.acceptance_criteria or [],
+                    release_id=story.release_id,
+                    position=story.position,
+                    status=story.status or "todo"
+                )
+                for story in task.stories
+            ]
+            tasks_data.append(TaskResponse(
+                id=task.id,
+                title=task.title,
+                position=task.position,
+                stories=stories_data
+            ))
+        activities_data.append(ActivityResponse(
+            id=activity.id,
+            title=activity.title,
+            position=activity.position,
+            tasks=tasks_data
+        ))
+
+    releases_data = [
+        ReleaseResponse(
+            id=release.id,
+            title=release.title,
+            position=release.position
+        )
+        for release in project.releases
+    ]
+
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        raw_requirements=project.raw_requirements,
+        activities=activities_data,
+        releases=releases_data
+    )
+
+
 def get_redis_client():
     """Получает Redis клиент или возвращает None если недоступен"""
     try:
@@ -41,7 +99,20 @@ def get_redis_client():
         redis_client.ping()
         return redis_client
     except Exception as e:
-        logger.warning(f"Redis not available: {e}")
+        # В production это критичная проблема - логируем как error
+        if settings.ENVIRONMENT == "production":
+            logger.error(f"❌ Redis unavailable in production: {e}. Caching disabled!")
+            # В production можно отправить alert в Sentry
+            try:
+                import sentry_sdk
+                sentry_sdk.capture_message(
+                    f"Redis connection failed: {e}",
+                    level="error"
+                )
+            except ImportError:
+                pass
+        else:
+            logger.warning(f"⚠️ Redis not available in development: {e}. Caching disabled.")
         return None
 
 
@@ -291,56 +362,11 @@ def get_project(
         .filter(Project.id == project_id)\
         .filter(Project.user_id == current_user.id)\
         .first()
-    
+
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
-    # Формируем ответ в нужном формате
-    activities_data = []
-    for activity in project.activities:
-        tasks_data = []
-        for task in activity.tasks:
-            stories_data = []
-            for story in task.stories:
-                stories_data.append(StoryResponse(
-                    id=story.id,
-                    title=story.title,
-                    description=story.description,
-                    priority=story.priority,
-                    acceptance_criteria=story.acceptance_criteria or [],
-                    release_id=story.release_id,
-                    position=story.position,
-                    status=story.status or "todo"
-                ))
-            tasks_data.append(TaskResponse(
-                id=task.id,
-                title=task.title,
-                position=task.position,
-                stories=stories_data
-            ))
-        activities_data.append(ActivityResponse(
-            id=activity.id,
-            title=activity.title,
-            position=activity.position,
-            tasks=tasks_data
-        ))
-    
-    releases_data = [
-        ReleaseResponse(
-            id=release.id,
-            title=release.title,
-            position=release.position
-        )
-        for release in project.releases
-    ]
-    
-    return ProjectResponse(
-        id=project.id,
-        name=project.name,
-        raw_requirements=project.raw_requirements,
-        activities=activities_data,
-        releases=releases_data
-    )
+
+    return format_project_response(project)
 
 
 @router.put("/project/{project_id}", response_model=ProjectResponse)
@@ -386,58 +412,13 @@ def update_project(
         .filter(Project.id == project_id)\
         .filter(Project.user_id == current_user.id)\
         .first()
-    
+
     # Проверяем, что проект все еще существует после повторного запроса
     # (может быть удален или права доступа изменены между обновлением и запросом)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found or access denied")
-    
-    # Формируем ответ в нужном формате
-    activities_data = []
-    for activity in project.activities:
-        tasks_data = []
-        for task in activity.tasks:
-            stories_data = []
-            for story in task.stories:
-                stories_data.append(StoryResponse(
-                    id=story.id,
-                    title=story.title,
-                    description=story.description,
-                    priority=story.priority,
-                    acceptance_criteria=story.acceptance_criteria or [],
-                    release_id=story.release_id,
-                    position=story.position,
-                    status=story.status or "todo"
-                ))
-            tasks_data.append(TaskResponse(
-                id=task.id,
-                title=task.title,
-                position=task.position,
-                stories=stories_data
-            ))
-        activities_data.append(ActivityResponse(
-            id=activity.id,
-            title=activity.title,
-            position=activity.position,
-            tasks=tasks_data
-        ))
-    
-    releases_data = [
-        ReleaseResponse(
-            id=release.id,
-            title=release.title,
-            position=release.position
-        )
-        for release in project.releases
-    ]
-    
-    return ProjectResponse(
-        id=project.id,
-        name=project.name,
-        raw_requirements=project.raw_requirements,
-        activities=activities_data,
-        releases=releases_data
-    )
+
+    return format_project_response(project)
 
 
 @router.get("/projects")
