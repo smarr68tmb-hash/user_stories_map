@@ -17,20 +17,27 @@ function Auth({ onLogin }) {
 
     if (remember) {
       const savedEmail = localStorage.getItem('remembered_login') || '';
+      const savedPassword = localStorage.getItem('remembered_password') || '';
+
       if (savedEmail) {
         setEmail(savedEmail);
+      }
+      if (savedPassword) {
+        setPassword(savedPassword);
       }
     }
   }, []);
 
-  // Сохраняем только логин, пароль никогда не храним на клиенте
-  const saveCredentials = (shouldRemember, currentEmail) => {
+  // Сохраняем логин и пароль в localStorage (для удобного автозаполнения)
+  const saveCredentials = (shouldRemember, currentEmail, currentPassword) => {
     if (shouldRemember) {
       localStorage.setItem('remember_credentials', 'true');
       localStorage.setItem('remembered_login', currentEmail);
+      localStorage.setItem('remembered_password', currentPassword);
     } else {
       localStorage.removeItem('remember_credentials');
       localStorage.removeItem('remembered_login');
+      localStorage.removeItem('remembered_password');
     }
   };
 
@@ -47,8 +54,8 @@ function Auth({ onLogin }) {
         // После регистрации автоматически логинимся
         await auth.login(email, password);
       }
-      // Сохраняем или очищаем сохраненный логин в зависимости от выбора пользователя
-      saveCredentials(rememberCredentials, email);
+      // Сохраняем или очищаем сохраненные логин и пароль в зависимости от выбора пользователя
+      saveCredentials(rememberCredentials, email, password);
       // Токены уже сохранены в localStorage внутри auth.login
       onLogin();
     } catch (err) {
@@ -135,7 +142,7 @@ function Auth({ onLogin }) {
                 onChange={(e) => setRememberCredentials(e.target.checked)}
                 className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
-              Запомнить логин (email) на этом устройстве
+              Запомнить логин и пароль на этом устройстве
             </label>
           </div>
 

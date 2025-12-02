@@ -147,11 +147,13 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
     } else {
       localStorage.removeItem('remember_credentials');
       localStorage.removeItem('remembered_login');
+       localStorage.removeItem('remembered_password');
     }
   };
 
   const handleClearSavedCredentials = () => {
     localStorage.removeItem('remembered_login');
+    localStorage.removeItem('remembered_password');
     localStorage.removeItem('remember_credentials');
     setRememberCredentials(false);
   };
@@ -465,10 +467,10 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
                     className="text-sm text-gray-800 cursor-pointer"
                   >
                     <span className="font-medium block">
-                      Запоминать логин (email) на этом устройстве
+                      Запоминать логин и пароль на этом устройстве
                     </span>
                     <span className="text-gray-600">
-                      При включении логин будет предзаполняться при следующем входе
+                      При включении логин и пароль будут предзаполняться при следующем входе
                       в этом браузере.
                     </span>
                   </label>
@@ -479,14 +481,14 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
                     Управление сохранёнными данными
                   </p>
                   <p className="text-xs text-gray-500 mb-3">
-                    Вы можете в любой момент удалить сохранённый логин с этого устройства.
+                    Вы можете в любой момент удалить сохранённые логин и пароль с этого устройства.
                     Это не повлияет на ваш аккаунт или сессию на сервере.
                   </p>
                   <button
                     onClick={handleClearSavedCredentials}
                     className="px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition font-medium"
                   >
-                    Удалить сохранённый логин
+                    Удалить сохранённые логин и пароль
                   </button>
                 </div>
               </div>
