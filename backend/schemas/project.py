@@ -79,3 +79,29 @@ class ProjectResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class ActivityCreate(BaseModel):
+    """Схема для создания Activity"""
+    project_id: int
+    title: str
+    position: Optional[int] = None
+
+
+class ActivityUpdate(BaseModel):
+    """Схема для обновления Activity"""
+    title: Optional[str] = None
+    position: Optional[int] = None
+
+
+class TaskCreate(BaseModel):
+    """Схема для создания Task"""
+    activity_id: int
+    title: str
+    position: Optional[int] = None
+
+
+class TaskUpdate(BaseModel):
+    """Схема для обновления Task"""
+    title: Optional[str] = None
+    position: Optional[int] = None
+

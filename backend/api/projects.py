@@ -17,7 +17,11 @@ from schemas import (
     ActivityResponse, 
     TaskResponse, 
     StoryResponse, 
-    ReleaseResponse
+    ReleaseResponse,
+    ActivityCreate,
+    ActivityUpdate,
+    TaskCreate,
+    TaskUpdate
 )
 from services.ai_service import generate_ai_map, enhance_requirements
 from dependencies import get_current_active_user
@@ -368,4 +372,384 @@ def list_projects(
         "skip": skip,
         "limit": limit
     }
+
+
+# ========== ACTIVITY ENDPOINTS ==========
+
+@router.post("/activity", response_model=ActivityResponse)
+@limiter.limit("30/minute")
+def create_activity(
+    activity: ActivityCreate,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Создает новую Activity в проекте"""
+    # Проверяем существование проекта и владельца
+    project = db.query(Project)\
+        .filter(Project.id == activity.project_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found or access denied")
+    
+    # Проверяем уникальность названия Activity в рамках проекта
+    existing_activity = db.query(Activity)\
+        .filter(Activity.project_id == activity.project_id)\
+        .filter(Activity.title == activity.title.strip())\
+        .first()
+    
+    if existing_activity:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Activity with title '{activity.title}' already exists in this project"
+        )
+    
+    # Определяем позицию (в конец списка, если не указана)
+    if activity.position is None:
+        max_position = db.query(Activity)\
+            .filter(Activity.project_id == activity.project_id)\
+            .count()
+        position = max_position
+    else:
+        position = activity.position
+        # Сдвигаем существующие активности
+        activities_to_shift = db.query(Activity)\
+            .filter(Activity.project_id == activity.project_id)\
+            .filter(Activity.position >= position)\
+            .all()
+        for act in activities_to_shift:
+            act.position += 1
+    
+    new_activity = Activity(
+        project_id=activity.project_id,
+        title=activity.title.strip(),
+        position=position
+    )
+    
+    db.add(new_activity)
+    db.commit()
+    db.refresh(new_activity)
+    
+    # Возвращаем ActivityResponse с пустым списком tasks
+    return ActivityResponse(
+        id=new_activity.id,
+        title=new_activity.title,
+        position=new_activity.position,
+        tasks=[]
+    )
+
+
+@router.put("/activity/{activity_id}", response_model=ActivityResponse)
+@limiter.limit("30/minute")
+def update_activity(
+    activity_id: int,
+    activity_update: ActivityUpdate,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Обновляет существующую Activity (переименование)"""
+    # Проверяем владельца проекта
+    activity = db.query(Activity)\
+        .join(Project)\
+        .filter(Activity.id == activity_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
+    
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found or access denied")
+    
+    # Если обновляется название, проверяем уникальность
+    if activity_update.title is not None:
+        new_title = activity_update.title.strip()
+        if new_title != activity.title:
+            existing_activity = db.query(Activity)\
+                .filter(Activity.project_id == activity.project_id)\
+                .filter(Activity.title == new_title)\
+                .filter(Activity.id != activity_id)\
+                .first()
+            
+            if existing_activity:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Activity with title '{new_title}' already exists in this project"
+                )
+            activity.title = new_title
+    
+    # Обновляем позицию, если указана
+    if activity_update.position is not None and activity_update.position != activity.position:
+        old_position = activity.position
+        new_position = activity_update.position
+        
+        if new_position < old_position:
+            # Сдвигаем активности вправо
+            activities_to_shift = db.query(Activity)\
+                .filter(Activity.project_id == activity.project_id)\
+                .filter(Activity.position >= new_position)\
+                .filter(Activity.position < old_position)\
+                .filter(Activity.id != activity_id)\
+                .all()
+            for act in activities_to_shift:
+                act.position += 1
+        else:
+            # Сдвигаем активности влево
+            activities_to_shift = db.query(Activity)\
+                .filter(Activity.project_id == activity.project_id)\
+                .filter(Activity.position > old_position)\
+                .filter(Activity.position <= new_position)\
+                .filter(Activity.id != activity_id)\
+                .all()
+            for act in activities_to_shift:
+                act.position -= 1
+        
+        activity.position = new_position
+    
+    db.commit()
+    db.refresh(activity)
+    
+    # Формируем ответ с tasks
+    tasks_data = []
+    for task in activity.tasks:
+        stories_data = []
+        for story in task.stories:
+            stories_data.append(StoryResponse(
+                id=story.id,
+                title=story.title,
+                description=story.description,
+                priority=story.priority,
+                acceptance_criteria=story.acceptance_criteria or [],
+                release_id=story.release_id,
+                position=story.position,
+                status=story.status or "todo"
+            ))
+        tasks_data.append(TaskResponse(
+            id=task.id,
+            title=task.title,
+            position=task.position,
+            stories=stories_data
+        ))
+    
+    return ActivityResponse(
+        id=activity.id,
+        title=activity.title,
+        position=activity.position,
+        tasks=tasks_data
+    )
+
+
+@router.delete("/activity/{activity_id}")
+@limiter.limit("30/minute")
+def delete_activity(
+    activity_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Удаляет Activity и все связанные Tasks (каскадное удаление)"""
+    # Проверяем владельца проекта
+    activity = db.query(Activity)\
+        .join(Project)\
+        .filter(Activity.id == activity_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
+    
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found or access denied")
+    
+    project_id = activity.project_id
+    position = activity.position
+    
+    # Удаляем активность (каскадное удаление tasks и stories происходит автоматически)
+    db.delete(activity)
+    db.commit()
+    
+    # Обновляем позиции остальных активностей
+    activities_to_update = db.query(Activity)\
+        .filter(Activity.project_id == project_id)\
+        .filter(Activity.position > position)\
+        .all()
+    
+    for act in activities_to_update:
+        act.position -= 1
+    
+    db.commit()
+    
+    return {"status": "success", "message": "Activity deleted"}
+
+
+# ========== TASK ENDPOINTS ==========
+
+@router.post("/task", response_model=TaskResponse)
+@limiter.limit("30/minute")
+def create_task(
+    task: TaskCreate,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Создает новую Task в Activity"""
+    # Проверяем существование Activity и владельца проекта
+    activity = db.query(Activity)\
+        .join(Project)\
+        .filter(Activity.id == task.activity_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
+    
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found or access denied")
+    
+    # Определяем позицию (в конец списка, если не указана)
+    if task.position is None:
+        max_position = db.query(UserTask)\
+            .filter(UserTask.activity_id == task.activity_id)\
+            .count()
+        position = max_position
+    else:
+        position = task.position
+        # Сдвигаем существующие задачи
+        tasks_to_shift = db.query(UserTask)\
+            .filter(UserTask.activity_id == task.activity_id)\
+            .filter(UserTask.position >= position)\
+            .all()
+        for t in tasks_to_shift:
+            t.position += 1
+    
+    new_task = UserTask(
+        activity_id=task.activity_id,
+        title=task.title.strip(),
+        position=position
+    )
+    
+    db.add(new_task)
+    db.commit()
+    db.refresh(new_task)
+    
+    # Возвращаем TaskResponse с пустым списком stories
+    return TaskResponse(
+        id=new_task.id,
+        title=new_task.title,
+        position=new_task.position,
+        stories=[]
+    )
+
+
+@router.put("/task/{task_id}", response_model=TaskResponse)
+@limiter.limit("30/minute")
+def update_task(
+    task_id: int,
+    task_update: TaskUpdate,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Обновляет существующую Task (переименование)"""
+    # Проверяем владельца проекта
+    task = db.query(UserTask)\
+        .join(Activity)\
+        .join(Project)\
+        .filter(UserTask.id == task_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found or access denied")
+    
+    # Обновляем название, если указано
+    if task_update.title is not None:
+        task.title = task_update.title.strip()
+    
+    # Обновляем позицию, если указана
+    if task_update.position is not None and task_update.position != task.position:
+        old_position = task.position
+        new_position = task_update.position
+        
+        if new_position < old_position:
+            # Сдвигаем задачи вправо
+            tasks_to_shift = db.query(UserTask)\
+                .filter(UserTask.activity_id == task.activity_id)\
+                .filter(UserTask.position >= new_position)\
+                .filter(UserTask.position < old_position)\
+                .filter(UserTask.id != task_id)\
+                .all()
+            for t in tasks_to_shift:
+                t.position += 1
+        else:
+            # Сдвигаем задачи влево
+            tasks_to_shift = db.query(UserTask)\
+                .filter(UserTask.activity_id == task.activity_id)\
+                .filter(UserTask.position > old_position)\
+                .filter(UserTask.position <= new_position)\
+                .filter(UserTask.id != task_id)\
+                .all()
+            for t in tasks_to_shift:
+                t.position -= 1
+        
+        task.position = new_position
+    
+    db.commit()
+    db.refresh(task)
+    
+    # Формируем ответ с stories
+    stories_data = []
+    for story in task.stories:
+        stories_data.append(StoryResponse(
+            id=story.id,
+            title=story.title,
+            description=story.description,
+            priority=story.priority,
+            acceptance_criteria=story.acceptance_criteria or [],
+            release_id=story.release_id,
+            position=story.position,
+            status=story.status or "todo"
+        ))
+    
+    return TaskResponse(
+        id=task.id,
+        title=task.title,
+        position=task.position,
+        stories=stories_data
+    )
+
+
+@router.delete("/task/{task_id}")
+@limiter.limit("30/minute")
+def delete_task(
+    task_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Удаляет Task и все связанные Stories (каскадное удаление)"""
+    # Проверяем владельца проекта
+    task = db.query(UserTask)\
+        .join(Activity)\
+        .join(Project)\
+        .filter(UserTask.id == task_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found or access denied")
+    
+    activity_id = task.activity_id
+    position = task.position
+    
+    # Удаляем задачу (каскадное удаление stories происходит автоматически)
+    db.delete(task)
+    db.commit()
+    
+    # Обновляем позиции остальных задач
+    tasks_to_update = db.query(UserTask)\
+        .filter(UserTask.activity_id == activity_id)\
+        .filter(UserTask.position > position)\
+        .all()
+    
+    for t in tasks_to_update:
+        t.position -= 1
+    
+    db.commit()
+    
+    return {"status": "success", "message": "Task deleted"}
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import api from './api';
+import api, { activities, tasks } from './api';
 import AIAssistant from './AIAssistant';
 import EditStoryModal from './EditStoryModal';
 import AnalysisPanel from './AnalysisPanel';
@@ -58,6 +58,16 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
   const [aiAssistantTaskId, setAiAssistantTaskId] = useState(null);
   const [aiAssistantReleaseId, setAiAssistantReleaseId] = useState(null);
   const [analysisPanelOpen, setAnalysisPanelOpen] = useState(false);
+  
+  // States for Activities and Tasks editing
+  const [editingActivityId, setEditingActivityId] = useState(null);
+  const [editingActivityTitle, setEditingActivityTitle] = useState('');
+  const [addingActivity, setAddingActivity] = useState(false);
+  const [newActivityTitle, setNewActivityTitle] = useState('');
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editingTaskTitle, setEditingTaskTitle] = useState('');
+  const [addingTaskActivityId, setAddingTaskActivityId] = useState(null);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -245,6 +255,154 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     return { total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 };
   };
 
+  // ========== ACTIVITY HANDLERS ==========
+  
+  const handleAddActivity = async () => {
+    if (!newActivityTitle.trim()) {
+      setAddingActivity(false);
+      setNewActivityTitle('');
+      return;
+    }
+
+    try {
+      await activities.create(project.id, newActivityTitle.trim());
+      setNewActivityTitle('');
+      setAddingActivity(false);
+      
+      // Обновляем проект
+      const res = await api.get(`/project/${project.id}`);
+      onUpdate(res.data);
+    } catch (error) {
+      console.error('Error adding activity:', error);
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
+    }
+  };
+
+  const handleUpdateActivity = async (activityId) => {
+    if (!editingActivityTitle.trim()) {
+      setEditingActivityId(null);
+      setEditingActivityTitle('');
+      return;
+    }
+
+    try {
+      await activities.update(activityId, editingActivityTitle.trim());
+      setEditingActivityId(null);
+      setEditingActivityTitle('');
+      
+      // Обновляем проект
+      const res = await api.get(`/project/${project.id}`);
+      onUpdate(res.data);
+    } catch (error) {
+      console.error('Error updating activity:', error);
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
+      // Восстанавливаем оригинальное название
+      const activity = project.activities.find(a => a.id === activityId);
+      if (activity) {
+        setEditingActivityTitle(activity.title);
+      }
+    }
+  };
+
+  const handleDeleteActivity = async (activityId) => {
+    if (!confirm('Вы уверены, что хотите удалить эту активность? Все связанные задачи и истории будут удалены.')) {
+      return;
+    }
+
+    try {
+      await activities.delete(activityId);
+      
+      // Обновляем проект
+      const res = await api.get(`/project/${project.id}`);
+      onUpdate(res.data);
+    } catch (error) {
+      console.error('Error deleting activity:', error);
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
+    }
+  };
+
+  const startEditingActivity = (activity) => {
+    setEditingActivityId(activity.id);
+    setEditingActivityTitle(activity.title);
+  };
+
+  // ========== TASK HANDLERS ==========
+  
+  const handleAddTask = async (activityId) => {
+    if (!newTaskTitle.trim()) {
+      setAddingTaskActivityId(null);
+      setNewTaskTitle('');
+      return;
+    }
+
+    try {
+      await tasks.create(activityId, newTaskTitle.trim());
+      setNewTaskTitle('');
+      setAddingTaskActivityId(null);
+      
+      // Обновляем проект
+      const res = await api.get(`/project/${project.id}`);
+      onUpdate(res.data);
+    } catch (error) {
+      console.error('Error adding task:', error);
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
+    }
+  };
+
+  const handleUpdateTask = async (taskId) => {
+    if (!editingTaskTitle.trim()) {
+      setEditingTaskId(null);
+      setEditingTaskTitle('');
+      return;
+    }
+
+    try {
+      await tasks.update(taskId, editingTaskTitle.trim());
+      setEditingTaskId(null);
+      setEditingTaskTitle('');
+      
+      // Обновляем проект
+      const res = await api.get(`/project/${project.id}`);
+      onUpdate(res.data);
+    } catch (error) {
+      console.error('Error updating task:', error);
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
+      // Восстанавливаем оригинальное название
+      const task = allTasks.find(t => t.id === taskId);
+      if (task) {
+        setEditingTaskTitle(task.title);
+      }
+    }
+  };
+
+  const handleDeleteTask = async (taskId) => {
+    if (!confirm('Вы уверены, что хотите удалить эту задачу? Все связанные истории будут удалены.')) {
+      return;
+    }
+
+    try {
+      await tasks.delete(taskId);
+      
+      // Обновляем проект
+      const res = await api.get(`/project/${project.id}`);
+      onUpdate(res.data);
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
+    }
+  };
+
+  const startEditingTask = (task) => {
+    setEditingTaskId(task.id);
+    setEditingTaskTitle(task.title);
+  };
+
   return (
     <DndContext
       sensors={sensors}
@@ -271,26 +429,220 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
             </div>
             {project.activities.map(act => {
               const taskCount = act.tasks.length;
+              const isEditing = editingActivityId === act.id;
               return (
                 <div 
                   key={act.id} 
-                  className="bg-blue-100 border-r border-gray-200 p-3 text-center font-bold text-blue-800 flex items-center justify-center"
+                  className="bg-blue-100 border-r border-gray-200 p-3 text-center font-bold text-blue-800 flex items-center justify-center group relative"
                   style={{ width: `${taskCount * 220}px`, minWidth: '220px' }}
                 >
-                  <span className="text-sm">{act.title}</span>
+                  {isEditing ? (
+                    <div className="flex items-center gap-2 w-full">
+                      <input
+                        type="text"
+                        value={editingActivityTitle}
+                        onChange={(e) => setEditingActivityTitle(e.target.value)}
+                        onBlur={() => handleUpdateActivity(act.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleUpdateActivity(act.id);
+                          } else if (e.key === 'Escape') {
+                            setEditingActivityId(null);
+                            setEditingActivityTitle('');
+                          }
+                        }}
+                        className="flex-1 px-2 py-1 text-sm border rounded bg-white text-gray-800"
+                        autoFocus
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <span 
+                        className="text-sm cursor-pointer hover:underline"
+                        onDoubleClick={() => startEditingActivity(act)}
+                        title="Двойной клик для редактирования"
+                      >
+                        {act.title}
+                      </span>
+                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                        <button
+                          onClick={() => startEditingActivity(act)}
+                          className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-200 rounded"
+                          title="Редактировать"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => handleDeleteActivity(act.id)}
+                          className="p-1 text-red-600 hover:text-red-800 hover:bg-red-200 rounded"
+                          title="Удалить"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               );
             })}
+            {/* Кнопка добавления Activity */}
+            <div className="flex-shrink-0 border-r border-gray-200">
+              {addingActivity ? (
+                <div className="p-3 bg-green-50 border border-green-300">
+                  <input
+                    type="text"
+                    placeholder="Название активности"
+                    value={newActivityTitle}
+                    onChange={(e) => setNewActivityTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleAddActivity();
+                      } else if (e.key === 'Escape') {
+                        setAddingActivity(false);
+                        setNewActivityTitle('');
+                      }
+                    }}
+                    className="w-full px-2 py-1 text-sm border rounded"
+                    autoFocus
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={handleAddActivity}
+                      className="flex-1 bg-green-600 text-white text-xs py-1 px-2 rounded hover:bg-green-700"
+                    >
+                      Добавить
+                    </button>
+                    <button
+                      onClick={() => {
+                        setAddingActivity(false);
+                        setNewActivityTitle('');
+                      }}
+                      className="flex-1 bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded hover:bg-gray-400"
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setAddingActivity(true)}
+                  className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 border-2 border-dashed border-gray-300 rounded transition"
+                  title="Добавить активность"
+                >
+                  + Activity
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex">
             <div className="w-32 flex-shrink-0 bg-gray-100 border-r-2 border-gray-300"></div>
-            {allTasks.map(task => (
+            {project.activities.map(act => (
+              <div key={`activity-tasks-${act.id}`} className="flex">
+                {act.tasks.map(task => {
+                  const isEditing = editingTaskId === task.id;
+                  return (
               <div 
                 key={task.id} 
-                className="w-[220px] flex-shrink-0 bg-blue-50 border-r border-gray-200 p-3 text-sm font-semibold text-center text-gray-700 min-h-[60px] flex items-center justify-center"
-              >
-                <span className="leading-tight">{task.title}</span>
+                      className="w-[220px] flex-shrink-0 bg-blue-50 border-r border-gray-200 p-3 text-sm font-semibold text-center text-gray-700 min-h-[60px] flex items-center justify-center group relative"
+                    >
+                      {isEditing ? (
+                        <div className="flex items-center gap-2 w-full">
+                          <input
+                            type="text"
+                            value={editingTaskTitle}
+                            onChange={(e) => setEditingTaskTitle(e.target.value)}
+                            onBlur={() => handleUpdateTask(task.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleUpdateTask(task.id);
+                              } else if (e.key === 'Escape') {
+                                setEditingTaskId(null);
+                                setEditingTaskTitle('');
+                              }
+                            }}
+                            className="flex-1 px-2 py-1 text-xs border rounded bg-white text-gray-800"
+                            autoFocus
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <span 
+                            className="leading-tight cursor-pointer hover:underline"
+                            onDoubleClick={() => startEditingTask(task)}
+                            title="Двойной клик для редактирования"
+                          >
+                            {task.title}
+                          </span>
+                          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                            <button
+                              onClick={() => startEditingTask(task)}
+                              className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-200 rounded text-xs"
+                              title="Редактировать"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTask(task.id)}
+                              className="p-1 text-red-600 hover:text-red-800 hover:bg-red-200 rounded text-xs"
+                              title="Удалить"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Кнопка добавления Task для каждой Activity */}
+                <div className="flex-shrink-0 border-r border-gray-200 w-[220px]">
+                  {addingTaskActivityId === act.id ? (
+                    <div className="p-3 bg-green-50 border border-green-300 min-h-[60px]">
+                      <input
+                        type="text"
+                        placeholder="Название задачи"
+                        value={newTaskTitle}
+                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleAddTask(act.id);
+                          } else if (e.key === 'Escape') {
+                            setAddingTaskActivityId(null);
+                            setNewTaskTitle('');
+                          }
+                        }}
+                        className="w-full px-2 py-1 text-xs border rounded"
+                        autoFocus
+                      />
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          onClick={() => handleAddTask(act.id)}
+                          className="flex-1 bg-green-600 text-white text-xs py-1 px-2 rounded hover:bg-green-700"
+                        >
+                          Добавить
+                        </button>
+                        <button
+                          onClick={() => {
+                            setAddingTaskActivityId(null);
+                            setNewTaskTitle('');
+                          }}
+                          className="flex-1 bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded hover:bg-gray-400"
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setAddingTaskActivityId(act.id)}
+                      className="w-full h-[60px] text-gray-400 hover:text-gray-600 hover:bg-gray-100 border-2 border-dashed border-gray-300 rounded transition text-xs flex items-center justify-center"
+                      title="Добавить задачу"
+                    >
+                      + Task
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

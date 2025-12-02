@@ -20,7 +20,11 @@ from .project import (
     TaskResponse,
     ActivityResponse,
     ReleaseResponse,
-    ProjectResponse
+    ProjectResponse,
+    ActivityCreate,
+    ActivityUpdate,
+    TaskCreate,
+    TaskUpdate
 )
 from .analysis import (
     IssueSeverity,
@@ -61,6 +65,10 @@ __all__ = [
     "ActivityResponse",
     "ReleaseResponse",
     "ProjectResponse",
+    "ActivityCreate",
+    "ActivityUpdate",
+    "TaskCreate",
+    "TaskUpdate",
     # Analysis schemas
     "IssueSeverity",
     "IssueType",

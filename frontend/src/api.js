@@ -134,5 +134,27 @@ export const auth = {
   getMe: () => api.get('/me')
 };
 
+export const activities = {
+  create: (projectId, title, position) => 
+    api.post('/activity', { project_id: projectId, title, position }),
+  
+  update: (activityId, title, position) => 
+    api.put(`/activity/${activityId}`, { title, position }),
+  
+  delete: (activityId) => 
+    api.delete(`/activity/${activityId}`),
+};
+
+export const tasks = {
+  create: (activityId, title, position) => 
+    api.post('/task', { activity_id: activityId, title, position }),
+  
+  update: (taskId, title, position) => 
+    api.put(`/task/${taskId}`, { title, position }),
+  
+  delete: (taskId) => 
+    api.delete(`/task/${taskId}`),
+};
+
 export default api;
 
