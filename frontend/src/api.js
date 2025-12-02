@@ -159,6 +159,9 @@ export const tasks = {
 export const projects = {
   update: (projectId, name) => 
     api.put(`/project/${projectId}`, { name }),
+  
+  delete: (projectId) => 
+    api.delete(`/project/${projectId}`),
 };
 
 export default api;

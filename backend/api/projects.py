@@ -472,6 +472,35 @@ def list_projects(
     }
 
 
+@router.delete("/project/{project_id}")
+@limiter.limit("30/minute")
+def delete_project(
+    project_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Удаляет проект и все связанные данные (activities, tasks, stories, releases)"""
+    # Проверяем существование проекта и владельца
+    project = db.query(Project)\
+        .filter(Project.id == project_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found or access denied")
+    
+    project_name = project.name
+    
+    # Удаляем проект (каскадное удаление activities, releases, tasks и stories происходит автоматически)
+    db.delete(project)
+    db.commit()
+    
+    logger.info(f"Project {project_id} ({project_name}) deleted by user {current_user.id}")
+    
+    return {"status": "success", "message": f"Project '{project_name}' deleted successfully"}
+
+
 # ========== ACTIVITY ENDPOINTS ==========
 
 @router.post("/activity", response_model=ActivityResponse)
