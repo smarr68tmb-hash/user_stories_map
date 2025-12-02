@@ -24,7 +24,8 @@ from .project import (
     ActivityCreate,
     ActivityUpdate,
     TaskCreate,
-    TaskUpdate
+    TaskUpdate,
+    ProjectUpdate,
 )
 from .analysis import (
     IssueSeverity,
@@ -65,6 +66,7 @@ __all__ = [
     "ActivityResponse",
     "ReleaseResponse",
     "ProjectResponse",
+    "ProjectUpdate",
     "ActivityCreate",
     "ActivityUpdate",
     "TaskCreate",
