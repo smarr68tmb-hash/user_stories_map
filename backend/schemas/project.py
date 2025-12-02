@@ -105,3 +105,13 @@ class TaskUpdate(BaseModel):
     title: Optional[str] = None
     position: Optional[int] = None
 
+
+class ProjectUpdate(BaseModel):
+    """Схема для обновления проекта"""
+    name: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=255,
+        description="Название проекта (максимум 255 символов)"
+    )
+

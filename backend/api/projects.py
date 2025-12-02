@@ -21,7 +21,8 @@ from schemas import (
     ActivityCreate,
     ActivityUpdate,
     TaskCreate,
-    TaskUpdate
+    TaskUpdate,
+    ProjectUpdate
 )
 from services.ai_service import generate_ai_map, enhance_requirements
 from dependencies import get_current_active_user
@@ -293,6 +294,103 @@ def get_project(
     
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Формируем ответ в нужном формате
+    activities_data = []
+    for activity in project.activities:
+        tasks_data = []
+        for task in activity.tasks:
+            stories_data = []
+            for story in task.stories:
+                stories_data.append(StoryResponse(
+                    id=story.id,
+                    title=story.title,
+                    description=story.description,
+                    priority=story.priority,
+                    acceptance_criteria=story.acceptance_criteria or [],
+                    release_id=story.release_id,
+                    position=story.position,
+                    status=story.status or "todo"
+                ))
+            tasks_data.append(TaskResponse(
+                id=task.id,
+                title=task.title,
+                position=task.position,
+                stories=stories_data
+            ))
+        activities_data.append(ActivityResponse(
+            id=activity.id,
+            title=activity.title,
+            position=activity.position,
+            tasks=tasks_data
+        ))
+    
+    releases_data = [
+        ReleaseResponse(
+            id=release.id,
+            title=release.title,
+            position=release.position
+        )
+        for release in project.releases
+    ]
+    
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        raw_requirements=project.raw_requirements,
+        activities=activities_data,
+        releases=releases_data
+    )
+
+
+@router.put("/project/{project_id}", response_model=ProjectResponse)
+@limiter.limit("30/minute")
+def update_project(
+    project_id: int,
+    project_update: ProjectUpdate,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Обновляет название проекта"""
+    # Проверяем существование проекта и владельца
+    project = db.query(Project)\
+        .filter(Project.id == project_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found or access denied")
+    
+    # Обновляем название, если указано
+    if project_update.name is not None:
+        new_name = project_update.name.strip()
+        if not new_name:
+            raise HTTPException(status_code=400, detail="Project name cannot be empty")
+        if len(new_name) > 255:
+            raise HTTPException(status_code=400, detail="Project name cannot exceed 255 characters")
+        project.name = new_name
+    
+    db.commit()
+    db.refresh(project)
+    
+    # Повторно загружаем проект с eager loading, чтобы избежать N+1 запросов,
+    # аналогично get_project
+    project = db.query(Project)\
+        .options(
+            joinedload(Project.activities)
+            .subqueryload(Activity.tasks)
+            .subqueryload(UserTask.stories),
+            joinedload(Project.releases)
+        )\
+        .filter(Project.id == project_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
+    
+    # Проверяем, что проект все еще существует после повторного запроса
+    # (может быть удален или права доступа изменены между обновлением и запросом)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found or access denied")
     
     # Формируем ответ в нужном формате
     activities_data = []

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api, { auth, enhancement } from './api';
+import api, { auth, enhancement, projects } from './api';
 import StoryMap from './StoryMap.jsx';
 import Auth from './Auth.jsx';
 import ProjectList from './ProjectList.jsx';
@@ -27,6 +27,12 @@ function App() {
   const [showEnhancementPreview, setShowEnhancementPreview] = useState(false);
   const [enhancementLoading, setEnhancementLoading] = useState(false);
   const [stage, setStage] = useState(null); // 'enhancing' | 'generating' | null
+  
+  // Редактирование названия проекта
+  const [isEditingProjectName, setIsEditingProjectName] = useState(false);
+  const [editedProjectName, setEditedProjectName] = useState('');
+  const [projectNameError, setProjectNameError] = useState(null);
+  const [updatingProjectName, setUpdatingProjectName] = useState(false);
   
   // Проверка токена при загрузке
   useEffect(() => {
@@ -248,6 +254,72 @@ function App() {
     setInput('');
     setError(null);
     localStorage.removeItem('draft_requirements');
+    setIsEditingProjectName(false);
+    setEditedProjectName('');
+    setProjectNameError(null);
+  };
+  
+  // Обработчики редактирования названия проекта
+  const handleStartEditProjectName = () => {
+    if (project) {
+      setEditedProjectName(project.name);
+      setIsEditingProjectName(true);
+      setProjectNameError(null);
+    }
+  };
+  
+  const handleCancelEditProjectName = () => {
+    setIsEditingProjectName(false);
+    setEditedProjectName('');
+    setProjectNameError(null);
+  };
+  
+  const handleSaveProjectName = async () => {
+    if (!project) return;
+    
+    const trimmedName = editedProjectName.trim();
+    
+    // Валидация
+    if (!trimmedName) {
+      setProjectNameError('Название проекта не может быть пустым');
+      return;
+    }
+    
+    if (trimmedName.length > 255) {
+      setProjectNameError('Название проекта не может превышать 255 символов');
+      return;
+    }
+    
+    if (trimmedName === project.name) {
+      // Не изменилось, просто отменяем редактирование
+      handleCancelEditProjectName();
+      return;
+    }
+    
+    setUpdatingProjectName(true);
+    setProjectNameError(null);
+    
+    try {
+      const response = await projects.update(project.id, trimmedName);
+      // Обновляем проект с новыми данными
+      setProject(response.data);
+      setIsEditingProjectName(false);
+      setEditedProjectName('');
+    } catch (err) {
+      console.error('Error updating project name:', err);
+      if (err.response?.status === 401) {
+        setProjectNameError('Сессия истекла. Пожалуйста, войдите снова.');
+        handleLogout();
+      } else if (err.response?.status === 400) {
+        setProjectNameError(err.response.data?.detail || 'Некорректное название проекта');
+      } else if (err.response?.status === 404) {
+        setProjectNameError('Проект не найден');
+      } else {
+        setProjectNameError('Не удалось обновить название проекта');
+      }
+    } finally {
+      setUpdatingProjectName(false);
+    }
   };
 
   // Если не авторизован, показываем форму входа
@@ -260,8 +332,77 @@ function App() {
     return (
       <div className="min-h-screen p-4 md:p-8 overflow-x-auto bg-gray-50">
         <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">{project.name}</h1>
+          <div className="flex-1">
+            {isEditingProjectName ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={editedProjectName}
+                    onChange={(e) => {
+                      setEditedProjectName(e.target.value);
+                      setProjectNameError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSaveProjectName();
+                      } else if (e.key === 'Escape') {
+                        handleCancelEditProjectName();
+                      }
+                    }}
+                    disabled={updatingProjectName}
+                    maxLength={255}
+                    className="flex-1 px-3 py-2 text-2xl font-bold text-gray-800 border-2 border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleSaveProjectName}
+                    disabled={updatingProjectName || !editedProjectName.trim()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Сохранить название проекта"
+                  >
+                    {updatingProjectName ? (
+                      <span className="flex items-center gap-2">
+                        <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                        Сохранение...
+                      </span>
+                    ) : (
+                      'Сохранить'
+                    )}
+                  </button>
+                  <button
+                    onClick={handleCancelEditProjectName}
+                    disabled={updatingProjectName}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Отменить редактирование"
+                  >
+                    Отмена
+                  </button>
+                </div>
+                {projectNameError && (
+                  <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                    {projectNameError}
+                  </div>
+                )}
+                <div className="text-xs text-gray-500">
+                  {editedProjectName.length} / 255 символов
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 group">
+                <h1 className="text-2xl font-bold text-gray-800">{project.name}</h1>
+                <button
+                  onClick={handleStartEditProjectName}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-blue-600"
+                  aria-label="Редактировать название проекта"
+                  title="Редактировать название проекта"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+              </div>
+            )}
             <p className="text-sm text-gray-600 mt-1">User Story Map</p>
             {user && (
               <p className="text-xs text-gray-500 mt-1">

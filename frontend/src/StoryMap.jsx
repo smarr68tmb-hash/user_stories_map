@@ -420,21 +420,24 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
         </button>
       </div>
 
-      <div className="inline-block min-w-full bg-white rounded-lg shadow-sm border border-gray-200">
-        {/* BACKBONE */}
-        <div className="sticky top-0 z-10 bg-gray-50 border-b-2 border-gray-300">
+      <div className="w-full overflow-x-auto">
+        <div className="inline-block min-w-full bg-white rounded-lg shadow-sm border border-gray-200">
+          {/* BACKBONE */}
+          <div className="sticky top-0 z-10 bg-gray-50 border-b-2 border-gray-300">
           <div className="flex border-b border-gray-200">
             <div className="w-32 flex-shrink-0 bg-gray-100 border-r-2 border-gray-300 p-2 flex items-center justify-center">
               <span className="text-xs font-bold text-gray-600 uppercase">Releases</span>
             </div>
             {project.activities.map(act => {
               const taskCount = act.tasks.length;
+              // Учитываем кнопку "+ Task" при расчете ширины Activity
+              const activityWidth = (taskCount + 1) * 220; // +1 для кнопки "+ Task"
               const isEditing = editingActivityId === act.id;
               return (
                 <div 
                   key={act.id} 
                   className="bg-blue-100 border-r border-gray-200 p-3 text-center font-bold text-blue-800 flex items-center justify-center group relative"
-                  style={{ width: `${taskCount * 220}px`, minWidth: '220px' }}
+                  style={{ width: `${activityWidth}px`, minWidth: '220px' }}
                 >
                   {isEditing ? (
                     <div className="flex items-center gap-2 w-full">
@@ -537,8 +540,16 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
 
           <div className="flex">
             <div className="w-32 flex-shrink-0 bg-gray-100 border-r-2 border-gray-300"></div>
-            {project.activities.map(act => (
-              <div key={`activity-tasks-${act.id}`} className="flex">
+            {project.activities.map(act => {
+              // Ширина контейнера Tasks должна совпадать с шириной Activity
+              const taskCount = act.tasks.length;
+              const activityWidth = (taskCount + 1) * 220; // +1 для кнопки "+ Task"
+              return (
+              <div 
+                key={`activity-tasks-${act.id}`} 
+                className="flex"
+                style={{ width: `${activityWidth}px`, flexShrink: 0 }}
+              >
                 {act.tasks.map(task => {
                   const isEditing = editingTaskId === task.id;
                   return (
@@ -644,7 +655,8 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -674,96 +686,111 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
                 )}
               </div>
 
-              {allTasks.map(task => {
-                const storiesInCell = task.stories.filter(s => s.release_id === release.id);
-                const cellId = `cell-${task.id}-${release.id}`;
-                const isAdding = addingToCell === cellId;
-
+              {project.activities.map(act => {
+                const taskCount = act.tasks.length;
+                const activityWidth = (taskCount + 1) * 220; // +1 для кнопки "+ Task"
                 return (
-                  <DroppableCell
-                    key={`${task.id}-${release.id}`}
-                    cellId={cellId}
-                    taskId={task.id}
-                    releaseId={release.id}
+                  <div 
+                    key={`activity-body-${act.id}`}
+                    className="flex"
+                    style={{ width: `${activityWidth}px`, flexShrink: 0 }}
                   >
-                    <SortableContext 
-                      items={storiesInCell.map(s => `${s.id}-${task.id}-${release.id}`)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <div className="flex flex-col gap-2 min-h-[150px]">
-                        {storiesInCell.map(story => (
-                          <StoryCard
-                            key={story.id}
-                            story={story}
-                            taskId={task.id}
-                            releaseId={release.id}
-                            onEdit={() => handleOpenEditModal(story)}
-                            onOpenAI={() => handleOpenAIAssistant(story, task.id, release.id)}
-                            onStatusChange={handleStatusChange}
-                          />
-                        ))}
-                        
-                        {isAdding ? (
-                          <div className="bg-green-50 p-3 rounded border border-green-300">
-                            <input
-                              type="text"
-                              placeholder="Название истории"
-                              value={newStoryTitle}
-                              onChange={(e) => setNewStoryTitle(e.target.value)}
-                              className="w-full mb-2 p-2 text-sm border rounded"
-                              autoFocus
-                            />
-                            <textarea
-                              placeholder="Описание (опционально)"
-                              value={newStoryDescription}
-                              onChange={(e) => setNewStoryDescription(e.target.value)}
-                              className="w-full mb-2 p-2 text-xs border rounded resize-none"
-                              rows="2"
-                            />
-                            <select
-                              value={newStoryPriority}
-                              onChange={(e) => setNewStoryPriority(e.target.value)}
-                              className="w-full mb-2 p-1 text-xs border rounded"
-                            >
-                              <option value="MVP">MVP</option>
-                              <option value="Release 1">Release 1</option>
-                              <option value="Later">Later</option>
-                            </select>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleAddStory(task.id, release.id)}
-                                className="flex-1 bg-green-600 text-white text-xs py-1 px-2 rounded hover:bg-green-700"
-                              >
-                                Добавить
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setAddingToCell(null);
-                                  setNewStoryTitle('');
-                                  setNewStoryDescription('');
-                                }}
-                                className="flex-1 bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded hover:bg-gray-400"
-                              >
-                                Отмена
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setAddingToCell(cellId)}
-                            className="text-xs text-gray-400 hover:text-gray-600 py-2 border-2 border-dashed border-gray-300 rounded hover:border-gray-400 transition"
+                    {act.tasks.map(task => {
+                      const storiesInCell = task.stories.filter(s => s.release_id === release.id);
+                      const cellId = `cell-${task.id}-${release.id}`;
+                      const isAdding = addingToCell === cellId;
+
+                      return (
+                        <DroppableCell
+                          key={`${task.id}-${release.id}`}
+                          cellId={cellId}
+                          taskId={task.id}
+                          releaseId={release.id}
+                        >
+                          <SortableContext 
+                            items={storiesInCell.map(s => `${s.id}-${task.id}-${release.id}`)}
+                            strategy={verticalListSortingStrategy}
                           >
-                            + Добавить карточку
-                          </button>
-                        )}
-                      </div>
-                    </SortableContext>
-                  </DroppableCell>
+                            <div className="flex flex-col gap-2 min-h-[150px]">
+                              {storiesInCell.map(story => (
+                                <StoryCard
+                                  key={story.id}
+                                  story={story}
+                                  taskId={task.id}
+                                  releaseId={release.id}
+                                  onEdit={() => handleOpenEditModal(story)}
+                                  onOpenAI={() => handleOpenAIAssistant(story, task.id, release.id)}
+                                  onStatusChange={handleStatusChange}
+                                />
+                              ))}
+                              
+                              {isAdding ? (
+                                <div className="bg-green-50 p-3 rounded border border-green-300">
+                                  <input
+                                    type="text"
+                                    placeholder="Название истории"
+                                    value={newStoryTitle}
+                                    onChange={(e) => setNewStoryTitle(e.target.value)}
+                                    className="w-full mb-2 p-2 text-sm border rounded"
+                                    autoFocus
+                                  />
+                                  <textarea
+                                    placeholder="Описание (опционально)"
+                                    value={newStoryDescription}
+                                    onChange={(e) => setNewStoryDescription(e.target.value)}
+                                    className="w-full mb-2 p-2 text-xs border rounded resize-none"
+                                    rows="2"
+                                  />
+                                  <select
+                                    value={newStoryPriority}
+                                    onChange={(e) => setNewStoryPriority(e.target.value)}
+                                    className="w-full mb-2 p-1 text-xs border rounded"
+                                  >
+                                    <option value="MVP">MVP</option>
+                                    <option value="Release 1">Release 1</option>
+                                    <option value="Later">Later</option>
+                                  </select>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => handleAddStory(task.id, release.id)}
+                                      className="flex-1 bg-green-600 text-white text-xs py-1 px-2 rounded hover:bg-green-700"
+                                    >
+                                      Добавить
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setAddingToCell(null);
+                                        setNewStoryTitle('');
+                                        setNewStoryDescription('');
+                                      }}
+                                      className="flex-1 bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded hover:bg-gray-400"
+                                    >
+                                      Отмена
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => setAddingToCell(cellId)}
+                                  className="text-xs text-gray-400 hover:text-gray-600 py-2 border-2 border-dashed border-gray-300 rounded hover:border-gray-400 transition"
+                                >
+                                  + Добавить карточку
+                                </button>
+                              )}
+                            </div>
+                          </SortableContext>
+                        </DroppableCell>
+                      );
+                    })}
+                    {/* Пустая ячейка для выравнивания с кнопкой "+ Task" */}
+                    <div className="w-[220px] flex-shrink-0 border-r border-gray-200"></div>
+                  </div>
                 );
               })}
             </div>
           );
           })}
+        </div>
         </div>
       </div>
 
