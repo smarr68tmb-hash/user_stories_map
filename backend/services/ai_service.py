@@ -1,6 +1,7 @@
 """
 AI service - генерация User Story Map через AI API
-Поддерживает fallback между провайдерами: Groq → Perplexity → OpenAI
+Поддерживает fallback между провайдерами: Gemini → Groq → Perplexity → OpenAI
+С умным rate limiting и проактивным переключением провайдеров
 """
 import json
 import hashlib
@@ -8,20 +9,104 @@ import logging
 import os
 import copy
 from typing import Optional, Dict, List
+from datetime import datetime, timedelta
 from fastapi import HTTPException
 from openai import OpenAI, RateLimitError, APIError, APITimeoutError, APIConnectionError
+import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 from config import settings
 
 logger = logging.getLogger(__name__)
 
+
+# ============================================================================
+# Rate Limiting Tracker
+# ============================================================================
+
+class RateLimitTracker:
+    """Отслеживает использование API запросов для проактивного переключения"""
+
+    def __init__(self):
+        self.usage: Dict[str, Dict] = {}  # {provider: {date: count}}
+
+    def _get_today_key(self) -> str:
+        """Возвращает ключ для сегодняшней даты (UTC)"""
+        return datetime.utcnow().strftime("%Y-%m-%d")
+
+    def increment(self, provider: str, model: str = None):
+        """Увеличивает счетчик использования для провайдера"""
+        today = self._get_today_key()
+        key = f"{provider}:{model}" if model else provider
+
+        if key not in self.usage:
+            self.usage[key] = {}
+
+        if today not in self.usage[key]:
+            self.usage[key][today] = 0
+
+        self.usage[key][today] += 1
+        logger.debug(f"Rate limit tracker: {key} = {self.usage[key][today]} requests today")
+
+    def get_count(self, provider: str, model: str = None) -> int:
+        """Возвращает количество запросов сегодня"""
+        today = self._get_today_key()
+        key = f"{provider}:{model}" if model else provider
+        return self.usage.get(key, {}).get(today, 0)
+
+    def should_skip_provider(self, provider: str, model: str = None) -> bool:
+        """Проверяет, нужно ли пропустить провайдера из-за приближения к лимиту"""
+        if provider != "gemini":
+            return False  # Пока отслеживаем только Gemini
+
+        count = self.get_count(provider, model)
+
+        # Проверяем лимиты для Gemini моделей
+        if model and "flash" in model.lower():
+            return count >= settings.GEMINI_FLASH_LIMIT
+        elif model and "pro" in model.lower():
+            return count >= settings.GEMINI_PRO_LIMIT
+
+        # По умолчанию для Gemini используем Flash лимит
+        return count >= settings.GEMINI_FLASH_LIMIT
+
+    def cleanup_old_entries(self):
+        """Очищает старые записи (старше 2 дней)"""
+        today = self._get_today_key()
+        today_date = datetime.strptime(today, "%Y-%m-%d")
+
+        for key in list(self.usage.keys()):
+            dates_to_remove = []
+            for date_str in self.usage[key]:
+                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                if (today_date - date_obj).days > 2:
+                    dates_to_remove.append(date_str)
+
+            for date_str in dates_to_remove:
+                del self.usage[key][date_str]
+
+
+# Глобальный трекер лимитов
+rate_limiter = RateLimitTracker()
+
 # Инициализация AI клиентов для всех доступных провайдеров
 clients: Dict[str, OpenAI] = {}
+gemini_client = None  # Gemini использует свой SDK
+
 
 def _initialize_clients():
     """Инициализирует клиенты для всех доступных провайдеров"""
-    global clients
-    
+    global clients, gemini_client
+
+    # Gemini
+    if settings.GEMINI_API_KEY:
+        try:
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            gemini_client = genai
+            logger.info("✅ Initialized Gemini API client")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Gemini client: {e}")
+
     # Groq
     if settings.GROQ_API_KEY:
         try:
@@ -32,7 +117,7 @@ def _initialize_clients():
             logger.info("✅ Initialized Groq API client")
         except Exception as e:
             logger.warning(f"Failed to initialize Groq client: {e}")
-    
+
     # Perplexity
     if settings.PERPLEXITY_API_KEY:
         try:
@@ -43,7 +128,7 @@ def _initialize_clients():
             logger.info("✅ Initialized Perplexity API client")
         except Exception as e:
             logger.warning(f"Failed to initialize Perplexity client: {e}")
-    
+
     # OpenAI
     if settings.OPENAI_API_KEY:
         try:
@@ -51,9 +136,10 @@ def _initialize_clients():
             logger.info("✅ Initialized OpenAI API client")
         except Exception as e:
             logger.warning(f"Failed to initialize OpenAI client: {e}")
-    
-    if not clients:
+
+    if not clients and not gemini_client:
         logger.warning("⚠️ No AI API clients configured. AI functions will be unavailable.")
+
 
 # Инициализируем клиенты при импорте модуля
 _initialize_clients()
@@ -72,10 +158,29 @@ def get_cache_key(requirements_text: str, prefix: str = "ai_map") -> str:
     return f"{prefix}:{text_hash}"
 
 
-def _get_model_for_provider(provider: str, is_enhancement: bool = False) -> str:
-    """Возвращает модель для конкретного провайдера"""
+def _get_model_for_provider(provider: str, is_enhancement: bool = False, task_type: str = None) -> str:
+    """
+    Возвращает модель для конкретного провайдера с учетом типа задачи
+
+    Args:
+        provider: Имя провайдера (gemini, groq, perplexity, openai)
+        is_enhancement: True для Stage 1 (Enhancement)
+        task_type: Тип задачи ('enhancement', 'generation', 'assistant')
+
+    Returns:
+        Название модели для использования
+    """
+    # Gemini - используем оптимальные модели для каждой задачи
+    if provider == "gemini":
+        if task_type == "enhancement" or is_enhancement:
+            return settings.GEMINI_ENHANCEMENT_MODEL
+        elif task_type == "assistant":
+            return settings.GEMINI_ASSISTANT_MODEL
+        else:  # generation
+            return settings.GEMINI_GENERATION_MODEL
+
+    # Groq
     if is_enhancement:
-        # Для enhancement используем более быстрые модели
         if provider == "groq":
             return os.getenv("GROQ_ENHANCEMENT_MODEL", "llama-3.1-8b-instant")
         elif provider == "perplexity":
@@ -90,11 +195,88 @@ def _get_model_for_provider(provider: str, is_enhancement: bool = False) -> str:
             return os.getenv("PERPLEXITY_MODEL", "llama-3.1-sonar-large-128k-online")
         elif provider == "openai":
             return os.getenv("OPENAI_MODEL", "gpt-4o")
-    
+
     # Fallback на настройки из settings
     if is_enhancement:
         return settings.get_enhancement_model()
     return settings.API_MODEL
+
+
+def _call_gemini_api(messages: List[dict], model: str, temperature: float, timeout: float = 60.0) -> str:
+    """
+    Вызывает Gemini API и возвращает текстовый ответ
+
+    Args:
+        messages: Список сообщений [{role, content}]
+        model: Название модели
+        temperature: Температура генерации
+        timeout: Таймаут в секундах
+
+    Returns:
+        Текстовый ответ от модели
+
+    Raises:
+        Exception: При ошибке API
+    """
+    if not gemini_client:
+        raise Exception("Gemini client not initialized")
+
+    # Собираем промпт из messages
+    # Gemini API работает по-другому - нужно объединить system и user prompts
+    system_parts = []
+    user_parts = []
+
+    for msg in messages:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+
+        if role == "system":
+            system_parts.append(content)
+        elif role == "user":
+            user_parts.append(content)
+        elif role == "assistant":
+            # Gemini не поддерживает assistant role в истории для одного запроса
+            # Просто добавляем в user context
+            user_parts.append(f"[Previous response]: {content}")
+
+    # Формируем финальный промпт
+    full_prompt = ""
+    if system_parts:
+        full_prompt += "\n\n".join(system_parts) + "\n\n"
+    if user_parts:
+        full_prompt += "\n\n".join(user_parts)
+
+    # Создаем модель с настройками безопасности
+    generation_config = {
+        "temperature": temperature,
+        "top_p": 0.95,
+        "top_k": 40,
+        "max_output_tokens": 8192,
+    }
+
+    safety_settings = {
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    }
+
+    model_obj = gemini_client.GenerativeModel(
+        model_name=model,
+        generation_config=generation_config,
+        safety_settings=safety_settings
+    )
+
+    # Вызываем API
+    response = model_obj.generate_content(full_prompt)
+
+    # Проверяем блокировку контента
+    if not response.text:
+        if hasattr(response, 'prompt_feedback'):
+            raise Exception(f"Content was blocked: {response.prompt_feedback}")
+        raise Exception("Empty response from Gemini API")
+
+    return response.text
 
 
 def _should_retry_error(error: Exception, provider: str) -> bool:
@@ -110,6 +292,14 @@ def _should_retry_error(error: Exception, provider: str) -> bool:
             return True
         if "503" in error_str or "service unavailable" in error_str:
             return True
+
+    # Gemini ошибки
+    error_str = str(error).lower()
+    if "429" in error_str or "quota" in error_str or "rate" in error_str:
+        return True
+    if "503" in error_str or "unavailable" in error_str:
+        return True
+
     # Timeout и JSON ошибки не переключаем - это может быть проблема запроса
     return False
 
@@ -117,71 +307,120 @@ def _should_retry_error(error: Exception, provider: str) -> bool:
 def _make_request_with_fallback(
     request_params: dict,
     providers: Optional[List[str]] = None,
-    is_enhancement: bool = False
+    is_enhancement: bool = False,
+    task_type: str = None
 ) -> tuple:
     """
     Выполняет запрос к AI API с автоматическим fallback между провайдерами
-    
+
     Args:
         request_params: Параметры запроса (model будет заменен для каждого провайдера)
         providers: Список провайдеров для попыток (по умолчанию из настроек)
         is_enhancement: Используется ли для enhancement (влияет на выбор модели)
-    
+        task_type: Тип задачи ('enhancement', 'generation', 'assistant')
+
     Returns:
         tuple: (completion, provider_name) - результат и имя провайдера, который ответил
-    
+
     Raises:
         HTTPException: Если все провайдеры недоступны
     """
     if providers is None:
         providers = settings.get_available_providers()
-    
+
     if not providers:
         raise HTTPException(
             status_code=503,
-            detail="No AI providers configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY."
+            detail="No AI providers configured. Set GEMINI_API_KEY, GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY."
         )
-    
+
+    # Очищаем старые записи rate limiter
+    rate_limiter.cleanup_old_entries()
+
     last_error = None
     last_provider = None
-    
+
     for provider in providers:
-        if provider not in clients:
+        # Проверяем, нужно ли пропустить провайдера из-за лимитов
+        model = _get_model_for_provider(provider, is_enhancement, task_type)
+        if rate_limiter.should_skip_provider(provider, model):
+            logger.info(f"⏩ Skipping {provider.upper()} - approaching rate limit")
+            continue
+
+        # Проверяем инициализацию клиента (кроме Gemini)
+        if provider != "gemini" and provider not in clients:
             logger.debug(f"Skipping {provider} - client not initialized")
             continue
-        
+
+        if provider == "gemini" and not gemini_client:
+            logger.debug(f"Skipping gemini - client not initialized")
+            continue
+
         try:
             # Получаем модель для этого провайдера
-            model = _get_model_for_provider(provider, is_enhancement)
-            
-            # Создаем deep copy параметров запроса, чтобы не модифицировать оригинал
-            # Особенно важно для messages списка, который может быть изменен
-            provider_params = copy.deepcopy(request_params)
-            provider_params["model"] = model
-            
-            # JSON mode только для OpenAI (Groq и Perplexity могут не поддерживать)
-            if provider == "openai":
-                # Для OpenAI добавляем response_format если его нет
-                if "response_format" not in provider_params:
-                    provider_params["response_format"] = {"type": "json_object"}
-            else:
-                # Для не-OpenAI провайдеров (Groq, Perplexity):
-                # 1. Убираем response_format если он есть
-                provider_params.pop("response_format", None)
-                # 2. Всегда добавляем инструкцию в промпт для JSON
-                # (messages уже скопированы через deepcopy выше, можно безопасно модифицировать)
-                if len(provider_params["messages"]) > 0:
-                    last_msg = provider_params["messages"][-1]
-                    if isinstance(last_msg, dict) and "content" in last_msg:
-                        # Проверяем, не добавлена ли уже инструкция
-                        if "IMPORTANT: Return ONLY valid JSON" not in last_msg["content"]:
-                            provider_params["messages"][-1]["content"] += "\n\nIMPORTANT: Return ONLY valid JSON, no additional text or markdown formatting."
-            
+            model = _get_model_for_provider(provider, is_enhancement, task_type)
+
             logger.info(f"Trying {provider.upper()} with model {model}")
-            completion = clients[provider].chat.completions.create(**provider_params)
-            
-            logger.info(f"✅ Successfully got response from {provider.upper()}")
-            return completion, provider
+
+            # Gemini использует свой API
+            if provider == "gemini":
+                # Создаем копию параметров
+                messages = copy.deepcopy(request_params.get("messages", []))
+                temperature = request_params.get("temperature", 0.7)
+                timeout = request_params.get("timeout", 60.0)
+
+                # Добавляем инструкцию для JSON (для не-OpenAI провайдеров)
+                if len(messages) > 0:
+                    last_msg = messages[-1]
+                    if isinstance(last_msg, dict) and "content" in last_msg:
+                        if "IMPORTANT: Return ONLY valid JSON" not in last_msg["content"]:
+                            messages[-1]["content"] += "\n\nIMPORTANT: Return ONLY valid JSON, no additional text or markdown formatting."
+
+                # Вызываем Gemini API
+                response_text = _call_gemini_api(messages, model, temperature, timeout)
+
+                # Создаем объект completion для совместимости
+                class GeminiCompletion:
+                    def __init__(self, text):
+                        self.choices = [type('obj', (object,), {
+                            'message': type('obj', (object,), {'content': text})()
+                        })()]
+
+                completion = GeminiCompletion(response_text)
+
+                # Увеличиваем счетчик rate limiter
+                rate_limiter.increment(provider, model)
+
+                logger.info(f"✅ Successfully got response from {provider.upper()}")
+                return completion, provider
+
+            # OpenAI-совместимые провайдеры (Groq, Perplexity, OpenAI)
+            else:
+                # Создаем deep copy параметров запроса
+                provider_params = copy.deepcopy(request_params)
+                provider_params["model"] = model
+
+                # JSON mode только для OpenAI
+                if provider == "openai":
+                    if "response_format" not in provider_params:
+                        provider_params["response_format"] = {"type": "json_object"}
+                else:
+                    # Для Groq, Perplexity: убираем response_format
+                    provider_params.pop("response_format", None)
+                    # Добавляем инструкцию в промпт
+                    if len(provider_params["messages"]) > 0:
+                        last_msg = provider_params["messages"][-1]
+                        if isinstance(last_msg, dict) and "content" in last_msg:
+                            if "IMPORTANT: Return ONLY valid JSON" not in last_msg["content"]:
+                                provider_params["messages"][-1]["content"] += "\n\nIMPORTANT: Return ONLY valid JSON, no additional text or markdown formatting."
+
+                completion = clients[provider].chat.completions.create(**provider_params)
+
+                # Увеличиваем счетчик rate limiter
+                rate_limiter.increment(provider, model)
+
+                logger.info(f"✅ Successfully got response from {provider.upper()}")
+                return completion, provider
             
         except (RateLimitError, APIConnectionError) as e:
             last_error = e
@@ -334,7 +573,8 @@ confidence должен быть от 0.5 до 1.0:
         completion, used_provider = _make_request_with_fallback(
             request_params,
             providers=available_providers,
-            is_enhancement=True
+            is_enhancement=True,
+            task_type="enhancement"
         )
         
         response_text = completion.choices[0].message.content
@@ -494,7 +734,7 @@ def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool =
 
     try:
         logger.info(f"Generating map for requirements (length: {len(requirements_text)} chars)")
-        
+
         # Подготовка параметров запроса
         request_params = {
             "messages": [
@@ -504,12 +744,13 @@ def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool =
             "temperature": settings.API_TEMPERATURE,
             "timeout": 60.0,  # 60 секунд таймаут
         }
-        
+
         # Используем fallback механизм
         completion, used_provider = _make_request_with_fallback(
             request_params,
             providers=available_providers,
-            is_enhancement=False
+            is_enhancement=False,
+            task_type="generation"
         )
         
         response_text = completion.choices[0].message.content
@@ -715,7 +956,7 @@ Acceptance Criteria: {json.dumps(story_data.get('acceptance_criteria', []), ensu
     
     try:
         logger.info(f"Improving story with prompt length: {len(user_prompt)} chars, action: {action}")
-        
+
         request_params = {
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -724,12 +965,13 @@ Acceptance Criteria: {json.dumps(story_data.get('acceptance_criteria', []), ensu
             "temperature": 0.7,
             "timeout": 30.0,
         }
-        
+
         # Используем fallback механизм
         completion, used_provider = _make_request_with_fallback(
             request_params,
             providers=available_providers,
-            is_enhancement=False
+            is_enhancement=False,
+            task_type="assistant"
         )
         
         response_text = completion.choices[0].message.content
