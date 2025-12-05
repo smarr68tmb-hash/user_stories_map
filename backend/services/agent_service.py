@@ -436,9 +436,19 @@ class SimpleAgent:
         """
         # Быстрая проверка обязательных полей
         if not structure.get("map"):
+            # Добавляем критическую проблему в issues для логической консистентности
+            # Если is_valid=False, должен быть хотя бы один issue
+            from schemas.analysis import ValidationIssue, IssueType, IssueSeverity
             return {
                 "is_valid": False,
-                "issues": [],
+                "issues": [
+                    ValidationIssue(
+                        type=IssueType.EMPTY_ACTIVITY,  # Используем подходящий тип
+                        severity=IssueSeverity.ERROR,
+                        message="Отсутствует структура карты (map). Карта не может быть сгенерирована без структуры.",
+                        location={"structure": "map"}
+                    )
+                ],
                 "score": 0.0,  # float 0.0-1.0 для консистентности
                 "score_raw": 0,  # int 0-100 для консистентности
                 "similarity": None,
