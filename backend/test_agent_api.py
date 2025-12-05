@@ -32,14 +32,18 @@ def test_agent_api():
             timeout=5
         )
         
-        if register_response.status_code not in [200, 201, 400]:
-            # Если 400 - пользователь уже существует, попробуем логин
-            if register_response.status_code == 400:
-                print("   Пользователь уже существует, логинимся...")
-            else:
-                print(f"   Ошибка регистрации: {register_response.status_code}")
-                print(f"   Ответ: {register_response.text}")
-                return False
+        # Обрабатываем разные статусы регистрации
+        if register_response.status_code in [200, 201]:
+            # Успешная регистрация, продолжаем
+            pass
+        elif register_response.status_code == 400:
+            # Пользователь уже существует, пробуем логин
+            print("   Пользователь уже существует, логинимся...")
+        else:
+            # Другая ошибка регистрации
+            print(f"   Ошибка регистрации: {register_response.status_code}")
+            print(f"   Ответ: {register_response.text}")
+            return False
     except requests.exceptions.ConnectionError:
         print("   ❌ Не удалось подключиться к серверу")
         print("   Запустите сервер: cd backend && python main.py")
