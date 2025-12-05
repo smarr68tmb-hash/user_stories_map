@@ -427,9 +427,11 @@ class SimpleAgent:
             dict: {
                 "is_valid": bool,
                 "issues": List[ValidationIssue],
-                "score": float  # 0-100 (из validation_service)
-                "similarity": SimilarityResult,
-                "recommendations": List[str]
+                "score": float,  # 0.0-1.0 (нормализованный из validation_service)
+                "score_raw": int,  # 0-100 (оригинальный из validation_service)
+                "similarity": Optional[Dict],  # SimilarityResult как dict
+                "recommendations": List[str],
+                "stats": Dict  # Статистика из validation_service
             }
         """
         # Быстрая проверка обязательных полей
@@ -437,9 +439,11 @@ class SimpleAgent:
             return {
                 "is_valid": False,
                 "issues": [],
-                "score": 0,
+                "score": 0.0,  # float 0.0-1.0 для консистентности
+                "score_raw": 0,  # int 0-100 для консистентности
                 "similarity": None,
-                "recommendations": ["Отсутствует структура карты (map)"]
+                "recommendations": ["Отсутствует структура карты (map)"],
+                "stats": {}  # Пустой stats для консистентности
             }
         
         try:
@@ -490,9 +494,11 @@ class SimpleAgent:
                     "severity": "error",
                     "message": f"Ошибка валидации: {str(e)}"
                 }],
-                "score": 0.0,
+                "score": 0.0,  # float 0.0-1.0 для консистентности
+                "score_raw": 0,  # int 0-100 для консистентности
                 "similarity": None,
-                "recommendations": ["Ошибка при валидации структуры"]
+                "recommendations": ["Ошибка при валидации структуры"],
+                "stats": {}  # Пустой stats для консистентности
             }
 
     def _fix(
