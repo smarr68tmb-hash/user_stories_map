@@ -3,6 +3,7 @@ import api from './api';
 
 function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImproved }) {
   const [prompt, setPrompt] = useState('');
+  const [selectedActionId, setSelectedActionId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
@@ -11,28 +12,29 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
   const quickActions = [
     {
       id: 'details',
-      label: '📝 Добавить детали',
-      prompt: 'Добавь больше деталей про оплату и обработку ошибок'
+      label: '📝 Улучшить описание',
+      prompt: 'Сделай лучше и понятнее описание по best практикам User Story. Добавь контекст использования, бизнес-ценность и детали реализации. Убедись, что описание следует формату "Как [роль], я хочу [действие], чтобы [результат]" и содержит достаточно информации для понимания функциональности.'
     },
     {
       id: 'criteria',
       label: '✅ Улучшить критерии',
-      prompt: 'Улучши acceptance criteria, сделай их более конкретными'
+      prompt: 'Улучши и расширь acceptance criteria. Сделай их более конкретными, измеримыми и полными. Каждый критерий должен быть проверяемым, содержать конкретные условия и ожидаемые результаты. Добавь критерии для успешных сценариев и обработки ошибок.'
     },
     {
       id: 'split',
       label: '✂️ Разделить',
-      prompt: 'Раздели эту историю на 2 отдельные независимые истории'
+      prompt: 'Проанализируй историю и предложи, как её можно разделить на 2-3 более мелкие, независимые истории. Каждая новая история должна быть самодостаточной и иметь четкую бизнес-ценность.'
     },
     {
       id: 'edge_cases',
       label: '⚠️ Edge cases',
-      prompt: 'Добавь edge cases для offline режима и обработки ошибок'
+      prompt: 'Добавь edge cases (граничные случаи) в acceptance criteria. Подумай об ошибках, крайних ситуациях, невалидных данных, сетевых проблемах и других исключительных сценариях, которые нужно обработать.'
     }
   ];
 
   const handleQuickAction = (action) => {
     setPrompt(action.prompt);
+    setSelectedActionId(action.id);
   };
 
   const handleImprove = async () => {
@@ -46,9 +48,12 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
     setResult(null);
 
     try {
+      // Определяем action: используем сохраненный selectedActionId или ищем по промпту
+      const actionId = selectedActionId || quickActions.find(a => a.prompt === prompt)?.id || null;
+      
       const response = await api.post(`/story/${story.id}/ai-improve`, {
         prompt: prompt,
-        action: quickActions.find(a => a.prompt === prompt)?.id || null
+        action: actionId
       });
 
       const data = response.data;
@@ -175,8 +180,14 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
             <h3 className="font-semibold text-gray-800 mb-3">Или напишите свой запрос:</h3>
             <textarea
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Например: Добавь больше информации про обработку платежей..."
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                // Сбрасываем selectedActionId если пользователь редактирует промпт вручную
+                if (selectedActionId && e.target.value !== quickActions.find(a => a.id === selectedActionId)?.prompt) {
+                  setSelectedActionId(null);
+                }
+              }}
+              placeholder="Например: Улучши описание истории по best практикам User Story, добавь больше контекста и деталей..."
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none resize-none"
               rows="3"
               disabled={loading}
