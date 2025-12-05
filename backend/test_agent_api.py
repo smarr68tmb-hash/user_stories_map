@@ -16,7 +16,8 @@ def test_agent_api():
     
     # Сначала нужно получить токен (регистрация или логин)
     # Для теста используем простой подход - сначала регистрация
-    test_email = f"test_agent_{hash('test') % 10000}@test.com"
+    # Используем abs() чтобы гарантировать положительное число (hash может быть отрицательным)
+    test_email = f"test_agent_{abs(hash('test')) % 10000}@test.com"
     test_password = "test123456"
     
     print(f"\n1. Регистрация тестового пользователя: {test_email}")
