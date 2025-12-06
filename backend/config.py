@@ -56,7 +56,14 @@ class Settings:
         self.ACCESS_TOKEN_COOKIE_NAME = os.getenv("ACCESS_TOKEN_COOKIE_NAME", "access_token")
         self.REFRESH_TOKEN_COOKIE_NAME = os.getenv("REFRESH_TOKEN_COOKIE_NAME", "refresh_token")
         self.COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
-        self.COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax")
+        # Нормализуем SameSite: допускаем только lax|strict|none (в нижнем регистре)
+        self.COOKIE_SAMESITE = (os.getenv("COOKIE_SAMESITE", "lax") or "lax").lower()
+        if self.COOKIE_SAMESITE not in {"lax", "strict", "none"}:
+            logger.warning("Invalid COOKIE_SAMESITE value. Fallback to 'lax'.")
+            self.COOKIE_SAMESITE = "lax"
+        # Для SameSite=None требуется Secure=true
+        if self.COOKIE_SAMESITE == "none":
+            self.COOKIE_SECURE = True
         # Пустая строка означает "не задавать домен" (важно для localhost)
         self.COOKIE_DOMAIN = os.getenv("COOKIE_DOMAIN", "") or None
         
