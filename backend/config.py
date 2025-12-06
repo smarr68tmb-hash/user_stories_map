@@ -13,6 +13,9 @@ class Settings:
     """Настройки приложения (упрощенная версия для совместимости)"""
     
     def __init__(self):
+        # Основные переменные окружения
+        self.ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
         # API Keys
         self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
         self.PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
@@ -57,7 +60,10 @@ class Settings:
         self.REFRESH_TOKEN_COOKIE_NAME = os.getenv("REFRESH_TOKEN_COOKIE_NAME", "refresh_token")
         self.COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
         # Нормализуем SameSite: допускаем только lax|strict|none (в нижнем регистре)
-        self.COOKIE_SAMESITE = (os.getenv("COOKIE_SAMESITE", "lax") or "lax").lower()
+        default_samesite = os.getenv("COOKIE_SAMESITE")
+        if default_samesite is None and self.ENVIRONMENT == "production":
+            default_samesite = "none"  # по умолчанию разрешаем cross-site cookie в проде
+        self.COOKIE_SAMESITE = (default_samesite or "lax").lower()
         if self.COOKIE_SAMESITE not in {"lax", "strict", "none"}:
             logger.warning("Invalid COOKIE_SAMESITE value. Fallback to 'lax'.")
             self.COOKIE_SAMESITE = "lax"
@@ -68,17 +74,19 @@ class Settings:
         self.COOKIE_DOMAIN = os.getenv("COOKIE_DOMAIN", "") or None
         
         # CORS
-        self.ALLOWED_ORIGINS = os.getenv(
-            "ALLOWED_ORIGINS",
-            "http://localhost:5173,http://127.0.0.1:5173"
-        )
+        default_allowed_origins = [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "https://user-stories-map-ab.onrender.com",
+            "https://user-stories-map.onrender.com",
+        ]
+        self.ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", ",".join(default_allowed_origins))
         
         # Logging
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
         
         # Sentry
         self.SENTRY_DSN = os.getenv("SENTRY_DSN", "")
-        self.ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
         
         # Автоопределение провайдера
         self._set_api_provider()
