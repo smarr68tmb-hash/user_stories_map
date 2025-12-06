@@ -163,7 +163,7 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
         const activityId = Number(overId.replace('activity-tasks-', ''));
         if (activityId === activity.id) {
           // Перемещаем в конец списка
-          const endPosition = activity.tasks.length;
+          const endPosition = Math.max(activity.tasks.length - 1, 0);
           await moveTask(taskId, endPosition);
         }
       }
@@ -433,6 +433,8 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     // Валидация на frontend (дополнительно к backend)
     if (!trimmedTitle) {
       alert('Поле названия шага должно быть заполнено');
+      setAddingTaskActivityId(null);
+      setNewTaskTitle('');
       return;
     }
 
@@ -525,9 +527,13 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
       console.error('Error moving task:', error);
       const errorMsg = handleApiError(error, onUnauthorized);
       alert(errorMsg);
-      // Обновляем проект в случае ошибки
-      const res = await api.get(`/project/${project.id}`);
-      onUpdate(res.data);
+      // Обновляем проект в случае ошибки, но защищаемся от повторного падения
+      try {
+        const res = await api.get(`/project/${project.id}`);
+        onUpdate(res.data);
+      } catch (refreshError) {
+        console.error('Error refreshing project after move failure:', refreshError);
+      }
     }
   };
 
@@ -749,6 +755,7 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
                     </button>
                   )}
                 </div>
+              </div>
                 </DroppableTaskZone>
               </SortableContext>
               );

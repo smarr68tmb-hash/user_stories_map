@@ -950,6 +950,16 @@ def move_task(
     
     old_position = task.position
     new_position = move.position
+
+    # Нормализуем позицию в допустимый диапазон [0, max_position]
+    tasks_count = db.query(UserTask)\
+        .filter(UserTask.activity_id == task.activity_id)\
+        .count()
+    max_position = max(tasks_count - 1, 0)
+    if new_position < 0:
+        new_position = 0
+    elif new_position > max_position:
+        new_position = max_position
     
     # Если позиция не изменилась, ничего не делаем
     if old_position == new_position:
