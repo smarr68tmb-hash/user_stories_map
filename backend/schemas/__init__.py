@@ -25,6 +25,7 @@ from .project import (
     ActivityUpdate,
     TaskCreate,
     TaskUpdate,
+    TaskMove,
     ProjectUpdate,
 )
 from .analysis import (
@@ -71,6 +72,7 @@ __all__ = [
     "ActivityUpdate",
     "TaskCreate",
     "TaskUpdate",
+    "TaskMove",
     # Analysis schemas
     "IssueSeverity",
     "IssueType",
