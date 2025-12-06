@@ -1,256 +1,67 @@
-#!/usr/bin/env python3
-"""
-Скрипт для тестирования аутентификации и миграций
-"""
-import requests
-import json
-import sys
+import pytest
 
-API_URL = "http://127.0.0.1:8000"
 
-def test_health():
-    """Тест health check"""
-    print("🔍 Тестирование health check...")
-    try:
-        response = requests.get(f"{API_URL}/health")
-        assert response.status_code == 200
-        print("✅ Health check работает")
-        return True
-    except Exception as e:
-        print(f"❌ Health check не работает: {e}")
-        return False
+def test_health(client):
+    response = client.get("/health")
+    assert response.status_code == 200
 
-def test_ready():
-    """Тест readiness check"""
-    print("\n🔍 Тестирование readiness check...")
-    try:
-        response = requests.get(f"{API_URL}/ready")
-        assert response.status_code == 200
-        data = response.json()
-        print(f"✅ Readiness check работает: {json.dumps(data, indent=2)}")
-        return True
-    except Exception as e:
-        print(f"❌ Readiness check не работает: {e}")
-        return False
 
-def test_register():
-    """Тест регистрации"""
-    print("\n🔍 Тестирование регистрации...")
-    test_email = f"test_{hash('test') % 10000}@example.com"
-    test_password = "testpass123"
-    
-    try:
-        response = requests.post(
-            f"{API_URL}/register",
-            json={
-                "email": test_email,
-                "password": test_password,
-                "full_name": "Test User"
-            }
-        )
-        if response.status_code == 201:
-            print(f"✅ Регистрация успешна: {test_email}")
-            return test_email, test_password
-        elif response.status_code == 400 and "already registered" in response.json().get("detail", ""):
-            print(f"⚠️  Пользователь уже существует, используем существующий")
-            return test_email, test_password
-        else:
-            print(f"❌ Ошибка регистрации: {response.status_code} - {response.text}")
-            return None, None
-    except Exception as e:
-        print(f"❌ Ошибка при регистрации: {e}")
-        return None, None
+def test_ready(client):
+    response = client.get("/ready")
+    assert response.status_code == 200
+    assert "status" in response.json()
 
-def test_login(email, password):
-    """Тест логина"""
-    print("\n🔍 Тестирование логина...")
-    try:
-        response = requests.post(
-            f"{API_URL}/token",
-            data={
-                "username": email,
-                "password": password
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
-        if response.status_code == 200:
-            data = response.json()
-            token = data.get("access_token")
-            refresh_token = data.get("refresh_token")
-            print(f"✅ Логин успешен, получены токены: access и {'refresh' if refresh_token else 'NO refresh'}")
-            return token, refresh_token
-        else:
-            print(f"❌ Ошибка логина: {response.status_code} - {response.text}")
-            return None, None
-    except Exception as e:
-        print(f"❌ Ошибка при логине: {e}")
-        return None, None
 
-def test_refresh(access_token, refresh_token):
-    """Тест обновления токена"""
-    print("\n🔍 Тестирование обновления токена...")
-    if not refresh_token:
-        print("⚠️ Нет refresh токена для теста")
-        return None, None
-        
-    try:
-        response = requests.post(
-            f"{API_URL}/refresh",
-            json={"refresh_token": refresh_token},
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
-        if response.status_code == 200:
-            data = response.json()
-            print(f"✅ Токен обновлен успешно")
-            return data.get("access_token"), data.get("refresh_token")
-        else:
-            print(f"❌ Ошибка обновления токена: {response.status_code} - {response.text}")
-            return None, None
-    except Exception as e:
-        print(f"❌ Ошибка при обновлении токена: {e}")
-        return None, None
+def test_register(client, test_user_credentials):
+    response = client.post("/register", json=test_user_credentials)
+    assert response.status_code == 201
+    data = response.json()
+    assert data["email"] == test_user_credentials["email"]
+    assert data["full_name"] == test_user_credentials["full_name"]
 
-def test_logout(refresh_token):
-    """Тест выхода (отзыва токена)"""
-    print("\n🔍 Тестирование выхода...")
-    if not refresh_token:
-        print("⚠️ Нет refresh токена для теста")
-        return False
-        
-    try:
-        response = requests.post(
-            f"{API_URL}/logout",
-            json={"refresh_token": refresh_token}
-        )
-        if response.status_code == 200:
-            print(f"✅ Выход успешен")
-            return True
-        else:
-            print(f"❌ Ошибка выхода: {response.status_code} - {response.text}")
-            return False
-    except Exception as e:
-        print(f"❌ Ошибка при выходе: {e}")
-        return False
 
-def test_me(token):
-    """Тест получения информации о пользователе"""
-    print("\n🔍 Тестирование /me endpoint...")
-    try:
-        response = requests.get(
-            f"{API_URL}/me",
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        if response.status_code == 200:
-            user_data = response.json()
-            print(f"✅ Получена информация о пользователе: {json.dumps(user_data, indent=2)}")
-            return True
-        else:
-            print(f"❌ Ошибка получения информации: {response.status_code} - {response.text}")
-            return False
-    except Exception as e:
-        print(f"❌ Ошибка при запросе /me: {e}")
-        return False
+def test_login(client, registered_user):
+    response = client.post(
+        "/token",
+        data={"username": registered_user["email"], "password": registered_user["password"]},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
 
-def test_protected_endpoint_without_token():
-    """Тест защищенного эндпоинта без токена"""
-    print("\n🔍 Тестирование защищенного эндпоинта без токена...")
-    try:
-        response = requests.get(f"{API_URL}/projects")
-        if response.status_code == 401:
-            print("✅ Защита работает: 401 Unauthorized без токена")
-            return True
-        else:
-            print(f"❌ Защита не работает: получили {response.status_code} вместо 401")
-            return False
-    except Exception as e:
-        print(f"❌ Ошибка при тесте защиты: {e}")
-        return False
 
-def test_projects(token):
-    """Тест получения списка проектов"""
-    print("\n🔍 Тестирование получения списка проектов...")
-    try:
-        response = requests.get(
-            f"{API_URL}/projects",
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        if response.status_code == 200:
-            projects = response.json()
-            print(f"✅ Получен список проектов: {len(projects.get('items', []))} проектов")
-            return True
-        else:
-            print(f"❌ Ошибка получения проектов: {response.status_code} - {response.text}")
-            return False
-    except Exception as e:
-        print(f"❌ Ошибка при запросе проектов: {e}")
-        return False
+def test_refresh(client, refresh_token):
+    response = client.post("/refresh", json={"refresh_token": refresh_token})
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
 
-def main():
-    print("=" * 60)
-    print("🧪 ТЕСТИРОВАНИЕ АУТЕНТИФИКАЦИИ И МИГРАЦИЙ")
-    print("=" * 60)
-    
-    results = []
-    
-    # Тест 1: Health check
-    results.append(("Health Check", test_health()))
-    
-    # Тест 2: Readiness check
-    results.append(("Readiness Check", test_ready()))
-    
-    # Тест 3: Регистрация
-    email, password = test_register()
-    results.append(("Регистрация", email is not None))
-    
-    if not email:
-        print("\n❌ Не удалось зарегистрировать пользователя. Остановка тестов.")
-        sys.exit(1)
-    
-    # Тест 4: Логин
-    token, refresh_token = test_login(email, password)
-    results.append(("Логин", token is not None))
-    
-    if not token:
-        print("\n❌ Не удалось получить токен. Остановка тестов.")
-        sys.exit(1)
-    
-    # Тест 5: /me endpoint
-    results.append(("Получение информации о пользователе", test_me(token)))
-    
-    # Тест 6: Защита эндпоинтов
-    results.append(("Защита эндпоинтов", test_protected_endpoint_without_token()))
-    
-    # Тест 7: Получение проектов
-    results.append(("Получение списка проектов", test_projects(token)))
-    
-    # Тест 8: Обновление токена
-    new_access, new_refresh = test_refresh(token, refresh_token)
-    results.append(("Обновление токена", new_access is not None))
-    
-    # Тест 9: Выход
-    results.append(("Выход", test_logout(new_refresh if new_refresh else refresh_token)))
-    
-    # Итоги
-    print("\n" + "=" * 60)
-    print("📊 РЕЗУЛЬТАТЫ ТЕСТИРОВАНИЯ")
-    print("=" * 60)
-    
-    passed = sum(1 for _, result in results if result)
-    total = len(results)
-    
-    for name, result in results:
-        status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{status} - {name}")
-    
-    print(f"\nИтого: {passed}/{total} тестов пройдено")
-    
-    if passed == total:
-        print("\n🎉 Все тесты пройдены успешно!")
-        sys.exit(0)
-    else:
-        print(f"\n⚠️  {total - passed} тестов не пройдено")
-        sys.exit(1)
 
-if __name__ == "__main__":
-    main()
+def test_logout(client, refresh_token):
+    response = client.post("/logout", json={"refresh_token": refresh_token})
+    assert response.status_code == 200
+    assert response.json()["message"] == "Logged out successfully"
+
+
+def test_me(client, auth_headers, test_user_credentials):
+    response = client.get("/me", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["email"] == test_user_credentials["email"]
+
+
+def test_protected_endpoint_without_token(client):
+    response = client.get("/projects")
+    assert response.status_code == 401
+
+
+def test_projects(client, auth_headers):
+    response = client.get("/projects", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert "items" in body
+    assert isinstance(body["items"], list)
 
