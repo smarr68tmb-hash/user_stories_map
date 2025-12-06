@@ -679,85 +679,83 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
               const taskCount = act.tasks.length;
               const activityWidth = (taskCount + 1) * 220; // +1 для кнопки "+ Task"
               return (
-              <SortableContext
-                key={`activity-tasks-${act.id}`}
-                items={act.tasks.map(t => `task-${t.id}`)}
-                strategy={horizontalListSortingStrategy}
-              >
-                <DroppableTaskZone activityId={act.id}>
-                  <div 
-                    key={`activity-tasks-${act.id}`} 
+                <SortableContext
+                  key={`activity-tasks-${act.id}`}
+                  items={act.tasks.map(t => `task-${t.id}`)}
+                  strategy={horizontalListSortingStrategy}
+                >
+                  <DroppableTaskZone
+                    activityId={act.id}
                     className="flex"
                     style={{ width: `${activityWidth}px`, flexShrink: 0 }}
                     id={`activity-tasks-${act.id}`}
                   >
-                  {act.tasks.map(task => {
-                    const isEditing = editingTaskId === task.id;
-                    return (
-                      <SortableTask
-                        key={task.id}
-                        task={task}
-                        isEditing={isEditing}
-                        editingTaskTitle={editingTaskTitle}
-                        setEditingTaskTitle={setEditingTaskTitle}
-                        onUpdateTask={handleUpdateTask}
-                        onStartEditing={startEditingTask}
-                        onDelete={handleDeleteTask}
-                        setEditingTaskId={setEditingTaskId}
-                      />
-                    );
-                  })}
-                {/* Кнопка добавления Task для каждой Activity */}
-                <div className="flex-shrink-0 border-r border-gray-200 w-[220px]">
-                  {addingTaskActivityId === act.id ? (
-                    <div className="p-3 bg-green-50 border border-green-300 min-h-[60px]">
-                      <input
-                        type="text"
-                        placeholder="Название задачи"
-                        value={newTaskTitle}
-                        onChange={(e) => setNewTaskTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleAddTask(act.id);
-                          } else if (e.key === 'Escape') {
-                            setAddingTaskActivityId(null);
-                            setNewTaskTitle('');
-                          }
-                        }}
-                        className="w-full px-2 py-1 text-xs border rounded"
-                        autoFocus
-                      />
-                      <div className="flex gap-2 mt-2">
+                    {act.tasks.map(task => {
+                      const isEditing = editingTaskId === task.id;
+                      return (
+                        <SortableTask
+                          key={task.id}
+                          task={task}
+                          isEditing={isEditing}
+                          editingTaskTitle={editingTaskTitle}
+                          setEditingTaskTitle={setEditingTaskTitle}
+                          onUpdateTask={handleUpdateTask}
+                          onStartEditing={startEditingTask}
+                          onDelete={handleDeleteTask}
+                          setEditingTaskId={setEditingTaskId}
+                        />
+                      );
+                    })}
+                    {/* Кнопка добавления Task для каждой Activity */}
+                    <div className="flex-shrink-0 border-r border-gray-200 w-[220px]">
+                      {addingTaskActivityId === act.id ? (
+                        <div className="p-3 bg-green-50 border border-green-300 min-h-[60px]">
+                          <input
+                            type="text"
+                            placeholder="Название задачи"
+                            value={newTaskTitle}
+                            onChange={(e) => setNewTaskTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleAddTask(act.id);
+                              } else if (e.key === 'Escape') {
+                                setAddingTaskActivityId(null);
+                                setNewTaskTitle('');
+                              }
+                            }}
+                            className="w-full px-2 py-1 text-xs border rounded"
+                            autoFocus
+                          />
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              onClick={() => handleAddTask(act.id)}
+                              className="flex-1 bg-green-600 text-white text-xs py-1 px-2 rounded hover:bg-green-700"
+                            >
+                              Добавить
+                            </button>
+                            <button
+                              onClick={() => {
+                                setAddingTaskActivityId(null);
+                                setNewTaskTitle('');
+                              }}
+                              className="flex-1 bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded hover:bg-gray-400"
+                            >
+                              Отмена
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
                         <button
-                          onClick={() => handleAddTask(act.id)}
-                          className="flex-1 bg-green-600 text-white text-xs py-1 px-2 rounded hover:bg-green-700"
+                          onClick={() => setAddingTaskActivityId(act.id)}
+                          className="w-full h-[60px] text-gray-400 hover:text-gray-600 hover:bg-gray-100 border-2 border-dashed border-gray-300 rounded transition text-xs flex items-center justify-center"
+                          title="Добавить задачу"
                         >
-                          Добавить
+                          + Task
                         </button>
-                        <button
-                          onClick={() => {
-                            setAddingTaskActivityId(null);
-                            setNewTaskTitle('');
-                          }}
-                          className="flex-1 bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded hover:bg-gray-400"
-                        >
-                          Отмена
-                        </button>
-                      </div>
+                      )}
                     </div>
-                  ) : (
-                    <button
-                      onClick={() => setAddingTaskActivityId(act.id)}
-                      className="w-full h-[60px] text-gray-400 hover:text-gray-600 hover:bg-gray-100 border-2 border-dashed border-gray-300 rounded transition text-xs flex items-center justify-center"
-                      title="Добавить задачу"
-                    >
-                      + Task
-                    </button>
-                  )}
-                </div>
-              </div>
-                </DroppableTaskZone>
-              </SortableContext>
+                  </DroppableTaskZone>
+                </SortableContext>
               );
             })}
           </div>
@@ -930,7 +928,7 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
 }
 
 // Компонент для droppable зоны задач активности
-function DroppableTaskZone({ activityId, children }) {
+function DroppableTaskZone({ activityId, children, className = '', style, id }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `activity-tasks-${activityId}`,
     data: {
@@ -939,10 +937,14 @@ function DroppableTaskZone({ activityId, children }) {
     },
   });
 
+  const zoneClassName = `${className} ${isOver ? 'bg-blue-50' : ''}`.trim();
+
   return (
     <div
       ref={setNodeRef}
-      className={isOver ? 'bg-blue-50' : ''}
+      className={zoneClassName}
+      style={style}
+      id={id}
     >
       {children}
     </div>
