@@ -1,18 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import StoryMap from './StoryMap';
 
 vi.mock('@dnd-kit/core', () => ({
-  DndContext: ({ children }) => <div>{children}</div>,
+  DndContext: ({ children }) => <div data-testid="dnd-context">{children}</div>,
   closestCenter: vi.fn(),
-  useSensor: () => ({}),
-  useSensors: () => [],
-  PointerSensor: vi.fn(),
-  KeyboardSensor: vi.fn(),
-}));
-
-vi.mock('@dnd-kit/sortable', () => ({
-  sortableKeyboardCoordinates: vi.fn(),
 }));
 
 vi.mock('./hooks/useActivities', () => ({
@@ -21,7 +13,7 @@ vi.mock('./hooks/useActivities', () => ({
     createActivity: vi.fn(),
     updateActivity: vi.fn(),
     deleteActivity: vi.fn(),
-    activityLoading: { isUpdating: vi.fn() },
+    activityLoading: { isUpdating: vi.fn(), isDeleting: vi.fn() },
   }),
 }));
 
@@ -32,7 +24,7 @@ vi.mock('./hooks/useTasks', () => ({
     updateTaskTitle: vi.fn(),
     deleteTask: vi.fn(),
     moveTask: vi.fn(),
-    taskLoading: { isMoving: vi.fn(), isUpdating: vi.fn(), isDeleting: vi.fn() },
+    taskLoading: { isMoving: vi.fn(), isUpdating: vi.fn(), isDeleting: vi.fn(), isCreating: vi.fn() },
     taskDrafts: {},
     updateTaskDraft: vi.fn(),
     addingTaskActivityId: null,
@@ -79,19 +71,48 @@ vi.mock('./context/ProjectRefreshContext', () => ({
   }),
 }));
 
-// Stub heavy children with simple shells
-vi.mock('./components/story-map/ActivityHeader', () => ({
+vi.mock('./hooks/useStoryMapDrag', () => ({
   __esModule: true,
-  default: () => <div data-testid="activity-header" />,
+  default: () => ({ sensors: [], handleDragEnd: vi.fn() }),
 }));
-vi.mock('./components/story-map/ReleaseRow', () => ({
+
+vi.mock('./hooks/useStoryMapInteractions', () => ({
   __esModule: true,
-  default: () => <div data-testid="release-row" />,
+  default: () => ({
+    editingStory: null,
+    editingTaskId: null,
+    pendingDeleteTaskId: null,
+    aiAssistantOpen: false,
+    aiAssistantStory: null,
+    aiAssistantTaskId: null,
+    aiAssistantReleaseId: null,
+    analysisPanelOpen: false,
+    setAnalysisPanelOpen: vi.fn(),
+    activityHeaderProps: {},
+    baseReleaseRowProps: {},
+    modalHandlers: {
+      handleUpdateStory: vi.fn(),
+      handleDeleteStory: vi.fn(),
+      handleCloseAIAssistant: vi.fn(),
+      handleStoryImproved: vi.fn(),
+    },
+    closeEditModal: vi.fn(),
+    onOpenEditModal: vi.fn(),
+    onOpenAIAssistant: vi.fn(),
+    onStatusChange: vi.fn(),
+  }),
 }));
+
+vi.mock('./components/story-map/StoryMapBoard', () => ({
+  __esModule: true,
+  default: () => <div data-testid="storymap-board" />,
+}));
+
 vi.mock('./components/story-map/StoryMapSkeleton', () => ({
   __esModule: true,
   default: () => <div data-testid="storymap-skeleton" />,
 }));
+
 vi.mock('./components/story-map/StoryMapModals', () => ({
   __esModule: true,
   default: () => <div data-testid="storymap-modals" />,
@@ -119,30 +140,24 @@ const baseProject = {
   ],
 };
 
-describe('StoryMap filters', () => {
+describe('StoryMap filters and search', () => {
   beforeEach(() => {
-    if (typeof localStorage?.clear === 'function') {
-      localStorage.clear();
-    } else {
-      vi.stubGlobal('localStorage', {
-        getItem: vi.fn(),
-        setItem: vi.fn(),
-        removeItem: vi.fn(),
-        clear: vi.fn(),
-      });
-    }
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn(),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    });
     vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
+    window.location.search = '';
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('toggles status filters and reset restores all', () => {
-    render(
-      <StoryMap
-        project={baseProject}
-        onUpdate={() => {}}
-        onUnauthorized={() => {}}
-        isLoading={false}
-      />,
-    );
+    render(<StoryMap project={baseProject} onUpdate={() => {}} onUnauthorized={() => {}} isLoading={false} />);
 
     const todoBtn = screen.getByRole('button', { name: /todo/i });
     expect(todoBtn).toHaveAttribute('aria-pressed', 'true');
@@ -155,14 +170,7 @@ describe('StoryMap filters', () => {
   });
 
   it('resets release checkboxes', () => {
-    render(
-      <StoryMap
-        project={baseProject}
-        onUpdate={() => {}}
-        onUnauthorized={() => {}}
-        isLoading={false}
-      />,
-    );
+    render(<StoryMap project={baseProject} onUpdate={() => {}} onUnauthorized={() => {}} isLoading={false} />);
 
     const releaseCheckbox = screen.getByLabelText('R1');
     expect(releaseCheckbox).toBeChecked();
@@ -172,6 +180,27 @@ describe('StoryMap filters', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /сбросить фильтры/i }));
     expect(releaseCheckbox).toBeChecked();
+  });
+
+  it('updates search query and syncs url/localStorage', async () => {
+    render(<StoryMap project={baseProject} onUpdate={() => {}} onUnauthorized={() => {}} isLoading={false} />);
+
+    const input = screen.getByPlaceholderText(/поиск историй/i);
+    fireEvent.change(input, { target: { value: 'login' } });
+    expect(input).toHaveValue('login');
+
+    await waitFor(() => {
+      expect(window.history.replaceState).toHaveBeenCalled();
+      expect(localStorage.setItem).toHaveBeenCalledWith(
+        'storymap_filters_1',
+        expect.stringContaining('"search":"login"'),
+      );
+    });
+  });
+
+  it('shows skeleton when loading', () => {
+    render(<StoryMap project={baseProject} onUpdate={() => {}} onUnauthorized={() => {}} isLoading />);
+    expect(screen.getByTestId('storymap-skeleton')).toBeInTheDocument();
   });
 });
 
