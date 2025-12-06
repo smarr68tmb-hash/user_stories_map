@@ -2,7 +2,7 @@
 User Story schemas
 """
 from typing import Optional, List, Literal
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 # Допустимые статусы
