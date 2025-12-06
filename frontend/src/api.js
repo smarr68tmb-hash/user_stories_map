@@ -5,61 +5,74 @@ const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 const api = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
 });
 
-// Интерцептор запросов: добавляет токен
+// Делаем отправку cookies явной для всех запросов
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    config.withCredentials = true;
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Интерцептор ответов: обрабатывает 401 и обновляет токен
+const redirectToLogin = () => {
+  // Логика выхода и очистки состояния на фронте вынесена в App.jsx
+  window.location.href = '/';
+};
+
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+const subscribeTokenRefresh = (callback) => {
+  refreshSubscribers.push(callback);
+};
+
+const onRefreshed = () => {
+  refreshSubscribers.forEach((cb) => cb());
+  refreshSubscribers = [];
+};
+
+// Интерцептор ответов: обрабатывает 401 и обновляет токен через httpOnly cookie
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
     // Если ошибка 401 и это не запрос на обновление токена
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest?.url?.includes('/refresh')
+    ) {
       originalRequest._retry = true;
 
-      const refreshToken = localStorage.getItem('refresh_token');
-      
-      if (refreshToken) {
-        try {
-          // Пытаемся обновить токен
-          const response = await axios.post(`${API_URL}/refresh`, {
-            refresh_token: refreshToken
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          subscribeTokenRefresh(() => {
+            api(originalRequest).then(resolve).catch(reject);
           });
+        });
+      }
 
-          const { access_token, refresh_token: newRefreshToken } = response.data;
+      isRefreshing = true;
 
-          // Сохраняем новые токены
-          localStorage.setItem('auth_token', access_token);
-          if (newRefreshToken) {
-            localStorage.setItem('refresh_token', newRefreshToken);
-          }
-
-          // Обновляем заголовок и повторяем исходный запрос
-          originalRequest.headers.Authorization = `Bearer ${access_token}`;
-          return api(originalRequest);
-        } catch (refreshError) {
-          // Если не удалось обновить токен - разлогиниваем
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('refresh_token');
-          window.location.href = '/'; // Или используйте колбэк для редиректа
-          return Promise.reject(refreshError);
+      try {
+        await axios.post(`${API_URL}/refresh`, {}, { withCredentials: true });
+        isRefreshing = false;
+        onRefreshed();
+        return api(originalRequest);
+      } catch (refreshError) {
+        isRefreshing = false;
+        refreshSubscribers = [];
+        try {
+          await axios.post(`${API_URL}/logout`, {}, { withCredentials: true });
+        } catch (logoutError) {
+          console.error("Logout after refresh failure error:", logoutError);
         }
-      } else {
-        // Если нет refresh токена - разлогиниваем
-        localStorage.removeItem('auth_token');
-        // window.location.href = '/'; 
+        redirectToLogin();
+        return Promise.reject(refreshError);
       }
     }
 
@@ -100,14 +113,10 @@ export const auth = {
     formData.append('password', password);
     
     const response = await api.post('/token', formData, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    withCredentials: true,
     });
     
-    const { access_token, refresh_token } = response.data;
-    localStorage.setItem('auth_token', access_token);
-    if (refresh_token) {
-      localStorage.setItem('refresh_token', refresh_token);
-    }
     return response.data;
   },
   
@@ -121,16 +130,11 @@ export const auth = {
   },
   
   logout: async () => {
-    const refreshToken = localStorage.getItem('refresh_token');
-    if (refreshToken) {
-      try {
-        await api.post('/logout', { refresh_token: refreshToken });
-      } catch (e) {
-        console.error("Logout error:", e);
-      }
-    }
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('refresh_token');
+  try {
+    await api.post('/logout', {}, { withCredentials: true });
+  } catch (e) {
+    console.error("Logout error:", e);
+  }
   },
   
   getMe: () => api.get('/me')

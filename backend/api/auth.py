@@ -2,7 +2,8 @@
 Authentication endpoints
 """
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response, Body
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from slowapi import Limiter
@@ -22,6 +23,43 @@ from dependencies import get_current_active_user
 
 router = APIRouter(prefix="", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)
+
+
+def _cookie_params(max_age: int) -> dict:
+    """Общие параметры для httpOnly cookie (access/refresh)."""
+    params = {
+        "httponly": True,
+        "secure": settings.COOKIE_SECURE,
+        "samesite": settings.COOKIE_SAMESITE,
+        "max_age": max_age,
+        "path": "/",
+    }
+    if settings.COOKIE_DOMAIN:
+        params["domain"] = settings.COOKIE_DOMAIN
+    return params
+
+
+def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    """Ставит httpOnly cookie для access/refresh токенов."""
+    response.set_cookie(
+        settings.ACCESS_TOKEN_COOKIE_NAME,
+        access_token,
+        **_cookie_params(settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    )
+    response.set_cookie(
+        settings.REFRESH_TOKEN_COOKIE_NAME,
+        refresh_token,
+        **_cookie_params(settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60)
+    )
+
+
+def _clear_auth_cookies(response: Response) -> None:
+    """Удаляет httpOnly cookies c токенами."""
+    delete_kwargs = {"path": "/"}
+    if settings.COOKIE_DOMAIN:
+        delete_kwargs["domain"] = settings.COOKIE_DOMAIN
+    response.delete_cookie(settings.ACCESS_TOKEN_COOKIE_NAME, **delete_kwargs)
+    response.delete_cookie(settings.REFRESH_TOKEN_COOKIE_NAME, **delete_kwargs)
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -61,6 +99,7 @@ def register(user_data: UserCreate, request: Request, db: Session = Depends(get_
 @limiter.limit("10/minute")
 def login(
     request: Request,
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -80,6 +119,9 @@ def login(
     )
     
     refresh_token = create_refresh_token(user.id, db)
+
+    # Ставим httpOnly cookies, чтобы фронт не хранил токены в localStorage
+    _set_auth_cookies(response, access_token, refresh_token)
     
     return {
         "access_token": access_token,
@@ -92,12 +134,20 @@ def login(
 @limiter.limit("10/minute")
 def refresh_token_endpoint(
     request: Request,
-    token_data: TokenRefreshRequest,
+    response: Response,
+    token_data: Optional[TokenRefreshRequest] = Body(default=None),
     db: Session = Depends(get_db)
 ):
     """Обновление access токена с помощью refresh токена"""
+    incoming_token = (token_data.refresh_token if token_data else None) or request.cookies.get(
+        settings.REFRESH_TOKEN_COOKIE_NAME
+    )
+
+    if not incoming_token:
+        raise HTTPException(status_code=401, detail="Refresh token is missing")
+
     refresh_token = db.query(RefreshToken).filter(
-        RefreshToken.token == token_data.refresh_token
+        RefreshToken.token == incoming_token
     ).first()
     
     if not refresh_token:
@@ -121,6 +171,9 @@ def refresh_token_endpoint(
     new_refresh_token = create_refresh_token(refresh_token.user_id, db)
     
     db.commit()
+
+    # Обновляем httpOnly cookies
+    _set_auth_cookies(response, access_token, new_refresh_token)
     
     return {
         "access_token": access_token,
@@ -130,14 +183,25 @@ def refresh_token_endpoint(
 
 
 @router.post("/logout")
-def logout(token_data: TokenRefreshRequest, db: Session = Depends(get_db)):
+def logout(
+    request: Request,
+    response: Response,
+    token_data: Optional[TokenRefreshRequest] = Body(default=None),
+    db: Session = Depends(get_db)
+):
     """Отзыв refresh токена"""
-    refresh_token = db.query(RefreshToken).filter(
-        RefreshToken.token == token_data.refresh_token
-    ).first()
-    if refresh_token:
-        refresh_token.revoked = True
-        db.commit()
+    incoming_token = (token_data.refresh_token if token_data else None) or request.cookies.get(
+        settings.REFRESH_TOKEN_COOKIE_NAME
+    )
+    if incoming_token:
+        refresh_token = db.query(RefreshToken).filter(
+            RefreshToken.token == incoming_token
+        ).first()
+        if refresh_token:
+            refresh_token.revoked = True
+            db.commit()
+
+    _clear_auth_cookies(response)
     return {"message": "Logged out successfully"}
 
 

@@ -1,20 +1,39 @@
 """
 FastAPI dependencies - переиспользуемые зависимости для эндпоинтов
 """
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from utils.database import get_db
 from models import User
 from services.auth_service import decode_access_token
+from config import settings
 
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+def _extract_token(request: Request) -> str:
+    """
+    Извлекает access токен из httpOnly cookie или заголовка Authorization.
+    Возвращает строку токена или выбрасывает HTTPException 401.
+    """
+    # 1) Пытаемся взять токен из httpOnly cookie
+    cookie_token = request.cookies.get(settings.ACCESS_TOKEN_COOKIE_NAME)
+    if cookie_token:
+        return cookie_token
+
+    # 2) Фолбэк: заголовок Authorization: Bearer <token>
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        return auth_header.split(" ", 1)[1].strip()
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    request: Request,
     db: Session = Depends(get_db)
 ) -> User:
     """
@@ -24,6 +43,7 @@ async def get_current_user(
         HTTPException: Если токен невалиден или пользователь не найден
     """
     # Декодируем токен и получаем user_id
+    token = _extract_token(request)
     user_id = decode_access_token(token)
     
     # Находим пользователя в БД

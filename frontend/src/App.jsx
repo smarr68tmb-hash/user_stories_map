@@ -11,8 +11,8 @@ const MAX_CHARS = 10000;
 const MIN_CHARS = 10;
 
 function AppContent() {
-  const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
   const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
   
   // Загружаем сохраненный черновик из localStorage
   const [input, setInput] = useState(() => {
@@ -40,24 +40,30 @@ function AppContent() {
   const [projectNameError, setProjectNameError] = useState(null);
   const [updatingProjectName, setUpdatingProjectName] = useState(false);
   
-  // Проверка токена при загрузке
+  // Проверка текущей сессии при загрузке
   useEffect(() => {
-    if (token) {
-      // Проверяем валидность токена
-      auth.getMe()
-        .then(res => setUser(res.data))
-        .catch(() => {
-          // Если не удалось получить пользователя - разлогиниваем
-          // Интерцептор уже обработал обновление токена, если это было возможно
-          // Если мы здесь, значит токен невалиден
-          auth.logout();
-          setToken(null);
+    let mounted = true;
+    auth.getMe()
+      .then((res) => {
+        if (mounted) {
+          setUser(res.data);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
           setUser(null);
-          setProject(null);
-          setInput('');
-        });
-    }
-  }, [token]);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setAuthChecked(true);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
   
   // Автосохранение черновика
   useEffect(() => {
@@ -90,23 +96,20 @@ function AppContent() {
   const charCount = input.length;
   const remainingChars = MAX_CHARS - charCount;
 
-  const handleLogin = async (loginData) => {
-    // loginData теперь приходит из Auth компонента, который использует api.js
-    // Токены уже сохранены в localStorage
-    setToken(localStorage.getItem('auth_token'));
-    
-    // Загружаем информацию о пользователе
+  const handleLogin = async () => {
+    // После успешного логина получаем пользователя из /me
     try {
       const res = await auth.getMe();
       setUser(res.data);
     } catch (e) {
       console.error("Failed to fetch user data:", e);
+    } finally {
+      setAuthChecked(true);
     }
   };
 
   const handleLogout = async () => {
     await auth.logout();
-    setToken(null);
     setUser(null);
     setProject(null);
     setInput('');
@@ -329,7 +332,15 @@ function AppContent() {
   };
 
   // Если не авторизован, показываем форму входа
-  if (!token || !user) {
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-600">
+        Проверяем сессию...
+      </div>
+    );
+  }
+
+  if (!user) {
     return <Auth onLogin={handleLogin} />;
   }
 

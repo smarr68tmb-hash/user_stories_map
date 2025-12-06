@@ -59,7 +59,7 @@ class Token(BaseModel):
 
 class TokenRefreshRequest(BaseModel):
     """Схема запроса на обновление токена"""
-    refresh_token: str
+    refresh_token: Optional[str] = None
 
 
 class TokenData(BaseModel):

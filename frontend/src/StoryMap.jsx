@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DndContext,
   KeyboardSensor,
@@ -21,6 +21,11 @@ import { useProjectRefreshContext } from './context/ProjectRefreshContext';
 
 const TASK_COLUMN_WIDTH = 220;
 const ACTIVITY_PADDING_COLUMNS = 1;
+const STATUS_OPTIONS = [
+  { value: 'todo', label: 'Todo', activeClass: 'bg-yellow-100 border-yellow-300 text-yellow-800' },
+  { value: 'in_progress', label: 'In Progress', activeClass: 'bg-blue-100 border-blue-300 text-blue-800' },
+  { value: 'done', label: 'Done', activeClass: 'bg-green-100 border-green-300 text-green-800' },
+];
 
 function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
   const toast = useToast();
@@ -71,6 +76,8 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
   const [editingTaskTitle, setEditingTaskTitle] = useState('');
   const [pendingDeleteActivityId, setPendingDeleteActivityId] = useState(null);
   const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState(null);
+  const [statusFilter, setStatusFilter] = useState(STATUS_OPTIONS.map((s) => s.value));
+  const [releaseFilter, setReleaseFilter] = useState(project.releases.map((r) => r.id));
 
   const { isTaskDragDisabled, isTaskHandleDisabled, isStoryDragDisabled, isStoryHandleDisabled } = useDnD({
     storyLoading,
@@ -91,24 +98,177 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
     }),
   );
 
+  const filterStorageKey = useMemo(() => `storymap_filters_${project.id}`, [project.id]);
+  const availableReleaseIds = useMemo(
+    () => project.releases.map((release) => release.id),
+    [project.releases],
+  );
+
+  // Инициализация фильтров из URL или localStorage
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const statusParam = params.get('status');
+    const releaseParam = params.get('release');
+
+    let nextStatuses = STATUS_OPTIONS.map((s) => s.value);
+    let nextReleases = availableReleaseIds;
+
+    const storedRaw = localStorage.getItem(filterStorageKey);
+    if (storedRaw) {
+      try {
+        const stored = JSON.parse(storedRaw);
+        if (Array.isArray(stored.status)) {
+          const validStatuses = stored.status.filter((s) => STATUS_OPTIONS.some((opt) => opt.value === s));
+          if (validStatuses.length) {
+            nextStatuses = validStatuses;
+          }
+        }
+        if (Array.isArray(stored.releases)) {
+          const validReleases = stored.releases
+            .map((id) => Number(id))
+            .filter((id) => availableReleaseIds.includes(id));
+          if (validReleases.length) {
+            nextReleases = validReleases;
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to parse saved filters', e);
+      }
+    }
+
+    if (statusParam) {
+      const parsedStatuses = statusParam.split(',').filter((s) => STATUS_OPTIONS.some((opt) => opt.value === s));
+      if (parsedStatuses.length) {
+        nextStatuses = parsedStatuses;
+      }
+    }
+
+    if (releaseParam) {
+      const parsedReleases = releaseParam
+        .split(',')
+        .map((id) => Number(id))
+        .filter((id) => availableReleaseIds.includes(id));
+      if (parsedReleases.length) {
+        nextReleases = parsedReleases;
+      }
+    }
+
+    setStatusFilter(nextStatuses);
+    setReleaseFilter(nextReleases.length ? nextReleases : availableReleaseIds);
+  }, [availableReleaseIds, filterStorageKey]);
+
+  // Поддерживаем актуальность фильтров при появлении новых релизов
+  useEffect(() => {
+    setReleaseFilter((prev) => {
+      const filtered = prev.filter((id) => availableReleaseIds.includes(id));
+      const newOnes = availableReleaseIds.filter((id) => !filtered.includes(id));
+      const next = [...filtered, ...newOnes];
+      return next.length ? next : availableReleaseIds;
+    });
+  }, [availableReleaseIds]);
+
+  const persistFilters = useCallback(
+    (statuses, releases) => {
+      const payload = { status: statuses, releases };
+      localStorage.setItem(filterStorageKey, JSON.stringify(payload));
+
+      const params = new URLSearchParams(window.location.search);
+      if (statuses.length && statuses.length !== STATUS_OPTIONS.length) {
+        params.set('status', statuses.join(','));
+      } else {
+        params.delete('status');
+      }
+
+      if (releases.length && releases.length !== availableReleaseIds.length) {
+        params.set('release', releases.join(','));
+      } else {
+        params.delete('release');
+      }
+
+      const newSearch = params.toString();
+      const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ''}`;
+      window.history.replaceState({}, '', newUrl);
+    },
+    [availableReleaseIds, filterStorageKey],
+  );
+
+  useEffect(() => {
+    persistFilters(statusFilter, releaseFilter);
+  }, [persistFilters, releaseFilter, statusFilter]);
+
+  const toggleStatus = useCallback((value) => {
+    setStatusFilter((prev) => {
+      const exists = prev.includes(value);
+      const next = exists ? prev.filter((s) => s !== value) : [...prev, value];
+      return next.length ? next : STATUS_OPTIONS.map((s) => s.value);
+    });
+  }, []);
+
+  const toggleRelease = useCallback(
+    (id) => {
+      setReleaseFilter((prev) => {
+        const exists = prev.includes(id);
+        const next = exists ? prev.filter((r) => r !== id) : [...prev, id];
+        return next.length ? next : availableReleaseIds;
+      });
+    },
+    [availableReleaseIds],
+  );
+
+  const handleResetFilters = useCallback(() => {
+    setStatusFilter(STATUS_OPTIONS.map((s) => s.value));
+    setReleaseFilter(availableReleaseIds);
+  }, [availableReleaseIds]);
+
+  const filteredReleases = useMemo(
+    () => project.releases.filter((release) => releaseFilter.includes(release.id)),
+    [project.releases, releaseFilter],
+  );
+
+  const filteredActivities = useMemo(
+    () =>
+      project.activities.map((act) => ({
+        ...act,
+        tasks: act.tasks.map((task) => ({
+          ...task,
+          stories: task.stories.filter((story) => {
+            const status = story.status || 'todo';
+            const isStatusAllowed = statusFilter.includes(status);
+            const isReleaseAllowed = releaseFilter.includes(story.release_id);
+            return isStatusAllowed && isReleaseAllowed;
+          }),
+        })),
+      })),
+    [project.activities, releaseFilter, statusFilter],
+  );
+
+  const filteredProject = useMemo(
+    () => ({
+      ...project,
+      activities: filteredActivities,
+      releases: filteredReleases,
+    }),
+    [filteredActivities, filteredReleases, project],
+  );
+
   const allTasks = useMemo(
     () =>
-      project.activities.flatMap((act) =>
+      filteredProject.activities.flatMap((act) =>
         act.tasks.map((task) => ({ ...task, activityTitle: act.title })),
       ),
-    [project.activities],
+    [filteredProject.activities],
   );
 
   const activityWidths = useMemo(() => {
     const widths = {};
-    project.activities.forEach((act) => {
+    filteredProject.activities.forEach((act) => {
       widths[act.id] = (act.tasks.length + ACTIVITY_PADDING_COLUMNS) * TASK_COLUMN_WIDTH;
     });
     return widths;
-  }, [project.activities]);
+  }, [filteredProject.activities]);
 
   const releaseProgress = useMemo(() => {
-    return project.releases.reduce((acc, release) => {
+    return filteredProject.releases.reduce((acc, release) => {
       let total = 0;
       let done = 0;
 
@@ -128,7 +288,7 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
       };
       return acc;
     }, {});
-  }, [allTasks, project.releases]);
+  }, [allTasks, filteredProject.releases]);
 
   const findStory = (taskId, releaseId, storyId) => {
     const task = allTasks.find((t) => t.id === taskId);
@@ -318,7 +478,7 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
     return (
       <StoryMapSkeleton
         activityWidths={activityWidths}
-        releases={project.releases}
+        releases={filteredProject.releases}
         taskColumnWidth={TASK_COLUMN_WIDTH}
       />
     );
@@ -326,20 +486,85 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <div className="mb-4 flex justify-end">
-        <button
-          onClick={() => setAnalysisPanelOpen(true)}
-          className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-4 py-2 rounded-lg font-medium shadow-lg hover:from-indigo-600 hover:to-purple-600 transition flex items-center gap-2"
-        >
-          <span>📊</span>
-          Анализ карты
-        </button>
-        {isRefreshing && (
-          <span className="ml-3 text-xs text-gray-500 flex items-center gap-1">
-            <span className="animate-pulse">●</span>
-            Синхронизация…
-          </span>
-        )}
+      <div className="mb-4 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-gray-700">Статусы:</span>
+          {STATUS_OPTIONS.map((option) => {
+            const isActive = statusFilter.includes(option.value);
+            const statusRingClass =
+              option.value === 'done'
+                ? 'ring-green-200'
+                : option.value === 'in_progress'
+                ? 'ring-blue-200'
+                : 'ring-yellow-200';
+            return (
+              <button
+                key={option.value}
+                onClick={() => toggleStatus(option.value)}
+                className={`px-3 py-1 rounded-full border text-sm transition focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+                  isActive
+                    ? `${option.activeClass} ring-1 ring-offset-1 ${statusRingClass}`
+                    : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                }`}
+                aria-pressed={isActive}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-gray-700">Релизы:</span>
+          {project.releases.map((release) => {
+            const checked = releaseFilter.includes(release.id);
+            return (
+              <label
+                key={release.id}
+                className={`flex items-center gap-2 px-2 py-1 rounded border text-sm cursor-pointer transition ${
+                  checked ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-gray-200 bg-white text-gray-700'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  className="accent-blue-600"
+                  checked={checked}
+                  onChange={() => toggleRelease(release.id)}
+                />
+                <span className="max-w-[160px] truncate" title={release.title}>
+                  {release.title}
+                </span>
+              </label>
+            );
+          })}
+          <button
+            onClick={handleResetFilters}
+            className="ml-2 text-sm text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-300 rounded-lg bg-white transition"
+          >
+            Сбросить фильтры
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setAnalysisPanelOpen(true)}
+              className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-4 py-2 rounded-lg font-medium shadow-lg hover:from-indigo-600 hover:to-purple-600 transition flex items-center gap-2"
+            >
+              <span>📊</span>
+              Анализ карты
+            </button>
+            {isRefreshing && (
+              <span className="text-xs text-gray-500 flex items-center gap-1">
+                <span className="animate-pulse">●</span>
+                Синхронизация…
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-gray-500">
+            Показаны статусы: {statusFilter.length}/{STATUS_OPTIONS.length}, релизы: {releaseFilter.length}/{project.releases.length}
+          </div>
+        </div>
       </div>
 
       <div className="w-full overflow-x-auto">
@@ -385,11 +610,11 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
           />
 
         <div>
-            {project.releases.map((release) => (
+            {filteredProject.releases.map((release) => (
               <ReleaseRow
                 key={release.id}
                 release={release}
-                activities={project.activities}
+                activities={filteredProject.activities}
                 addingToCell={addingToCell}
                 storyDrafts={storyDrafts}
                 openAddForm={openAddForm}

@@ -56,7 +56,7 @@ function Auth({ onLogin }) {
       }
       // Сохраняем или очищаем сохраненные логин и пароль в зависимости от выбора пользователя
       saveCredentials(rememberCredentials, email, password);
-      // Токены уже сохранены в localStorage внутри auth.login
+      // Сессия устанавливается через httpOnly cookies внутри auth.login
       onLogin();
     } catch (err) {
       setError(err.response?.data?.detail || 'Ошибка аутентификации');
