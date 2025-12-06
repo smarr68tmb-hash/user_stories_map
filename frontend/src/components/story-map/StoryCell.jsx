@@ -1,6 +1,15 @@
+import { useCallback, useMemo } from 'react';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
+import { FixedSizeList as List } from 'react-window';
 import StoryCard from './StoryCard';
+
+const STORY_CARD_HEIGHT = 156;
+const STORY_ROW_GAP = 8;
+const STORY_ROW_HEIGHT = STORY_CARD_HEIGHT + STORY_ROW_GAP;
+const MIN_VISIBLE_ROWS = 3;
+const MAX_VISIBLE_ROWS = 6;
+const VIRTUALIZATION_THRESHOLD = 12;
 
 function StoryCell({
   cellId,
@@ -20,6 +29,43 @@ function StoryCell({
   isStoryHandleDisabled,
   isStoryDragDisabled,
 }) {
+  const shouldVirtualize = stories.length >= VIRTUALIZATION_THRESHOLD;
+
+  const listHeight = useMemo(() => {
+    if (!shouldVirtualize) return 0;
+    const visibleRows = Math.min(Math.max(stories.length, MIN_VISIBLE_ROWS), MAX_VISIBLE_ROWS);
+    return visibleRows * STORY_ROW_HEIGHT - STORY_ROW_GAP;
+  }, [shouldVirtualize, stories.length]);
+
+  const renderStoryRow = useCallback(
+    ({ index, style }) => {
+      const story = stories[index];
+      const rowStyle = {
+        ...style,
+        paddingBottom: STORY_ROW_GAP,
+        width: '100%',
+      };
+
+      return (
+        <div style={rowStyle}>
+          <StoryCard
+            story={story}
+            taskId={taskId}
+            releaseId={releaseId}
+            onEdit={() => onEditStory(story)}
+            onOpenAI={() => onOpenAI(story, taskId, releaseId)}
+            onStatusChange={onStatusChange}
+            dragDisabled={isStoryDragDisabled(story.id)}
+            handleDisabled={isStoryHandleDisabled(story.id)}
+            statusLoading={storyLoading.isChangingStatus(story.id)}
+            containerStyle={{ height: STORY_CARD_HEIGHT }}
+          />
+        </div>
+      );
+    },
+    [isStoryDragDisabled, isStoryHandleDisabled, onEditStory, onOpenAI, onStatusChange, releaseId, stories, storyLoading, taskId],
+  );
+
   return (
     <DroppableCell cellId={cellId} taskId={taskId} releaseId={releaseId}>
       <SortableContext
@@ -27,20 +73,33 @@ function StoryCell({
         strategy={verticalListSortingStrategy}
       >
         <div className="flex flex-col gap-2 min-h-[150px]">
-          {stories.map((story) => (
-            <StoryCard
-              key={story.id}
-              story={story}
-              taskId={taskId}
-              releaseId={releaseId}
-              onEdit={() => onEditStory(story)}
-              onOpenAI={() => onOpenAI(story, taskId, releaseId)}
-              onStatusChange={onStatusChange}
-              dragDisabled={isStoryDragDisabled(story.id)}
-              handleDisabled={isStoryHandleDisabled(story.id)}
-              statusLoading={storyLoading.isChangingStatus(story.id)}
-            />
-          ))}
+          {stories.length > 0 && (
+            shouldVirtualize ? (
+              <List
+                height={listHeight}
+                itemCount={stories.length}
+                itemSize={STORY_ROW_HEIGHT}
+                width="100%"
+              >
+                {renderStoryRow}
+              </List>
+            ) : (
+              stories.map((story) => (
+                <StoryCard
+                  key={story.id}
+                  story={story}
+                  taskId={taskId}
+                  releaseId={releaseId}
+                  onEdit={() => onEditStory(story)}
+                  onOpenAI={() => onOpenAI(story, taskId, releaseId)}
+                  onStatusChange={onStatusChange}
+                  dragDisabled={isStoryDragDisabled(story.id)}
+                  handleDisabled={isStoryHandleDisabled(story.id)}
+                  statusLoading={storyLoading.isChangingStatus(story.id)}
+                />
+              ))
+            )
+          )}
 
           {isAdding ? (
             <div className="bg-green-50 p-3 rounded border border-green-300">

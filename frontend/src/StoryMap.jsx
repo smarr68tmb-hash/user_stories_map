@@ -11,6 +11,7 @@ import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import ActivityHeader from './components/story-map/ActivityHeader';
 import ReleaseRow from './components/story-map/ReleaseRow';
 import StoryMapModals from './components/story-map/StoryMapModals';
+import StoryMapSkeleton from './components/story-map/StoryMapSkeleton';
 import useActivities from './hooks/useActivities';
 import useTasks from './hooks/useTasks';
 import useStories from './hooks/useStories';
@@ -18,7 +19,10 @@ import useDnD from './hooks/useDnD';
 import { useToast } from './hooks/useToast';
 import { useProjectRefreshContext } from './context/ProjectRefreshContext';
 
-function StoryMap({ project, onUpdate, onUnauthorized }) {
+const TASK_COLUMN_WIDTH = 220;
+const ACTIVITY_PADDING_COLUMNS = 1;
+
+function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
   const toast = useToast();
   const { refreshProject, isRefreshing } = useProjectRefreshContext();
   const {
@@ -94,6 +98,37 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
       ),
     [project.activities],
   );
+
+  const activityWidths = useMemo(() => {
+    const widths = {};
+    project.activities.forEach((act) => {
+      widths[act.id] = (act.tasks.length + ACTIVITY_PADDING_COLUMNS) * TASK_COLUMN_WIDTH;
+    });
+    return widths;
+  }, [project.activities]);
+
+  const releaseProgress = useMemo(() => {
+    return project.releases.reduce((acc, release) => {
+      let total = 0;
+      let done = 0;
+
+      allTasks.forEach((task) => {
+        task.stories.forEach((story) => {
+          if (story.release_id === release.id) {
+            total += 1;
+            if (story.status === 'done') done += 1;
+          }
+        });
+      });
+
+      acc[release.id] = {
+        total,
+        done,
+        percent: total > 0 ? Math.round((done / total) * 100) : 0,
+      };
+      return acc;
+    }, {});
+  }, [allTasks, project.releases]);
 
   const findStory = (taskId, releaseId, storyId) => {
     const task = allTasks.find((t) => t.id === taskId);
@@ -202,22 +237,6 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     await changeStatus(storyId, newStatus);
   };
 
-  const calculateReleaseProgress = (releaseId) => {
-    let total = 0;
-    let done = 0;
-    
-    allTasks.forEach((task) => {
-      task.stories.forEach((story) => {
-        if (story.release_id === releaseId) {
-          total += 1;
-          if (story.status === 'done') done += 1;
-        }
-      });
-    });
-    
-    return { total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 };
-  };
-  
   const handleAddActivity = async () => {
     if (!newActivityTitle.trim()) {
       setAddingActivity(false);
@@ -295,6 +314,16 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     setEditingTaskTitle(task.title);
   };
 
+  if (isLoading) {
+    return (
+      <StoryMapSkeleton
+        activityWidths={activityWidths}
+        releases={project.releases}
+        taskColumnWidth={TASK_COLUMN_WIDTH}
+      />
+    );
+  }
+
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <div className="mb-4 flex justify-end">
@@ -351,6 +380,8 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
             stopAddingTask={stopAddingTask}
             isTaskHandleDisabled={isTaskHandleDisabled}
             isTaskDragDisabled={isTaskDragDisabled}
+            activityWidths={activityWidths}
+            taskColumnWidth={TASK_COLUMN_WIDTH}
           />
 
         <div>
@@ -371,7 +402,9 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
                                   onStatusChange={handleStatusChange}
                 isStoryHandleDisabled={isStoryHandleDisabled}
                 isStoryDragDisabled={isStoryDragDisabled}
-                progress={calculateReleaseProgress(release.id)}
+                progress={releaseProgress[release.id] || { total: 0, done: 0, percent: 0 }}
+                activityWidths={activityWidths}
+                taskColumnWidth={TASK_COLUMN_WIDTH}
                                 />
                               ))}
         </div>

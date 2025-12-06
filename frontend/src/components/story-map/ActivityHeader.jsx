@@ -38,6 +38,8 @@ function ActivityHeader({
   stopAddingTask,
   isTaskHandleDisabled,
   isTaskDragDisabled,
+  activityWidths,
+  taskColumnWidth = 220,
 }) {
   return (
     <div className="sticky top-0 z-10 bg-gray-50 border-b-2 border-gray-300">
@@ -46,8 +48,7 @@ function ActivityHeader({
           <span className="text-xs font-bold text-gray-600 uppercase">Releases</span>
         </div>
         {activities.map((act) => {
-          const taskCount = act.tasks.length;
-          const activityWidth = (taskCount + 1) * 220;
+          const activityWidth = activityWidths?.[act.id] ?? (act.tasks.length + 1) * taskColumnWidth;
           const isEditing = editingActivityId === act.id;
           const isDeleting = activityLoading.isDeleting(act.id);
           const isUpdating = activityLoading.isUpdating(act.id);
@@ -57,7 +58,7 @@ function ActivityHeader({
             <div
               key={act.id}
               className="bg-blue-100 border-r border-gray-200 p-3 text-center font-bold text-blue-800 flex items-center justify-center group relative"
-              style={{ width: `${activityWidth}px`, minWidth: '220px' }}
+              style={{ width: activityWidth, minWidth: taskColumnWidth }}
             >
               {isEditing ? (
                 <div className="flex items-center gap-2 w-full">
@@ -161,8 +162,7 @@ function ActivityHeader({
       <div className="flex">
         <div className="w-32 flex-shrink-0 bg-gray-100 border-r-2 border-gray-300"></div>
         {activities.map((act) => {
-          const taskCount = act.tasks.length;
-          const activityWidth = (taskCount + 1) * 220;
+          const activityWidth = activityWidths?.[act.id] ?? (act.tasks.length + 1) * taskColumnWidth;
           return (
             <SortableContext
               key={`activity-tasks-${act.id}`}
@@ -172,7 +172,7 @@ function ActivityHeader({
               <DroppableTaskZone
                 activityId={act.id}
                 className="flex"
-                style={{ width: `${activityWidth}px`, flexShrink: 0 }}
+                style={{ width: activityWidth, flexShrink: 0 }}
                 id={`activity-tasks-${act.id}`}
               >
                 {act.tasks.map((task) => {

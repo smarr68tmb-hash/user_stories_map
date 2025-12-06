@@ -591,7 +591,31 @@ function ProjectPage({
   handleLogout,
   onUpdateProject,
 }) {
-  const { isRefreshing } = useProjectRefreshContext();
+  const { isRefreshing, refreshProject } = useProjectRefreshContext();
+  const [isMapLoading, setIsMapLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const hydrate = async () => {
+      setIsMapLoading(true);
+      try {
+        await refreshProject({ silent: false });
+      } catch (error) {
+        console.error('Failed to refresh project', error);
+      } finally {
+        if (mounted) {
+          setIsMapLoading(false);
+        }
+      }
+    };
+
+    hydrate();
+
+    return () => {
+      mounted = false;
+    };
+  }, [refreshProject]);
 
   return (
     <div className="min-h-screen p-4 md:p-8 overflow-x-auto bg-gray-50">
@@ -697,7 +721,12 @@ function ProjectPage({
         </div>
       </div>
 
-      <StoryMap project={project} onUpdate={onUpdateProject} onUnauthorized={handleLogout} />
+      <StoryMap
+        project={project}
+        onUpdate={onUpdateProject}
+        onUnauthorized={handleLogout}
+        isLoading={isMapLoading || isRefreshing}
+      />
     </div>
   );
 }

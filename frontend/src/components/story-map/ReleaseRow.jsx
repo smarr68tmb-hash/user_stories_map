@@ -16,6 +16,8 @@ function ReleaseRow({
   isStoryHandleDisabled,
   isStoryDragDisabled,
   progress,
+  activityWidths,
+  taskColumnWidth = 220,
 }) {
   return (
     <div className="flex border-b border-gray-200 min-h-[180px] hover:bg-gray-50 transition">
@@ -39,13 +41,12 @@ function ReleaseRow({
       </div>
 
       {activities.map((act) => {
-        const taskCount = act.tasks.length;
-        const activityWidth = (taskCount + 1) * 220;
+        const activityWidth = activityWidths?.[act.id] ?? (act.tasks.length + 1) * taskColumnWidth;
         return (
           <div
             key={`activity-body-${act.id}`}
             className="flex"
-            style={{ width: `${activityWidth}px`, flexShrink: 0 }}
+            style={{ width: activityWidth, flexShrink: 0 }}
           >
             {act.tasks.map((task) => {
               const storiesInCell = task.stories.filter((s) => s.release_id === release.id);

@@ -13,6 +13,7 @@ function StoryCard({
   dragDisabled = false,
   handleDisabled = false,
   statusLoading,
+  containerStyle = {},
 }) {
   const {
     attributes,
@@ -26,6 +27,7 @@ function StoryCard({
   });
 
   const style = {
+    ...containerStyle,
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging || dragDisabled ? 0.5 : 1,
