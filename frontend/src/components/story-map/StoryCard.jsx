@@ -2,6 +2,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { Circle, Clock, Check, Sparkles, GripVertical } from 'lucide-react';
 
 function StoryCard({
   story,
@@ -53,9 +54,9 @@ function StoryCard({
 
   // Иконки статуса
   const statusIcons = {
-    'todo': '○',
-    'in_progress': '◐',
-    'done': '✓',
+    'todo': <Circle className="w-4 h-4" />,
+    'in_progress': <Clock className="w-4 h-4" />,
+    'done': <Check className="w-4 h-4" />,
   };
 
   const currentStatus = story.status || 'todo';
@@ -95,12 +96,11 @@ function StoryCard({
         {...(!handleDisabled ? listeners : {})}
         onClick={(e) => e.stopPropagation()}
         aria-disabled={handleDisabled}
+        aria-label="Перетащить карточку"
         className="absolute top-0 right-0 cursor-grab active:cursor-grabbing min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-white/50 rounded-md opacity-40 hover:opacity-100 transition z-10"
         title="Перетащить"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-          <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z" />
-        </svg>
+        <GripVertical className="h-5 w-5 text-gray-500" />
       </div>
 
       {/* Title with status toggle */}
@@ -151,11 +151,13 @@ function StoryCard({
             e.stopPropagation();
             onOpenAI();
           }}
-          className="ml-auto text-xs bg-gradient-to-r from-purple-500 to-blue-500 text-white px-3 py-1.5 min-h-[32px] rounded hover:from-purple-600 hover:to-blue-600 transition opacity-0 group-hover:opacity-100"
+          className="ml-auto text-xs bg-gradient-to-r from-purple-500 to-blue-500 text-white px-3 py-1.5 min-h-[32px] rounded hover:from-purple-600 hover:to-blue-600 transition opacity-0 group-hover:opacity-100 flex items-center gap-1"
           type="button"
           title="AI Ассистент"
+          aria-label={`Улучшить историю "${story.title}" с помощью AI`}
         >
-          ✨ AI
+          <Sparkles className="w-3 h-3" />
+          AI
         </button>
       </div>
     </div>

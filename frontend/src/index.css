@@ -105,3 +105,23 @@ body {
   }
 }
 
+/* Skip to content link */
+@layer components {
+  .skip-to-content {
+    position: absolute;
+    left: -9999px;
+    z-index: 999;
+    padding: 1rem 1.5rem;
+    background-color: var(--color-primary-600);
+    color: white;
+    text-decoration: none;
+    border-radius: 0.5rem;
+    font-weight: 600;
+  }
+
+  .skip-to-content:focus {
+    left: 1rem;
+    top: 1rem;
+  }
+}
+

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Bot, Sparkles, Pencil } from 'lucide-react';
 import api, { auth, enhancement, projects } from './api';
 import StoryMap from './StoryMap.jsx';
 import Auth from './Auth.jsx';
 import ProjectList from './ProjectList.jsx';
 import EnhancementPreview from './EnhancementPreview.jsx';
+import Breadcrumb from './components/common/Breadcrumb.jsx';
 import { ToastProvider, useToast } from './hooks/useToast';
 import { ProjectRefreshProvider, useProjectRefreshContext } from './context/ProjectRefreshContext';
 
@@ -341,19 +343,30 @@ function AppContent() {
   }
 
   if (!user) {
-    return <Auth onLogin={handleLogin} />;
+    return (
+      <>
+        <a href="#main-content" className="skip-to-content">
+          Перейти к содержимому
+        </a>
+        <Auth onLogin={handleLogin} />
+      </>
+    );
   }
 
   // Если есть выбранный проект, показываем карту
   if (project) {
     return (
-      <ProjectRefreshProvider
-        projectId={project.id}
-        onUpdate={setProject}
-        onUnauthorized={handleLogout}
-        toast={toast}
-      >
-        <ProjectPage
+      <>
+        <a href="#main-content" className="skip-to-content">
+          Перейти к содержимому
+        </a>
+        <ProjectRefreshProvider
+          projectId={project.id}
+          onUpdate={setProject}
+          onUnauthorized={handleLogout}
+          toast={toast}
+        >
+          <ProjectPage
           project={project}
           user={user}
           isEditingProjectName={isEditingProjectName}
@@ -370,26 +383,36 @@ function AppContent() {
           onUpdateProject={setProject}
         />
       </ProjectRefreshProvider>
+      </>
     );
   }
 
   // Если нет проекта и view === 'list', показываем список проектов
   if (view === 'list') {
     return (
-      <ProjectList
+      <>
+        <a href="#main-content" className="skip-to-content">
+          Перейти к содержимому
+        </a>
+        <ProjectList
         onSelectProject={handleSelectProject}
         onCreateNew={handleCreateNew}
         onLogout={handleLogout}
         user={user}
       />
+      </>
     );
   }
 
   // Если view === 'create', показываем форму создания нового проекта
   if (view === 'create') {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
-        <div className="bg-white p-8 rounded-xl shadow-lg max-w-2xl w-full">
+      <>
+        <a href="#main-content" className="skip-to-content">
+          Перейти к содержимому
+        </a>
+        <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+          <div id="main-content" className="bg-white p-8 rounded-xl shadow-lg max-w-2xl w-full">
           <div className="flex justify-between items-start mb-4">
             <div>
               <h1 className="text-3xl font-bold mb-2 text-gray-800">Создать новый проект</h1>
@@ -486,8 +509,9 @@ function AppContent() {
               />
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-800 group-hover:text-blue-700 transition">
-                    🤖 AI-Агент (MVP)
+                  <span className="font-semibold text-gray-800 group-hover:text-blue-700 transition flex items-center gap-2">
+                    <Bot className="w-5 h-5" />
+                    AI-Агент (MVP)
                   </span>
                   <span className="px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700 rounded-full">
                     +15% качество
@@ -540,7 +564,7 @@ function AppContent() {
               </span>
             ) : (
               <span className="flex items-center justify-center gap-2">
-                <span>✨</span>
+                <Sparkles className="w-5 h-5" />
                 Сгенерировать с улучшением (рекомендуется)
               </span>
             )}
@@ -579,6 +603,7 @@ function AppContent() {
           />
         </div>
       </div>
+      </>
     );
   }
 
@@ -628,9 +653,22 @@ function ProjectPage({
     };
   }, [refreshProject]);
 
+  const breadcrumbItems = [
+    {
+      label: 'Проекты',
+      href: '#',
+      onClick: handleBackToList,
+    },
+    {
+      label: project.name,
+    },
+  ];
+
   return (
     <div className="min-h-screen p-4 md:p-8 overflow-x-auto bg-gray-50">
-      <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <Breadcrumb items={breadcrumbItems} />
+
+      <div id="main-content" className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex-1">
           {isEditingProjectName ? (
             <div className="space-y-2">
@@ -702,9 +740,7 @@ function ProjectPage({
                 aria-label="Редактировать название проекта"
                 title="Редактировать название проекта"
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
+                <Pencil className="w-5 h-5" />
               </button>
             </div>
           )}

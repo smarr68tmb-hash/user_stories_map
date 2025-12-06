@@ -3,6 +3,7 @@ import {
   horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
+import { Pencil, Trash2, Check } from 'lucide-react';
 import TaskColumn from './TaskColumn';
 
 function ActivityHeader({
@@ -95,16 +96,24 @@ function ActivityHeader({
                       className="min-w-[40px] min-h-[40px] flex items-center justify-center text-blue-600 hover:text-blue-800 hover:bg-blue-200 rounded disabled:opacity-50"
                       disabled={isDeleting || isUpdating}
                       title="Редактировать"
+                      aria-label={`Редактировать активность ${act.title}`}
                     >
-                      ✏️
+                      <Pencil className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => onDeleteActivity(act.id)}
                       className={`min-w-[40px] min-h-[40px] flex items-center justify-center text-red-600 hover:text-red-800 hover:bg-red-200 rounded ${pendingDelete ? 'bg-red-100 border border-red-300' : ''}`}
                       disabled={isDeleting || isUpdating}
                       title="Удалить"
+                      aria-label={`Удалить активность ${act.title}`}
                     >
-                      {isDeleting ? '…' : pendingDelete ? '✓' : '🗑️'}
+                      {isDeleting ? (
+                        <span className="animate-pulse">…</span>
+                      ) : pendingDelete ? (
+                        <Check className="w-4 h-4" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 </>
