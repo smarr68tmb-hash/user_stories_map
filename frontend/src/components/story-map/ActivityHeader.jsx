@@ -58,7 +58,7 @@ function ActivityHeader({
           return (
             <div
               key={act.id}
-              className="bg-blue-100 border-r border-gray-200 p-3 text-center font-bold text-blue-800 flex items-center justify-center group relative"
+              className="bg-blue-100 border-r border-gray-200 p-3 text-center font-bold text-blue-900 flex items-center justify-center group relative transition-colors duration-200 hover:bg-blue-200"
               style={{ width: activityWidth, minWidth: taskColumnWidth }}
             >
               {isEditing ? (
@@ -90,10 +90,10 @@ function ActivityHeader({
                   >
                     {act.title}
                   </span>
-                  <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex">
+                  <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex">
                     <button
                       onClick={() => onStartEditingActivity(act)}
-                      className="min-w-[40px] min-h-[40px] flex items-center justify-center text-blue-600 hover:text-blue-800 hover:bg-blue-200 rounded disabled:opacity-50"
+                      className="min-w-[40px] min-h-[40px] flex items-center justify-center text-blue-700 hover:text-blue-900 hover:bg-blue-200 rounded disabled:opacity-50 transition-colors duration-150"
                       disabled={isDeleting || isUpdating}
                       title="Редактировать"
                       aria-label={`Редактировать активность ${act.title}`}
@@ -102,7 +102,7 @@ function ActivityHeader({
                     </button>
                     <button
                       onClick={() => onDeleteActivity(act.id)}
-                      className={`min-w-[40px] min-h-[40px] flex items-center justify-center text-red-600 hover:text-red-800 hover:bg-red-200 rounded ${pendingDelete ? 'bg-red-100 border border-red-300' : ''}`}
+                      className={`min-w-[40px] min-h-[40px] flex items-center justify-center text-red-700 hover:text-red-900 hover:bg-red-200 rounded transition-all duration-150 ${pendingDelete ? 'bg-red-100 border border-red-300' : ''}`}
                       disabled={isDeleting || isUpdating}
                       title="Удалить"
                       aria-label={`Удалить активность ${act.title}`}

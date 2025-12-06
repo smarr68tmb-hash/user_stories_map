@@ -30,19 +30,19 @@ function StoryCard({
   const style = {
     ...containerStyle,
     transform: CSS.Transform.toString(transform),
-    transition: transition || 'transform 200ms ease',
+    transition: transition || 'transform 250ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 200ms ease',
     opacity: dragDisabled ? 0.5 : 1,
     zIndex: isDragging ? 1000 : 'auto',
-    boxShadow: isDragging ? '0 12px 28px rgba(0,0,0,0.2), 0 4px 10px rgba(0,0,0,0.1)' : undefined,
+    boxShadow: isDragging ? '0 20px 40px rgba(0,0,0,0.25), 0 8px 16px rgba(0,0,0,0.15)' : undefined,
     cursor: isDragging ? 'grabbing' : undefined,
-    scale: isDragging ? '1.02' : undefined,
+    scale: isDragging ? '1.05' : undefined,
   };
 
-  // Цвет приоритета
+  // Цвет приоритета (WCAG AA compliant - минимум 4.5:1 контраст)
   const priorityColors = {
-    'MVP': 'bg-red-100 text-red-700 border-red-200',
-    'Release 1': 'bg-orange-100 text-orange-700 border-orange-200',
-    'Later': 'bg-gray-100 text-gray-600 border-gray-200',
+    'MVP': 'bg-red-100 text-red-800 border-red-300',
+    'Release 1': 'bg-orange-100 text-orange-800 border-orange-300',
+    'Later': 'bg-gray-100 text-gray-700 border-gray-300',
   };
 
   // Цвета статуса для левой полоски
@@ -78,12 +78,12 @@ function StoryCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative p-3 rounded-lg shadow-sm hover:shadow-md transition-all text-sm border group cursor-pointer overflow-hidden ${
-        currentStatus === 'done' 
-          ? 'bg-green-50 border-green-200' 
+      className={`relative p-3 rounded-lg shadow-sm hover:shadow-lg transition-all duration-200 text-sm border group cursor-pointer overflow-hidden ${
+        currentStatus === 'done'
+          ? 'bg-green-50 border-green-200 hover:border-green-300'
           : currentStatus === 'in_progress'
-          ? 'bg-blue-50 border-blue-200'
-          : 'bg-yellow-100 border-yellow-300'
+          ? 'bg-blue-50 border-blue-200 hover:border-blue-300'
+          : 'bg-yellow-100 border-yellow-300 hover:border-yellow-400'
       }`}
       onClick={onEdit}
     >
@@ -126,7 +126,7 @@ function StoryCard({
 
       {/* Description */}
       {story.description && (
-        <div className={`text-xs line-clamp-2 mb-2 ml-7 ${currentStatus === 'done' ? 'text-gray-400' : 'text-gray-600'}`}>
+        <div className={`text-xs line-clamp-2 mb-2 ml-7 ${currentStatus === 'done' ? 'text-gray-500' : 'text-gray-700'}`}>
           {story.description}
         </div>
       )}
@@ -139,7 +139,7 @@ function StoryCard({
           </span>
         )}
         {story.acceptance_criteria && story.acceptance_criteria.length > 0 && (
-          <span className="text-[10px] text-gray-500 bg-white/60 px-1.5 py-0.5 rounded">
+          <span className="text-[10px] text-gray-700 bg-white/80 px-1.5 py-0.5 rounded border border-gray-200">
             {story.acceptance_criteria.length} КП
           </span>
         )}
