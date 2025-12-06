@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api, { auth, enhancement, projects } from './api';
 import StoryMap from './StoryMap.jsx';
 import Auth from './Auth.jsx';
@@ -108,13 +108,13 @@ function AppContent() {
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await auth.logout();
     setUser(null);
     setProject(null);
     setInput('');
     setView('list');
-  };
+  }, []);
 
   // Stage 1: Улучшение требований
   const handleEnhanceRequirements = async () => {
