@@ -17,11 +17,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-const redirectToLogin = () => {
-  // Логика выхода и очистки состояния на фронте вынесена в App.jsx
-  window.location.href = '/';
-};
-
 let isRefreshing = false;
 let refreshSubscribers = [];
 
@@ -71,7 +66,8 @@ api.interceptors.response.use(
         } catch (logoutError) {
           console.error("Logout after refresh failure error:", logoutError);
         }
-        redirectToLogin();
+        // Не делаем redirect, чтобы избежать бесконечных перезагрузок.
+        // Компоненты-вызывающие обработают 401 и покажут экран логина.
         return Promise.reject(refreshError);
       }
     }
