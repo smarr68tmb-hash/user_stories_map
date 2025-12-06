@@ -1,68 +1,26 @@
 import { useMemo, useState } from 'react';
-import AIAssistant from './AIAssistant';
-import EditStoryModal from './EditStoryModal';
-import AnalysisPanel from './AnalysisPanel';
-import TaskColumn from './components/story-map/TaskColumn';
-import StoryCard from './components/story-map/StoryCard';
-import { ToastProvider, useToast } from './hooks/useToast';
-import useProjectRefresh from './hooks/useProjectRefresh';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import ActivityHeader from './components/story-map/ActivityHeader';
+import ReleaseRow from './components/story-map/ReleaseRow';
+import StoryMapModals from './components/story-map/StoryMapModals';
 import useActivities from './hooks/useActivities';
 import useTasks from './hooks/useTasks';
 import useStories from './hooks/useStories';
 import useDnD from './hooks/useDnD';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  horizontalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { useDroppable } from '@dnd-kit/core';
+import { useToast } from './hooks/useToast';
+import { useProjectRefreshContext } from './context/ProjectRefreshContext';
 
-// Функция для обработки ошибок (упрощенная, так как api.js уже обрабатывает 401)
-const handleApiError = (error, onUnauthorized) => {
-  // api.js уже обработал 401 и попытался обновить токен
-  // Если мы здесь, значит токен не удалось обновить или другая ошибка
-  if (error.response?.status === 401) {
-    if (onUnauthorized) {
-      onUnauthorized();
-    }
-    return 'Сессия истекла. Пожалуйста, войдите снова.';
-  }
-
-  if (error.response?.data?.detail) {
-    return error.response.data.detail;
-  }
-
-  if (error.response) {
-    return `Ошибка сервера: ${error.response.status}`;
-  }
-
-  if (error.request) {
-    return 'Не удалось подключиться к серверу';
-  }
-
-  return 'Произошла неизвестная ошибка';
-};
-
-function StoryMapWithProviders(props) {
-  return (
-    <ToastProvider>
-      <StoryMapInner {...props} />
-    </ToastProvider>
-  );
-}
-
-function StoryMapInner({ project, onUpdate, onUnauthorized }) {
+function StoryMap({ project, onUpdate, onUnauthorized }) {
   const toast = useToast();
-  const { refreshProject, isRefreshing } = useProjectRefresh(project.id, onUpdate, { onUnauthorized, toast });
+  const { refreshProject, isRefreshing } = useProjectRefreshContext();
   const {
     createActivity,
     updateActivity,
@@ -77,7 +35,6 @@ function StoryMapInner({ project, onUpdate, onUnauthorized }) {
     taskLoading,
     taskDrafts,
     updateTaskDraft,
-    resetTaskDraft,
     addingTaskActivityId,
     startAddingTask,
     stopAddingTask,
@@ -95,15 +52,13 @@ function StoryMapInner({ project, onUpdate, onUnauthorized }) {
     storyDrafts,
     updateDraft,
   } = useStories({ project, onUpdate, refreshProject, onUnauthorized, toast });
-  const { isTaskDragDisabled, isStoryDragDisabled } = useDnD({ storyLoading, taskLoading });
+
   const [editingStory, setEditingStory] = useState(null);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [aiAssistantStory, setAiAssistantStory] = useState(null);
   const [aiAssistantTaskId, setAiAssistantTaskId] = useState(null);
   const [aiAssistantReleaseId, setAiAssistantReleaseId] = useState(null);
   const [analysisPanelOpen, setAnalysisPanelOpen] = useState(false);
-  
-  // States for Activities and Tasks editing
   const [editingActivityId, setEditingActivityId] = useState(null);
   const [editingActivityTitle, setEditingActivityTitle] = useState('');
   const [addingActivity, setAddingActivity] = useState(false);
@@ -113,20 +68,38 @@ function StoryMapInner({ project, onUpdate, onUnauthorized }) {
   const [pendingDeleteActivityId, setPendingDeleteActivityId] = useState(null);
   const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState(null);
 
+  const { isTaskDragDisabled, isTaskHandleDisabled, isStoryDragDisabled, isStoryHandleDisabled } = useDnD({
+    storyLoading,
+    taskLoading,
+    editingStoryId: editingStory?.id || null,
+    editingTaskId,
+    pendingDeleteTaskId,
+  });
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 3, // Минимальное расстояние для активации (уменьшено для быстрого отклика)
+        distance: 3,
       },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
-  const allTasks = useMemo(() => project.activities.flatMap(act => 
-    act.tasks.map(task => ({ ...task, activityTitle: act.title }))
-  ), [project.activities]);
+  const allTasks = useMemo(
+    () =>
+      project.activities.flatMap((act) =>
+        act.tasks.map((task) => ({ ...task, activityTitle: act.title })),
+      ),
+    [project.activities],
+  );
+
+  const findStory = (taskId, releaseId, storyId) => {
+    const task = allTasks.find((t) => t.id === taskId);
+    if (!task) return null;
+    return task.stories.find((s) => s.id === storyId && s.release_id === releaseId);
+  };
 
   const handleDragEnd = async (event) => {
     const { active, over } = event;
@@ -136,28 +109,22 @@ function StoryMapInner({ project, onUpdate, onUnauthorized }) {
     const activeId = String(active.id);
     const overId = String(over.id);
 
-    // Проверяем, является ли это перетаскиванием Task (шага)
     if (activeId.startsWith('task-')) {
       const taskId = Number(activeId.replace('task-', ''));
       if (isTaskDragDisabled(taskId)) return;
-      const activity = project.activities.find(a => a.tasks.some(t => t.id === taskId));
-      
+      const activity = project.activities.find((a) => a.tasks.some((t) => t.id === taskId));
       if (!activity) return;
 
-      // Если бросаем на другую задачу в той же активности
       if (overId.startsWith('task-')) {
         const targetTaskId = Number(overId.replace('task-', ''));
-        const targetTask = activity.tasks.find(t => t.id === targetTaskId);
+        const targetTask = activity.tasks.find((t) => t.id === targetTaskId);
         
         if (targetTask && targetTask.id !== taskId) {
           await moveTask(activity.id, taskId, targetTask.position);
         }
-      }
-      // Если бросаем на droppable зону активности
-      else if (overId.startsWith('activity-tasks-')) {
+      } else if (overId.startsWith('activity-tasks-')) {
         const activityId = Number(overId.replace('activity-tasks-', ''));
         if (activityId === activity.id) {
-          // Перемещаем в конец списка
           const endPosition = Math.max(activity.tasks.length - 1, 0);
           await moveTask(activity.id, taskId, endPosition);
         }
@@ -165,24 +132,18 @@ function StoryMapInner({ project, onUpdate, onUnauthorized }) {
       return;
     }
 
-    // Оригинальная логика для Story (карточек)
-    // Парсим ID активного элемента (карточки): storyId-taskId-releaseId
     const activeParts = activeId.split('-');
     const storyId = Number(activeParts[0]);
     if (isStoryDragDisabled(storyId)) return;
 
-    // Если бросаем на ячейку (cell-taskId-releaseId)
     if (overId.startsWith('cell-')) {
       const cellParts = overId.replace('cell-', '').split('-');
       const targetTaskId = Number(cellParts[0]);
       const targetReleaseId = Number(cellParts[1]);
-      
-      // Перемещаем в эту ячейку
       await moveStory(storyId, targetTaskId, targetReleaseId, 0);
       return;
     }
 
-    // Если бросаем на другую карточку
     const overParts = overId.split('-');
     if (overParts.length === 3) {
       const targetStoryId = Number(overParts[0]);
@@ -198,12 +159,6 @@ function StoryMapInner({ project, onUpdate, onUnauthorized }) {
     }
   };
 
-  const findStory = (taskId, releaseId, storyId) => {
-    const task = allTasks.find(t => t.id === taskId);
-    if (!task) return null;
-    return task.stories.find(s => s.id === storyId && s.release_id === releaseId);
-  };
-
   const handleAddStory = async (taskId, releaseId) => {
     const cellId = `cell-${taskId}-${releaseId}`;
     await addStory(taskId, releaseId, cellId);
@@ -211,14 +166,12 @@ function StoryMapInner({ project, onUpdate, onUnauthorized }) {
 
   const handleUpdateStory = async (updates) => {
     if (!editingStory) return;
-
     await updateStory(editingStory.id, updates);
     setEditingStory(null);
   };
 
   const handleDeleteStory = async () => {
     if (!editingStory) return;
-
     await deleteStory(editingStory.id);
     setEditingStory(null);
   };
@@ -242,7 +195,6 @@ function StoryMapInner({ project, onUpdate, onUnauthorized }) {
   };
 
   const handleStoryImproved = async () => {
-    // Обновляем проект после улучшения истории
     await refreshProject({ silent: false });
   };
 
@@ -250,24 +202,21 @@ function StoryMapInner({ project, onUpdate, onUnauthorized }) {
     await changeStatus(storyId, newStatus);
   };
 
-  // Подсчет прогресса по релизу
   const calculateReleaseProgress = (releaseId) => {
     let total = 0;
     let done = 0;
     
-    allTasks.forEach(task => {
-      task.stories.forEach(story => {
+    allTasks.forEach((task) => {
+      task.stories.forEach((story) => {
         if (story.release_id === releaseId) {
-          total++;
-          if (story.status === 'done') done++;
+          total += 1;
+          if (story.status === 'done') done += 1;
         }
       });
     });
     
     return { total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 };
   };
-
-  // ========== ACTIVITY HANDLERS ==========
   
   const handleAddActivity = async () => {
     if (!newActivityTitle.trim()) {
@@ -309,11 +258,14 @@ function StoryMapInner({ project, onUpdate, onUnauthorized }) {
   };
 
   const startEditingActivity = (activity) => {
+    if (!activity) {
+      setEditingActivityId(null);
+      setEditingActivityTitle('');
+      return;
+    }
     setEditingActivityId(activity.id);
     setEditingActivityTitle(activity.title);
   };
-
-  // ========== TASK HANDLERS ==========
   
   const handleAddTask = async (activityId) => {
     await createTask(activityId);
@@ -344,12 +296,7 @@ function StoryMapInner({ project, onUpdate, onUnauthorized }) {
   };
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragEnd={handleDragEnd}
-    >
-      {/* Analysis Button - Floating */}
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <div className="mb-4 flex justify-end">
         <button
           onClick={() => setAnalysisPanelOpen(true)}
@@ -368,438 +315,88 @@ function StoryMapInner({ project, onUpdate, onUnauthorized }) {
 
       <div className="w-full overflow-x-auto">
         <div className="inline-block min-w-full bg-white rounded-lg shadow-sm border border-gray-200">
-          {/* BACKBONE */}
-          <div className="sticky top-0 z-10 bg-gray-50 border-b-2 border-gray-300">
-          <div className="flex border-b border-gray-200">
-            <div className="w-32 flex-shrink-0 bg-gray-100 border-r-2 border-gray-300 p-2 flex items-center justify-center">
-              <span className="text-xs font-bold text-gray-600 uppercase">Releases</span>
-            </div>
-            {project.activities.map(act => {
-              const taskCount = act.tasks.length;
-              // Учитываем кнопку "+ Task" при расчете ширины Activity
-              const activityWidth = (taskCount + 1) * 220; // +1 для кнопки "+ Task"
-              const isEditing = editingActivityId === act.id;
-              const isDeleting = activityLoading.isDeleting(act.id);
-              const isUpdating = activityLoading.isUpdating(act.id);
-              const pendingDelete = pendingDeleteActivityId === act.id;
-              return (
-                <div 
-                  key={act.id} 
-                  className="bg-blue-100 border-r border-gray-200 p-3 text-center font-bold text-blue-800 flex items-center justify-center group relative"
-                  style={{ width: `${activityWidth}px`, minWidth: '220px' }}
-                >
-                  {isEditing ? (
-                    <div className="flex items-center gap-2 w-full">
-                      <input
-                        type="text"
-                        value={editingActivityTitle}
-                        onChange={(e) => setEditingActivityTitle(e.target.value)}
-                        onBlur={() => handleUpdateActivity(act.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleUpdateActivity(act.id);
-                          } else if (e.key === 'Escape') {
-                            setEditingActivityId(null);
-                            setEditingActivityTitle('');
-                          }
-                        }}
-                        className="flex-1 px-2 py-1 text-sm border rounded bg-white text-gray-800"
-                        autoFocus
-                        disabled={isUpdating}
-                      />
-                    </div>
-                  ) : (
-                    <>
-                      <span 
-                        className="text-sm cursor-pointer hover:underline"
-                        onDoubleClick={() => startEditingActivity(act)}
-                        title="Двойной клик для редактирования"
-                      >
-                        {act.title}
-                      </span>
-                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                        <button
-                          onClick={() => startEditingActivity(act)}
-                          className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-200 rounded disabled:opacity-50"
-                          disabled={isDeleting || isUpdating}
-                          title="Редактировать"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDeleteActivity(act.id)}
-                          className={`p-1 text-red-600 hover:text-red-800 hover:bg-red-200 rounded ${pendingDelete ? 'bg-red-100 border border-red-300' : ''}`}
-                          disabled={isDeleting || isUpdating}
-                          title="Удалить"
-                        >
-                          {isDeleting ? '…' : pendingDelete ? 'Подтвердить' : '🗑️'}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-            {/* Кнопка добавления Activity */}
-            <div className="flex-shrink-0 border-r border-gray-200">
-              {addingActivity ? (
-                <div className="p-3 bg-green-50 border border-green-300">
-                  <input
-                    type="text"
-                    placeholder="Название активности"
-                    value={newActivityTitle}
-                    onChange={(e) => setNewActivityTitle(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleAddActivity();
-                      } else if (e.key === 'Escape') {
-                        setAddingActivity(false);
-                        setNewActivityTitle('');
-                      }
-                    }}
-                    className="w-full px-2 py-1 text-sm border rounded"
-                    autoFocus
-                  />
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      onClick={handleAddActivity}
-                      disabled={activityLoading.isCreating}
-                      className={`flex-1 bg-green-600 text-white text-xs py-1 px-2 rounded hover:bg-green-700 ${activityLoading.isCreating ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    >
-                      {activityLoading.isCreating ? 'Добавление...' : 'Добавить'}
-                    </button>
-                    <button
-                      onClick={() => {
+          <ActivityHeader
+            activities={project.activities}
+            editingActivityId={editingActivityId}
+            editingActivityTitle={editingActivityTitle}
+            setEditingActivityTitle={setEditingActivityTitle}
+            onUpdateActivity={handleUpdateActivity}
+            onStartEditingActivity={startEditingActivity}
+            onDeleteActivity={handleDeleteActivity}
+            activityLoading={activityLoading}
+            pendingDeleteActivityId={pendingDeleteActivityId}
+            addingActivity={addingActivity}
+            onStartAddActivity={() => setAddingActivity(true)}
+            onCancelAddActivity={() => {
                         setAddingActivity(false);
                         setNewActivityTitle('');
                       }}
-                      className="flex-1 bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded hover:bg-gray-400"
-                    >
-                      Отмена
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setAddingActivity(true)}
-                  className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 border-2 border-dashed border-gray-300 rounded transition"
-                  title="Добавить активность"
-                >
-                  + Activity
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="flex">
-            <div className="w-32 flex-shrink-0 bg-gray-100 border-r-2 border-gray-300"></div>
-            {project.activities.map(act => {
-              // Ширина контейнера Tasks должна совпадать с шириной Activity
-              const taskCount = act.tasks.length;
-              const activityWidth = (taskCount + 1) * 220; // +1 для кнопки "+ Task"
-              return (
-                <SortableContext
-                  key={`activity-tasks-${act.id}`}
-                  items={act.tasks.map(t => `task-${t.id}`)}
-                  strategy={horizontalListSortingStrategy}
-                >
-                  <DroppableTaskZone
-                    activityId={act.id}
-                    className="flex"
-                    style={{ width: `${activityWidth}px`, flexShrink: 0 }}
-                    id={`activity-tasks-${act.id}`}
-                  >
-                    {act.tasks.map(task => {
-                      const isEditing = editingTaskId === task.id;
-                      return (
-                        <TaskColumn
-                          key={task.id}
-                          task={task}
-                          isEditing={isEditing}
+            newActivityTitle={newActivityTitle}
+            setNewActivityTitle={setNewActivityTitle}
+            onAddActivity={handleAddActivity}
+            onAddTask={handleAddTask}
+            taskLoading={taskLoading}
+            editingTaskId={editingTaskId}
                           editingTaskTitle={editingTaskTitle}
                           setEditingTaskTitle={setEditingTaskTitle}
                           onUpdateTask={handleUpdateTask}
-                          onStartEditing={startEditingTask}
-                          onDelete={handleDeleteTask}
+            onStartEditingTask={startEditingTask}
+            onDeleteTask={handleDeleteTask}
                           setEditingTaskId={setEditingTaskId}
-                          isMoving={isTaskDragDisabled(task.id)}
-                          isUpdating={taskLoading.isUpdating(task.id)}
-                          isDeleting={taskLoading.isDeleting(task.id)}
-                          pendingDelete={pendingDeleteTaskId === task.id}
-                        />
-                      );
-                    })}
-                    {/* Кнопка добавления Task для каждой Activity */}
-                    <div className="flex-shrink-0 border-r border-gray-200 w-[220px]">
-                      {addingTaskActivityId === act.id ? (
-                        <div className="p-3 bg-green-50 border border-green-300 min-h-[60px]">
-                          <input
-                            type="text"
-                            placeholder="Название задачи"
-                            value={taskDrafts[act.id]?.title || ''}
-                            onChange={(e) => updateTaskDraft(act.id, { title: e.target.value, error: null })}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleAddTask(act.id);
-                              } else if (e.key === 'Escape') {
-                                stopAddingTask();
-                              }
-                            }}
-                            className="w-full px-2 py-1 text-xs border rounded"
-                            autoFocus
-                          />
-                          {taskDrafts[act.id]?.error && (
-                            <p className="text-[11px] text-red-600 mt-1">{taskDrafts[act.id]?.error}</p>
-                          )}
-                          <div className="flex gap-2 mt-2">
-                            <button
-                              onClick={() => handleAddTask(act.id)}
-                              disabled={taskLoading.isCreating(act.id)}
-                              className={`flex-1 bg-green-600 text-white text-xs py-1 px-2 rounded hover:bg-green-700 ${taskLoading.isCreating(act.id) ? 'opacity-60 cursor-not-allowed' : ''}`}
-                            >
-                              {taskLoading.isCreating(act.id) ? 'Добавление...' : 'Добавить'}
-                            </button>
-                            <button
-                              onClick={stopAddingTask}
-                              className="flex-1 bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded hover:bg-gray-400"
-                            >
-                              Отмена
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => startAddingTask(act.id)}
-                          className="w-full h-[60px] text-gray-400 hover:text-gray-600 hover:bg-gray-100 border-2 border-dashed border-gray-300 rounded transition text-xs flex items-center justify-center"
-                          title="Добавить задачу"
-                        >
-                          + Task
-                        </button>
-                      )}
-                    </div>
-                  </DroppableTaskZone>
-                </SortableContext>
-              );
-            })}
-          </div>
-        </div>
+            pendingDeleteTaskId={pendingDeleteTaskId}
+            addingTaskActivityId={addingTaskActivityId}
+            taskDrafts={taskDrafts}
+            updateTaskDraft={updateTaskDraft}
+            startAddingTask={startAddingTask}
+            stopAddingTask={stopAddingTask}
+            isTaskHandleDisabled={isTaskHandleDisabled}
+            isTaskDragDisabled={isTaskDragDisabled}
+          />
 
-        {/* BODY */}
         <div>
-          {project.releases.map(release => {
-            const progress = calculateReleaseProgress(release.id);
-            return (
-            <div key={release.id} className="flex border-b border-gray-200 min-h-[180px] hover:bg-gray-50 transition">
-              <div className="w-32 flex-shrink-0 bg-gray-100 p-3 font-bold flex flex-col items-center justify-center text-gray-700 border-r-2 border-gray-300 gap-2">
-                <span className="text-sm text-center">{release.title}</span>
-                {/* Progress bar */}
-                {progress.total > 0 && (
-                  <div className="w-full px-1">
-                    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          progress.percent === 100 ? 'bg-green-500' : 'bg-blue-500'
-                        }`}
-                        style={{ width: `${progress.percent}%` }}
-                      />
-                    </div>
-                    <div className="text-[10px] text-gray-500 text-center mt-1">
-                      {progress.done}/{progress.total}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {project.activities.map(act => {
-                const taskCount = act.tasks.length;
-                const activityWidth = (taskCount + 1) * 220; // +1 для кнопки "+ Task"
-                return (
-                  <div 
-                    key={`activity-body-${act.id}`}
-                    className="flex"
-                    style={{ width: `${activityWidth}px`, flexShrink: 0 }}
-                  >
-                    {act.tasks.map(task => {
-                      const storiesInCell = task.stories.filter(s => s.release_id === release.id);
-                      const cellId = `cell-${task.id}-${release.id}`;
-                      const isAdding = addingToCell === cellId;
-                      const draft = storyDrafts[cellId] || { title: '', description: '', priority: 'MVP', error: null };
-
-                      return (
-                        <DroppableCell
-                          key={`${task.id}-${release.id}`}
-                          cellId={cellId}
-                          taskId={task.id}
-                          releaseId={release.id}
-                        >
-                          <SortableContext 
-                            items={storiesInCell.map(s => `${s.id}-${task.id}-${release.id}`)}
-                            strategy={verticalListSortingStrategy}
-                          >
-                            <div className="flex flex-col gap-2 min-h-[150px]">
-                              {storiesInCell.map(story => (
-                                <StoryCard
-                                  key={story.id}
-                                  story={story}
-                                  taskId={task.id}
-                                  releaseId={release.id}
-                                  onEdit={() => handleOpenEditModal(story)}
-                                  onOpenAI={() => handleOpenAIAssistant(story, task.id, release.id)}
+            {project.releases.map((release) => (
+              <ReleaseRow
+                key={release.id}
+                release={release}
+                activities={project.activities}
+                addingToCell={addingToCell}
+                storyDrafts={storyDrafts}
+                openAddForm={openAddForm}
+                closeAddForm={closeAddForm}
+                updateDraft={updateDraft}
+                onAddStory={handleAddStory}
+                storyLoading={storyLoading}
+                onEditStory={handleOpenEditModal}
+                onOpenAI={handleOpenAIAssistant}
                                   onStatusChange={handleStatusChange}
-                                  isMoving={isStoryDragDisabled(story.id)}
-                                  statusLoading={storyLoading.isChangingStatus(story.id)}
+                isStoryHandleDisabled={isStoryHandleDisabled}
+                isStoryDragDisabled={isStoryDragDisabled}
+                progress={calculateReleaseProgress(release.id)}
                                 />
                               ))}
-                              
-                              {isAdding ? (
-                                <div className="bg-green-50 p-3 rounded border border-green-300">
-                                  <input
-                                    type="text"
-                                    placeholder="Название истории"
-                                    value={draft.title}
-                                    onChange={(e) => updateDraft(cellId, { title: e.target.value, error: null })}
-                                    className="w-full mb-2 p-2 text-sm border rounded"
-                                    autoFocus
-                                  />
-                                  <textarea
-                                    placeholder="Описание (опционально)"
-                                    value={draft.description}
-                                    onChange={(e) => updateDraft(cellId, { description: e.target.value })}
-                                    className="w-full mb-2 p-2 text-xs border rounded resize-none"
-                                    rows="2"
-                                  />
-                                  <select
-                                    value={draft.priority}
-                                    onChange={(e) => updateDraft(cellId, { priority: e.target.value })}
-                                    className="w-full mb-2 p-1 text-xs border rounded"
-                                  >
-                                    <option value="MVP">MVP</option>
-                                    <option value="Release 1">Release 1</option>
-                                    <option value="Later">Later</option>
-                                  </select>
-                                  {draft.error && (
-                                    <p className="text-[11px] text-red-600 mb-2">{draft.error}</p>
-                                  )}
-                                  <div className="flex gap-2">
-                                    <button
-                                      onClick={() => handleAddStory(task.id, release.id)}
-                                      disabled={storyLoading.isAdding(cellId)}
-                                      className={`flex-1 bg-green-600 text-white text-xs py-1 px-2 rounded hover:bg-green-700 ${storyLoading.isAdding(cellId) ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                    >
-                                      {storyLoading.isAdding(cellId) ? 'Добавление...' : 'Добавить'}
-                                    </button>
-                                    <button
-                                      onClick={() => closeAddForm(cellId)}
-                                      className="flex-1 bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded hover:bg-gray-400"
-                                    >
-                                      Отмена
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => openAddForm(cellId)}
-                                  className="text-xs text-gray-400 hover:text-gray-600 py-2 border-2 border-dashed border-gray-300 rounded hover:border-gray-400 transition disabled:opacity-60"
-                                  disabled={storyLoading.isAdding(cellId)}
-                                >
-                                  + Добавить карточку
-                                </button>
-                              )}
-                            </div>
-                          </SortableContext>
-                        </DroppableCell>
-                      );
-                    })}
-                    {/* Пустая ячейка для выравнивания с кнопкой "+ Task" */}
-                    <div className="w-[220px] flex-shrink-0 border-r border-gray-200"></div>
-                  </div>
-                );
-              })}
-            </div>
-          );
-          })}
         </div>
         </div>
       </div>
 
-      {/* Edit Story Modal */}
-      <EditStoryModal
-        story={editingStory}
+      <StoryMapModals
+        editingStory={editingStory}
         releases={project.releases}
-        isOpen={!!editingStory}
-        onClose={() => setEditingStory(null)}
-        onSave={handleUpdateStory}
-        onDelete={handleDeleteStory}
-      />
-
-      {/* AI Assistant Modal */}
-      {aiAssistantOpen && aiAssistantStory && (
-        <AIAssistant
-          story={aiAssistantStory}
-          taskId={aiAssistantTaskId}
-          releaseId={aiAssistantReleaseId}
-          isOpen={aiAssistantOpen}
-          onClose={handleCloseAIAssistant}
+        onCloseEdit={() => setEditingStory(null)}
+        onSaveStory={handleUpdateStory}
+        onDeleteStory={handleDeleteStory}
+        aiAssistantOpen={aiAssistantOpen}
+        aiAssistantStory={aiAssistantStory}
+        aiAssistantTaskId={aiAssistantTaskId}
+        aiAssistantReleaseId={aiAssistantReleaseId}
+        onCloseAI={handleCloseAIAssistant}
           onStoryImproved={handleStoryImproved}
-        />
-      )}
-
-      {/* Analysis Panel Modal */}
-      <AnalysisPanel
+        analysisPanelOpen={analysisPanelOpen}
+        onCloseAnalysis={() => setAnalysisPanelOpen(false)}
         projectId={project.id}
-        isOpen={analysisPanelOpen}
-        onClose={() => setAnalysisPanelOpen(false)}
       />
     </DndContext>
   );
 }
 
-// Компонент для droppable зоны задач активности
-function DroppableTaskZone({ activityId, children, className = '', style, id }) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: `activity-tasks-${activityId}`,
-    data: {
-      type: 'activity-tasks',
-      activityId,
-    },
-  });
-
-  const zoneClassName = `${className} ${isOver ? 'bg-blue-50' : ''}`.trim();
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={zoneClassName}
-      style={style}
-      id={id}
-    >
-      {children}
-    </div>
-  );
-}
-
-// Компонент для droppable ячейки
-function DroppableCell({ cellId, taskId, releaseId, children }) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: cellId,
-    data: {
-      type: 'cell',
-      taskId,
-      releaseId,
-    },
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={`w-[220px] flex-shrink-0 p-2 border-r border-dashed border-gray-300 transition-colors ${
-        isOver ? 'bg-blue-50 border-blue-400' : 'bg-white'
-      }`}
-    >
-      {children}
-    </div>
-  );
-}
-
-export default StoryMapWithProviders;
+export default StoryMap;
 

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import api from './api';
+import useFocusTrap from './hooks/useFocusTrap';
 
 function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImproved }) {
   const [prompt, setPrompt] = useState('');
@@ -8,6 +9,8 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [improvementHistory, setImprovementHistory] = useState([]);
+  const modalRef = useRef(null);
+  useFocusTrap(modalRef, isOpen);
 
   const quickActions = [
     {
@@ -113,8 +116,16 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        ref={modalRef}
+        className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        tabIndex={-1}
+      >
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-blue-600 text-white p-6 rounded-t-lg">
           <div className="flex justify-between items-start">

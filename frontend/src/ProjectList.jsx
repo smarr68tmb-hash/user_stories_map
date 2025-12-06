@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api, { projects as projectsApi } from './api';
+import { useToast } from './hooks/useToast';
 
 function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
   const [projects, setProjects] = useState([]);
@@ -11,6 +12,7 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
   const [deleting, setDeleting] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [rememberCredentials, setRememberCredentials] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     loadProjects();
@@ -52,13 +54,13 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
     } catch (err) {
       console.error('Error loading project:', err);
       if (err.response?.status === 401) {
-        alert('Сессия истекла. Пожалуйста, войдите снова.');
+        toast.error('Сессия истекла. Пожалуйста, войдите снова.');
         onLogout();
       } else if (err.response?.status === 404) {
-        alert('Проект не найден');
+        toast.warning('Проект не найден');
         loadProjects(); // Обновляем список
       } else {
-        alert('Не удалось загрузить проект');
+        toast.error('Не удалось загрузить проект');
       }
     }
   };
@@ -126,14 +128,14 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
     } catch (err) {
       console.error('Error deleting project:', err);
       if (err.response?.status === 401) {
-        alert('Сессия истекла. Пожалуйста, войдите снова.');
+        toast.error('Сессия истекла. Пожалуйста, войдите снова.');
         onLogout();
       } else if (err.response?.status === 404) {
-        alert('Проект не найден');
+        toast.warning('Проект не найден');
         // Обновляем список, так как проект уже может быть удален
         loadProjects();
       } else {
-        alert('Не удалось удалить проект');
+        toast.error('Не удалось удалить проект');
       }
     } finally {
       setDeleting(false);

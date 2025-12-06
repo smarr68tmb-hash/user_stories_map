@@ -162,6 +162,9 @@ export const tasks = {
 };
 
 export const projects = {
+  get: (projectId) =>
+    api.get(`/project/${projectId}`),
+
   update: (projectId, name) => 
     api.put(`/project/${projectId}`, { name }),
   

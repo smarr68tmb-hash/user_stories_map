@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import ConfirmDialog from './components/common/ConfirmDialog';
+import useFocusTrap from './hooks/useFocusTrap';
 
 function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) {
   const [editTitle, setEditTitle] = useState('');
@@ -7,6 +9,9 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
   const [editStatus, setEditStatus] = useState('todo');
   const [editAC, setEditAC] = useState('');
   const [saving, setSaving] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const modalRef = useRef(null);
+  useFocusTrap(modalRef, isOpen);
 
   // Синхронизация с story при открытии
   useEffect(() => {
@@ -44,11 +49,14 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
   };
 
   const handleDelete = async () => {
-    if (!confirm('Удалить эту карточку? Это действие нельзя отменить.')) return;
-    
+    setConfirmDeleteOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
     setSaving(true);
     try {
       await onDelete();
+      setConfirmDeleteOpen(false);
       onClose();
     } catch (error) {
       console.error('Error deleting story:', error);
@@ -91,11 +99,17 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
   return (
     <div 
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      role="dialog"
+      aria-modal="true"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+      <div
+        ref={modalRef}
+        className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden"
+        tabIndex={-1}
+      >
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4">
           <div className="flex justify-between items-center">
@@ -276,6 +290,16 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
         </div>
       </div>
     </div>
+    <ConfirmDialog
+      isOpen={confirmDeleteOpen}
+      title="Удалить эту карточку?"
+      description="Действие нельзя отменить. Карточка будет удалена без возможности восстановления."
+      confirmText="Удалить"
+      cancelText="Отмена"
+      onConfirm={handleConfirmDelete}
+      onCancel={() => setConfirmDeleteOpen(false)}
+      loading={saving}
+    />
   );
 }
 

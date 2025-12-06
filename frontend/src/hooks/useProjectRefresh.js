@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import api from '../api';
+import { projects } from '../api';
 import { handleApiError } from '../utils/handleApiError';
 
 export function useProjectRefresh(projectId, onUpdate, { onUnauthorized, toast } = {}) {
@@ -15,7 +15,7 @@ export function useProjectRefresh(projectId, onUpdate, { onUnauthorized, toast }
     if (!silent) setIsRefreshing(true);
 
     try {
-      const res = await api.get(`/project/${projectId}`);
+      const res = await projects.get(projectId);
       onUpdate(res.data);
       return res.data;
     } catch (error) {

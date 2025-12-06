@@ -10,7 +10,8 @@ function TaskColumn({
   onStartEditing, 
   onDelete,
   setEditingTaskId,
-  isMoving,
+  dragDisabled = false,
+  handleDisabled = false,
   isUpdating,
   isDeleting,
   pendingDelete,
@@ -29,7 +30,7 @@ function TaskColumn({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging || isMoving ? 0.5 : 1,
+    opacity: isDragging || dragDisabled ? 0.5 : 1,
   };
 
   return (
@@ -62,8 +63,9 @@ function TaskColumn({
         <>
           {/* Drag Handle */}
           <div
-            {...(!isMoving ? attributes : {})}
-            {...(!isMoving ? listeners : {})}
+            {...(!handleDisabled ? attributes : {})}
+            {...(!handleDisabled ? listeners : {})}
+            aria-disabled={handleDisabled}
             className="absolute top-2 left-2 cursor-grab active:cursor-grabbing p-1 opacity-40 hover:opacity-100 transition z-10"
             title="Перетащить для изменения порядка"
           >

@@ -3,7 +3,17 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-function StoryCard({ story, taskId, releaseId, onEdit, onOpenAI, onStatusChange, isMoving, statusLoading }) {
+function StoryCard({
+  story,
+  taskId,
+  releaseId,
+  onEdit,
+  onOpenAI,
+  onStatusChange,
+  dragDisabled = false,
+  handleDisabled = false,
+  statusLoading,
+}) {
   const {
     attributes,
     listeners,
@@ -18,7 +28,7 @@ function StoryCard({ story, taskId, releaseId, onEdit, onOpenAI, onStatusChange,
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging || isMoving ? 0.5 : 1,
+    opacity: isDragging || dragDisabled ? 0.5 : 1,
   };
 
   // Цвет приоритета
@@ -75,9 +85,10 @@ function StoryCard({ story, taskId, releaseId, onEdit, onOpenAI, onStatusChange,
 
       {/* Drag Handle */}
       <div
-        {...(!isMoving ? attributes : {})}
-        {...(!isMoving ? listeners : {})}
+        {...(!handleDisabled ? attributes : {})}
+        {...(!handleDisabled ? listeners : {})}
         onClick={(e) => e.stopPropagation()}
+        aria-disabled={handleDisabled}
         className="absolute top-2 right-2 cursor-grab active:cursor-grabbing p-1.5 hover:bg-white/50 rounded-md opacity-40 hover:opacity-100 transition z-10"
         title="Перетащить"
       >
