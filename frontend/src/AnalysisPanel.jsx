@@ -401,7 +401,7 @@ function SimilarityGroup({ group }) {
       </div>
       
       <div className="p-3 space-y-2">
-        {group.stories.map((story, idx) => (
+        {group.stories.map((story) => (
           <div 
             key={story.id}
             className="bg-white rounded px-3 py-2 border border-gray-200 flex justify-between items-center"

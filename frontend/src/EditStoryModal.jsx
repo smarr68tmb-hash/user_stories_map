@@ -205,7 +205,9 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
               {editReleaseId !== story.release_id && (
                 <p className="text-xs text-orange-600 mt-2 flex items-center gap-1">
                   <span>⚠️</span>
-                  <span>Карточка будет перемещена в строку "{currentRelease?.title}"</span>
+                  <span>
+                    Карточка будет перемещена в строку &quot;{currentRelease?.title}&quot;
+                  </span>
                 </p>
               )}
             </div>

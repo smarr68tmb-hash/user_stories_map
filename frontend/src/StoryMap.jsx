@@ -78,9 +78,6 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
     baseReleaseRowProps,
     modalHandlers,
     closeEditModal,
-    onOpenEditModal,
-    onOpenAIAssistant,
-    onStatusChange,
   } = useStoryMapInteractions({
     addStory,
     updateStory,

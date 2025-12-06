@@ -123,7 +123,7 @@ export function useStories({ project, onUpdate, refreshProject, onUnauthorized, 
   }, [onUnauthorized, onUpdate, project, refreshProject, setScopedLoading, toast]);
 
   // Store pending deletes for undo functionality
-  const [pendingDeletes, setPendingDeletes] = useState({});
+  const [, setPendingDeletes] = useState({});
 
   const deleteStory = useCallback(async (storyId) => {
     const prev = project;

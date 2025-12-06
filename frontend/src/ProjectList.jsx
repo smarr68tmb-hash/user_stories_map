@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api, { projects as projectsApi } from './api';
 import { useToast } from './hooks/useToast';
 
@@ -14,16 +14,7 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
   const [rememberCredentials, setRememberCredentials] = useState(false);
   const toast = useToast();
 
-  useEffect(() => {
-    loadProjects();
-  }, []);
-
-  useEffect(() => {
-    const remember = localStorage.getItem('remember_credentials') === 'true';
-    setRememberCredentials(remember);
-  }, []);
-
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -45,7 +36,16 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [onLogout]);
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
+
+  useEffect(() => {
+    const remember = localStorage.getItem('remember_credentials') === 'true';
+    setRememberCredentials(remember);
+  }, []);
 
   const handleProjectClick = async (projectId) => {
     try {
@@ -280,7 +280,7 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
             </svg>
             <h3 className="mt-4 text-lg font-medium text-gray-900">Ничего не найдено</h3>
             <p className="mt-2 text-gray-600">
-              По запросу "{searchQuery}" проекты не найдены
+              По запросу &quot;{searchQuery}&quot; проекты не найдены
             </p>
             <button
               onClick={() => setSearchQuery('')}
@@ -296,7 +296,7 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
           <>
             <div className="mb-4 text-sm text-gray-600">
               Найдено проектов: {sortedProjects.length}
-              {searchQuery && ` по запросу "${searchQuery}"`}
+              {searchQuery && ` по запросу &quot;${searchQuery}&quot;`}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {sortedProjects.map((project) => (
@@ -403,7 +403,7 @@ function ProjectList({ onSelectProject, onCreateNew, onLogout, user }) {
               </div>
               
               <p className="text-gray-600 mb-6">
-                Вы уверены, что хотите удалить проект <strong>"{projectToDelete.name}"</strong>?
+                Вы уверены, что хотите удалить проект <strong>&quot;{projectToDelete.name}&quot;</strong>?
                 Это действие нельзя отменить. Все задачи и история проекта будут удалены.
               </p>
               

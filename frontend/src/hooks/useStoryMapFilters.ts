@@ -1,10 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { STATUS_OPTIONS } from '../theme/tokens';
+import type { Activity, Project, Release, Status, Task } from '../types';
 
-function useStoryMapFilters({ project, taskColumnWidth = 220, activityPaddingColumns = 1 }) {
-  const [statusFilter, setStatusFilter] = useState(STATUS_OPTIONS.map((s) => s.value));
-  const [releaseFilter, setReleaseFilter] = useState(project.releases.map((r) => r.id));
-  const [searchQuery, setSearchQuery] = useState('');
+type UseStoryMapFiltersParams = {
+  project: Project;
+  taskColumnWidth?: number;
+  activityPaddingColumns?: number;
+};
+
+type ReleaseProgress = Record<number, { total: number; done: number; percent: number }>;
+
+type AllTasksWithActivity = Array<Task & { activityTitle: string }>;
+
+function useStoryMapFilters({
+  project,
+  taskColumnWidth = 220,
+  activityPaddingColumns = 1,
+}: UseStoryMapFiltersParams) {
+  const [statusFilter, setStatusFilter] = useState<Status[]>(STATUS_OPTIONS.map((s) => s.value as Status));
+  const [releaseFilter, setReleaseFilter] = useState<number[]>(project.releases.map((r) => r.id));
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const filterStorageKey = useMemo(() => `storymap_filters_${project.id}`, [project.id]);
   const availableReleaseIds = useMemo(
@@ -18,18 +33,18 @@ function useStoryMapFilters({ project, taskColumnWidth = 220, activityPaddingCol
     const releaseParam = params.get('release');
     const searchParam = params.get('q');
 
-    let nextStatuses = STATUS_OPTIONS.map((s) => s.value);
-    let nextReleases = availableReleaseIds;
+    let nextStatuses: Status[] = STATUS_OPTIONS.map((s) => s.value as Status);
+    let nextReleases: number[] = availableReleaseIds;
     let nextSearch = '';
 
     const storedRaw = localStorage.getItem(filterStorageKey);
     if (storedRaw) {
       try {
-        const stored = JSON.parse(storedRaw);
+        const stored = JSON.parse(storedRaw) as { status?: Status[]; releases?: (number | string)[]; search?: string };
         if (Array.isArray(stored.status)) {
           const validStatuses = stored.status.filter((s) => STATUS_OPTIONS.some((opt) => opt.value === s));
           if (validStatuses.length) {
-            nextStatuses = validStatuses;
+            nextStatuses = validStatuses as Status[];
           }
         }
         if (Array.isArray(stored.releases)) {
@@ -49,7 +64,9 @@ function useStoryMapFilters({ project, taskColumnWidth = 220, activityPaddingCol
     }
 
     if (statusParam) {
-      const parsedStatuses = statusParam.split(',').filter((s) => STATUS_OPTIONS.some((opt) => opt.value === s));
+      const parsedStatuses = statusParam
+        .split(',')
+        .filter((s) => STATUS_OPTIONS.some((opt) => opt.value === s)) as Status[];
       if (parsedStatuses.length) {
         nextStatuses = parsedStatuses;
       }
@@ -84,7 +101,7 @@ function useStoryMapFilters({ project, taskColumnWidth = 220, activityPaddingCol
   }, [availableReleaseIds]);
 
   const persistFilters = useCallback(
-    (statuses, releases, search) => {
+    (statuses: Status[], releases: number[], search: string) => {
       const payload = { status: statuses, releases, search };
       localStorage.setItem(filterStorageKey, JSON.stringify(payload));
 
@@ -118,16 +135,16 @@ function useStoryMapFilters({ project, taskColumnWidth = 220, activityPaddingCol
     persistFilters(statusFilter, releaseFilter, searchQuery);
   }, [persistFilters, releaseFilter, searchQuery, statusFilter]);
 
-  const toggleStatus = useCallback((value) => {
+  const toggleStatus = useCallback((value: Status) => {
     setStatusFilter((prev) => {
       const exists = prev.includes(value);
       const next = exists ? prev.filter((s) => s !== value) : [...prev, value];
-      return next.length ? next : STATUS_OPTIONS.map((s) => s.value);
+      return next.length ? next : (STATUS_OPTIONS.map((s) => s.value) as Status[]);
     });
   }, []);
 
   const toggleRelease = useCallback(
-    (id) => {
+    (id: number) => {
       setReleaseFilter((prev) => {
         const exists = prev.includes(id);
         const next = exists ? prev.filter((r) => r !== id) : [...prev, id];
@@ -138,28 +155,28 @@ function useStoryMapFilters({ project, taskColumnWidth = 220, activityPaddingCol
   );
 
   const handleResetFilters = useCallback(() => {
-    setStatusFilter(STATUS_OPTIONS.map((s) => s.value));
+    setStatusFilter(STATUS_OPTIONS.map((s) => s.value as Status));
     setReleaseFilter(availableReleaseIds);
     setSearchQuery('');
   }, [availableReleaseIds]);
 
   const normalizedQuery = useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
 
-  const filteredReleases = useMemo(
+  const filteredReleases = useMemo<Release[]>(
     () => project.releases.filter((release) => releaseFilter.includes(release.id)),
     [project.releases, releaseFilter],
   );
 
-  const filteredActivities = useMemo(
+  const filteredActivities = useMemo<Activity[]>(
     () =>
       project.activities.map((act) => ({
         ...act,
         tasks: act.tasks.map((task) => ({
           ...task,
           stories: task.stories.filter((story) => {
-            const status = story.status || 'todo';
+            const status = (story.status as Status | undefined) ?? 'todo';
             const isStatusAllowed = statusFilter.includes(status);
-            const isReleaseAllowed = releaseFilter.includes(story.release_id);
+            const isReleaseAllowed = releaseFilter.includes(Number(story.release_id));
             const matchesQuery =
               !normalizedQuery ||
               story.title?.toLowerCase().includes(normalizedQuery) ||
@@ -171,7 +188,7 @@ function useStoryMapFilters({ project, taskColumnWidth = 220, activityPaddingCol
     [normalizedQuery, project.activities, releaseFilter, statusFilter],
   );
 
-  const filteredProject = useMemo(
+  const filteredProject = useMemo<Project>(
     () => ({
       ...project,
       activities: filteredActivities,
@@ -180,7 +197,7 @@ function useStoryMapFilters({ project, taskColumnWidth = 220, activityPaddingCol
     [filteredActivities, filteredReleases, project],
   );
 
-  const allTasks = useMemo(
+  const allTasks = useMemo<AllTasksWithActivity>(
     () =>
       filteredProject.activities.flatMap((act) =>
         act.tasks
@@ -191,16 +208,16 @@ function useStoryMapFilters({ project, taskColumnWidth = 220, activityPaddingCol
     [filteredProject.activities],
   );
 
-  const activityWidths = useMemo(() => {
-    const widths = {};
+  const activityWidths = useMemo<Record<string, number>>(() => {
+    const widths: Record<string, number> = {};
     filteredProject.activities.forEach((act) => {
-      widths[act.id] = (act.tasks.length + activityPaddingColumns) * taskColumnWidth;
+      widths[String(act.id)] = (act.tasks.length + activityPaddingColumns) * taskColumnWidth;
     });
     return widths;
   }, [activityPaddingColumns, filteredProject.activities, taskColumnWidth]);
 
-  const releaseProgress = useMemo(() => {
-    return filteredProject.releases.reduce((acc, release) => {
+  const releaseProgress = useMemo<ReleaseProgress>(() => {
+    return filteredProject.releases.reduce<ReleaseProgress>((acc, release) => {
       let total = 0;
       let done = 0;
 

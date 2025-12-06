@@ -91,7 +91,7 @@ export function useTasks({ project, onUpdate, refreshProject, onUnauthorized, to
     } finally {
       setScopedLoading('create', activityId, false);
     }
-  }, [addTask, onUnauthorized, onUpdate, project, refreshProject, removeTask, setScopedLoading, tasks, toast, updateTaskDraft, resetTaskDraft, taskDrafts]);
+  }, [onUnauthorized, onUpdate, project, refreshProject, setScopedLoading, toast, updateTaskDraft, resetTaskDraft, taskDrafts]);
 
   const updateTaskTitle = useCallback(async (taskId, title) => {
     const trimmed = title.trim();
