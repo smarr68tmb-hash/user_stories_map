@@ -81,13 +81,15 @@ export const enhancement = {
    * @param {string} text - Текст требований
    * @param {boolean} skipEnhancement - Пропустить Stage 1
    * @param {boolean} useEnhancedText - Использовать улучшенный текст
+   * @param {boolean} useAgent - Использовать AI-агента для генерации
    * @returns {Promise} - Результат генерации
    */
-  generateMap: (text, skipEnhancement = false, useEnhancedText = true) => 
-    api.post('/generate-map', { 
-      text, 
+  generateMap: (text, skipEnhancement = false, useEnhancedText = true, useAgent = false) =>
+    api.post('/generate-map', {
+      text,
       skip_enhancement: skipEnhancement,
-      use_enhanced_text: useEnhancedText
+      use_enhanced_text: useEnhancedText,
+      use_agent: useAgent
     }),
 };
 
@@ -154,6 +156,9 @@ export const tasks = {
   
   delete: (taskId) => 
     api.delete(`/task/${taskId}`),
+  
+  move: (taskId, position) => 
+    api.patch(`/task/${taskId}/move`, { position }),
 };
 
 export const projects = {

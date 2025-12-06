@@ -22,9 +22,11 @@ from schemas import (
     ActivityUpdate,
     TaskCreate,
     TaskUpdate,
+    TaskMove,
     ProjectUpdate
 )
 from services.ai_service import generate_ai_map, enhance_requirements
+from services.agent_service import generate_map_with_agent
 from dependencies import get_current_active_user
 
 router = APIRouter(prefix="", tags=["projects"])
@@ -219,7 +221,21 @@ def generate_map(
     # Stage 2: Generation
     try:
         logger.info(f"Stage 2: Generating map for user {current_user.id}")
-        ai_data = generate_ai_map(generation_text, redis_client=redis_client)
+
+        # Используем агента если параметр use_agent=True
+        if req.use_agent:
+            logger.info("🤖 Using AI Agent for generation")
+            ai_data = generate_map_with_agent(
+                generation_text,
+                redis_client=redis_client,
+                use_cache=True,
+                enable_validation=True,
+                enable_fix=True
+            )
+        else:
+            logger.info("📝 Using standard generation")
+            ai_data = generate_ai_map(generation_text, redis_client=redis_client)
+
     except HTTPException as e:
         # Сохраняем оригинальное сообщение об ошибке
         raise
@@ -337,11 +353,18 @@ def generate_map(
             detail=f"Failed to save project to database: {error_msg}"
         )
     
-    return {
+    # Формируем ответ
+    response = {
         "status": "success",
         "project_id": project.id,
         "project_name": project.name
     }
+
+    # Добавляем метаданные агента если использовался агент
+    if req.use_agent and "metadata" in ai_data:
+        response["agent_metadata"] = ai_data["metadata"]
+
+    return response
 
 
 @router.get("/project/{project_id}", response_model=ProjectResponse)
@@ -708,6 +731,26 @@ def create_task(
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found or access denied")
     
+    # Валидация: проверяем, что название не пустое
+    task_title = task.title.strip()
+    if not task_title:
+        raise HTTPException(
+            status_code=400,
+            detail="Поле названия шага должно быть заполнено"
+        )
+    
+    # Проверяем дубликаты названий в рамках активности
+    existing_task = db.query(UserTask)\
+        .filter(UserTask.activity_id == task.activity_id)\
+        .filter(UserTask.title == task_title)\
+        .first()
+    
+    if existing_task:
+        raise HTTPException(
+            status_code=400,
+            detail="Шаг с таким названием уже существует"
+        )
+    
     # Определяем позицию (в конец списка, если не указана)
     if task.position is None:
         max_position = db.query(UserTask)\
@@ -726,7 +769,7 @@ def create_task(
     
     new_task = UserTask(
         activity_id=task.activity_id,
-        title=task.title.strip(),
+        title=task_title,
         position=position
     )
     
@@ -766,7 +809,29 @@ def update_task(
     
     # Обновляем название, если указано
     if task_update.title is not None:
-        task.title = task_update.title.strip()
+        new_title = task_update.title.strip()
+        # Валидация: проверяем, что название не пустое
+        if not new_title:
+            raise HTTPException(
+                status_code=400,
+                detail="Поле названия шага должно быть заполнено"
+            )
+        
+        # Проверяем дубликаты названий в рамках активности (исключая текущий task)
+        if new_title != task.title:
+            existing_task = db.query(UserTask)\
+                .filter(UserTask.activity_id == task.activity_id)\
+                .filter(UserTask.title == new_title)\
+                .filter(UserTask.id != task_id)\
+                .first()
+            
+            if existing_task:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Шаг с таким названием уже существует"
+                )
+        
+        task.title = new_title
     
     # Обновляем позицию, если указана
     if task_update.position is not None and task_update.position != task.position:
@@ -860,4 +925,100 @@ def delete_task(
     db.commit()
     
     return {"status": "success", "message": "Task deleted"}
+
+
+@router.patch("/task/{task_id}/move", response_model=TaskResponse)
+@limiter.limit("30/minute")
+def move_task(
+    task_id: int,
+    move: TaskMove,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Перемещает Task в другую позицию внутри Activity (drag & drop)"""
+    # Проверяем владельца проекта
+    task = db.query(UserTask)\
+        .join(Activity)\
+        .join(Project)\
+        .filter(UserTask.id == task_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found or access denied")
+    
+    old_position = task.position
+    new_position = move.position
+    
+    # Если позиция не изменилась, ничего не делаем
+    if old_position == new_position:
+        db.refresh(task)
+        stories_data = []
+        for story in task.stories:
+            stories_data.append(StoryResponse(
+                id=story.id,
+                title=story.title,
+                description=story.description,
+                priority=story.priority,
+                acceptance_criteria=story.acceptance_criteria or [],
+                release_id=story.release_id,
+                position=story.position,
+                status=story.status or "todo"
+            ))
+        return TaskResponse(
+            id=task.id,
+            title=task.title,
+            position=task.position,
+            stories=stories_data
+        )
+    
+    # Обновляем позиции других задач
+    if new_position < old_position:
+        # Сдвигаем задачи вправо
+        tasks_to_shift = db.query(UserTask)\
+            .filter(UserTask.activity_id == task.activity_id)\
+            .filter(UserTask.position >= new_position)\
+            .filter(UserTask.position < old_position)\
+            .filter(UserTask.id != task_id)\
+            .all()
+        for t in tasks_to_shift:
+            t.position += 1
+    else:
+        # Сдвигаем задачи влево
+        tasks_to_shift = db.query(UserTask)\
+            .filter(UserTask.activity_id == task.activity_id)\
+            .filter(UserTask.position > old_position)\
+            .filter(UserTask.position <= new_position)\
+            .filter(UserTask.id != task_id)\
+            .all()
+        for t in tasks_to_shift:
+            t.position -= 1
+    
+    # Обновляем позицию текущей задачи
+    task.position = new_position
+    
+    db.commit()
+    db.refresh(task)
+    
+    # Формируем ответ с stories
+    stories_data = []
+    for story in task.stories:
+        stories_data.append(StoryResponse(
+            id=story.id,
+            title=story.title,
+            description=story.description,
+            priority=story.priority,
+            acceptance_criteria=story.acceptance_criteria or [],
+            release_id=story.release_id,
+            position=story.position,
+            status=story.status or "todo"
+        ))
+    
+    return TaskResponse(
+        id=task.id,
+        title=task.title,
+        position=task.position,
+        stories=stories_data
+    )
 

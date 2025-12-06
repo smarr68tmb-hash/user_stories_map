@@ -27,6 +27,9 @@ function App() {
   const [showEnhancementPreview, setShowEnhancementPreview] = useState(false);
   const [enhancementLoading, setEnhancementLoading] = useState(false);
   const [stage, setStage] = useState(null); // 'enhancing' | 'generating' | null
+
+  // AI Agent состояние
+  const [useAgent, setUseAgent] = useState(false);
   
   // Редактирование названия проекта
   const [isEditingProjectName, setIsEditingProjectName] = useState(false);
@@ -162,8 +165,8 @@ function App() {
     setProgress(50);
     
     try {
-      // Генерируем карту с выбранным текстом
-      const res = await enhancement.generateMap(textToUse, skipEnhancement);
+      // Генерируем карту с выбранным текстом (передаем useAgent)
+      const res = await enhancement.generateMap(textToUse, skipEnhancement, true, useAgent);
       setProgress(80);
       const projectId = res.data.project_id;
       
@@ -533,7 +536,54 @@ function App() {
               {error}
             </div>
           )}
-          
+
+          {/* AI Agent Checkbox */}
+          <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={useAgent}
+                onChange={(e) => setUseAgent(e.target.checked)}
+                disabled={loading || enhancementLoading}
+                className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-gray-800 group-hover:text-blue-700 transition">
+                    🤖 AI-Агент (MVP)
+                  </span>
+                  <span className="px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700 rounded-full">
+                    +15% качество
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                  Улучшенная генерация с автоматической валидацией и исправлением ошибок.
+                  Агент проверит структуру карты и автоматически исправит критические проблемы.
+                </p>
+                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                  <span className="flex items-center gap-1">
+                    <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Валидация
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Автоисправление
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Метрики качества
+                  </span>
+                </div>
+              </div>
+            </label>
+          </div>
+
           {/* Основная кнопка - с улучшением */}
           <button
             onClick={handleGenerate}

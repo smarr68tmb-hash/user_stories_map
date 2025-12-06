@@ -10,12 +10,16 @@ class RequirementsInput(BaseModel):
     """Схема входных требований для генерации карты"""
     text: str
     skip_enhancement: bool = Field(
-        default=False, 
+        default=False,
         description="Пропустить этап улучшения требований (Stage 1)"
     )
     use_enhanced_text: bool = Field(
         default=True,
         description="Использовать улучшенный текст для генерации (если был enhancement)"
+    )
+    use_agent: bool = Field(
+        default=False,
+        description="Использовать AI-агента для генерации (MVP версия с валидацией и исправлением)"
     )
 
 
@@ -84,26 +88,31 @@ class ActivityCreate(BaseModel):
     """Схема для создания Activity"""
     project_id: int
     title: str
-    position: Optional[int] = None
+    position: Optional[int] = Field(None, ge=0, description="Позиция должна быть неотрицательной")
 
 
 class ActivityUpdate(BaseModel):
     """Схема для обновления Activity"""
     title: Optional[str] = None
-    position: Optional[int] = None
+    position: Optional[int] = Field(None, ge=0, description="Позиция должна быть неотрицательной")
 
 
 class TaskCreate(BaseModel):
     """Схема для создания Task"""
     activity_id: int
-    title: str
-    position: Optional[int] = None
+    title: str = Field(..., min_length=1, description="Название шага не может быть пустым")
+    position: Optional[int] = Field(None, ge=0, description="Позиция должна быть неотрицательной")
 
 
 class TaskUpdate(BaseModel):
     """Схема для обновления Task"""
-    title: Optional[str] = None
-    position: Optional[int] = None
+    title: Optional[str] = Field(None, min_length=1, description="Название шага не может быть пустым")
+    position: Optional[int] = Field(None, ge=0, description="Позиция должна быть неотрицательной")
+
+
+class TaskMove(BaseModel):
+    """Схема для перемещения Task (drag & drop)"""
+    position: int = Field(..., ge=0, description="Позиция должна быть неотрицательной")
 
 
 class ProjectUpdate(BaseModel):

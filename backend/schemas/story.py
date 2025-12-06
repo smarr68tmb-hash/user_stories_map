@@ -83,7 +83,7 @@ class StoryMove(BaseModel):
     """Схема для перемещения истории (drag & drop)"""
     task_id: int
     release_id: Optional[int] = None
-    position: int
+    position: int = Field(..., ge=0, description="Позиция должна быть неотрицательной")
 
 
 class StoryResponse(BaseModel):

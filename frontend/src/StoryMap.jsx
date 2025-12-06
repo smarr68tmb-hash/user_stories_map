@@ -17,6 +17,7 @@ import {
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
+  horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -138,15 +139,44 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     
     if (!over || active.id === over.id) return;
 
+    const activeId = String(active.id);
+    const overId = String(over.id);
+
+    // Проверяем, является ли это перетаскиванием Task (шага)
+    if (activeId.startsWith('task-')) {
+      const taskId = Number(activeId.replace('task-', ''));
+      const activity = project.activities.find(a => a.tasks.some(t => t.id === taskId));
+      
+      if (!activity) return;
+
+      // Если бросаем на другую задачу в той же активности
+      if (overId.startsWith('task-')) {
+        const targetTaskId = Number(overId.replace('task-', ''));
+        const targetTask = activity.tasks.find(t => t.id === targetTaskId);
+        
+        if (targetTask && targetTask.id !== taskId) {
+          await moveTask(taskId, targetTask.position);
+        }
+      }
+      // Если бросаем на droppable зону активности
+      else if (overId.startsWith('activity-tasks-')) {
+        const activityId = Number(overId.replace('activity-tasks-', ''));
+        if (activityId === activity.id) {
+          // Перемещаем в конец списка
+          const endPosition = activity.tasks.length;
+          await moveTask(taskId, endPosition);
+        }
+      }
+      return;
+    }
+
+    // Оригинальная логика для Story (карточек)
     // Парсим ID активного элемента (карточки): storyId-taskId-releaseId
-    const activeParts = String(active.id).split('-');
+    const activeParts = activeId.split('-');
     const storyId = Number(activeParts[0]);
     const sourceTaskId = Number(activeParts[1]);
     const sourceReleaseId = Number(activeParts[2]);
 
-    // Проверяем куда бросаем
-    const overId = String(over.id);
-    
     // Если бросаем на ячейку (cell-taskId-releaseId)
     if (overId.startsWith('cell-')) {
       const cellParts = overId.replace('cell-', '').split('-');
@@ -398,14 +428,16 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
   // ========== TASK HANDLERS ==========
   
   const handleAddTask = async (activityId) => {
-    if (!newTaskTitle.trim()) {
-      setAddingTaskActivityId(null);
-      setNewTaskTitle('');
+    const trimmedTitle = newTaskTitle.trim();
+    
+    // Валидация на frontend (дополнительно к backend)
+    if (!trimmedTitle) {
+      alert('Поле названия шага должно быть заполнено');
       return;
     }
 
     try {
-      await tasks.create(activityId, newTaskTitle.trim());
+      await tasks.create(activityId, trimmedTitle);
       setNewTaskTitle('');
       setAddingTaskActivityId(null);
       
@@ -415,19 +447,28 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     } catch (error) {
       console.error('Error adding task:', error);
       const errorMsg = handleApiError(error, onUnauthorized);
-      alert(errorMsg);
+      // Показываем конкретное сообщение об ошибке
+      if (error.response?.data?.detail) {
+        alert(error.response.data.detail);
+      } else {
+        alert(errorMsg);
+      }
     }
   };
 
   const handleUpdateTask = async (taskId) => {
-    if (!editingTaskTitle.trim()) {
+    const trimmedTitle = editingTaskTitle.trim();
+    
+    // Валидация на frontend (дополнительно к backend)
+    if (!trimmedTitle) {
+      alert('Поле названия шага должно быть заполнено');
       setEditingTaskId(null);
       setEditingTaskTitle('');
       return;
     }
 
     try {
-      await tasks.update(taskId, editingTaskTitle.trim());
+      await tasks.update(taskId, trimmedTitle);
       setEditingTaskId(null);
       setEditingTaskTitle('');
       
@@ -437,7 +478,12 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
     } catch (error) {
       console.error('Error updating task:', error);
       const errorMsg = handleApiError(error, onUnauthorized);
-      alert(errorMsg);
+      // Показываем конкретное сообщение об ошибке
+      if (error.response?.data?.detail) {
+        alert(error.response.data.detail);
+      } else {
+        alert(errorMsg);
+      }
       // Восстанавливаем оригинальное название
       const task = allTasks.find(t => t.id === taskId);
       if (task) {
@@ -467,6 +513,22 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
   const startEditingTask = (task) => {
     setEditingTaskId(task.id);
     setEditingTaskTitle(task.title);
+  };
+
+  const moveTask = async (taskId, newPosition) => {
+    try {
+      await tasks.move(taskId, newPosition);
+      // Обновляем проект
+      const res = await api.get(`/project/${project.id}`);
+      onUpdate(res.data);
+    } catch (error) {
+      console.error('Error moving task:', error);
+      const errorMsg = handleApiError(error, onUnauthorized);
+      alert(errorMsg);
+      // Обновляем проект в случае ошибки
+      const res = await api.get(`/project/${project.id}`);
+      onUpdate(res.data);
+    }
   };
 
   return (
@@ -611,67 +673,34 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
               const taskCount = act.tasks.length;
               const activityWidth = (taskCount + 1) * 220; // +1 для кнопки "+ Task"
               return (
-              <div 
-                key={`activity-tasks-${act.id}`} 
-                className="flex"
-                style={{ width: `${activityWidth}px`, flexShrink: 0 }}
+              <SortableContext
+                key={`activity-tasks-${act.id}`}
+                items={act.tasks.map(t => `task-${t.id}`)}
+                strategy={horizontalListSortingStrategy}
               >
-                {act.tasks.map(task => {
-                  const isEditing = editingTaskId === task.id;
-                  return (
-              <div 
-                key={task.id} 
-                      className="w-[220px] flex-shrink-0 bg-blue-50 border-r border-gray-200 p-3 text-sm font-semibold text-center text-gray-700 min-h-[60px] flex items-center justify-center group relative"
-                    >
-                      {isEditing ? (
-                        <div className="flex items-center gap-2 w-full">
-                          <input
-                            type="text"
-                            value={editingTaskTitle}
-                            onChange={(e) => setEditingTaskTitle(e.target.value)}
-                            onBlur={() => handleUpdateTask(task.id)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleUpdateTask(task.id);
-                              } else if (e.key === 'Escape') {
-                                setEditingTaskId(null);
-                                setEditingTaskTitle('');
-                              }
-                            }}
-                            className="flex-1 px-2 py-1 text-xs border rounded bg-white text-gray-800"
-                            autoFocus
-                          />
-                        </div>
-                      ) : (
-                        <>
-                          <span 
-                            className="leading-tight cursor-pointer hover:underline"
-                            onDoubleClick={() => startEditingTask(task)}
-                            title="Двойной клик для редактирования"
-                          >
-                            {task.title}
-                          </span>
-                          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                            <button
-                              onClick={() => startEditingTask(task)}
-                              className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-200 rounded text-xs"
-                              title="Редактировать"
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              onClick={() => handleDeleteTask(task.id)}
-                              className="p-1 text-red-600 hover:text-red-800 hover:bg-red-200 rounded text-xs"
-                              title="Удалить"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
+                <DroppableTaskZone activityId={act.id}>
+                  <div 
+                    key={`activity-tasks-${act.id}`} 
+                    className="flex"
+                    style={{ width: `${activityWidth}px`, flexShrink: 0 }}
+                    id={`activity-tasks-${act.id}`}
+                  >
+                  {act.tasks.map(task => {
+                    const isEditing = editingTaskId === task.id;
+                    return (
+                      <SortableTask
+                        key={task.id}
+                        task={task}
+                        isEditing={isEditing}
+                        editingTaskTitle={editingTaskTitle}
+                        setEditingTaskTitle={setEditingTaskTitle}
+                        onUpdateTask={handleUpdateTask}
+                        onStartEditing={startEditingTask}
+                        onDelete={handleDeleteTask}
+                        setEditingTaskId={setEditingTaskId}
+                      />
+                    );
+                  })}
                 {/* Кнопка добавления Task для каждой Activity */}
                 <div className="flex-shrink-0 border-r border-gray-200 w-[220px]">
                   {addingTaskActivityId === act.id ? (
@@ -720,7 +749,8 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
                     </button>
                   )}
                 </div>
-              </div>
+                </DroppableTaskZone>
+              </SortableContext>
               );
             })}
           </div>
@@ -892,6 +922,26 @@ function StoryMap({ project, onUpdate, onUnauthorized }) {
   );
 }
 
+// Компонент для droppable зоны задач активности
+function DroppableTaskZone({ activityId, children }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `activity-tasks-${activityId}`,
+    data: {
+      type: 'activity-tasks',
+      activityId,
+    },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={isOver ? 'bg-blue-50' : ''}
+    >
+      {children}
+    </div>
+  );
+}
+
 // Компонент для droppable ячейки
 function DroppableCell({ cellId, taskId, releaseId, children }) {
   const { setNodeRef, isOver } = useDroppable({
@@ -911,6 +961,101 @@ function DroppableCell({ cellId, taskId, releaseId, children }) {
       }`}
     >
       {children}
+    </div>
+  );
+}
+
+// Компонент для sortable Task (шага)
+function SortableTask({ 
+  task, 
+  isEditing, 
+  editingTaskTitle, 
+  setEditingTaskTitle, 
+  onUpdateTask, 
+  onStartEditing, 
+  onDelete,
+  setEditingTaskId 
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: `task-${task.id}`,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="w-[220px] flex-shrink-0 bg-blue-50 border-r border-gray-200 p-3 text-sm font-semibold text-center text-gray-700 min-h-[60px] flex items-center justify-center group relative"
+    >
+      {isEditing ? (
+        <div className="flex items-center gap-2 w-full">
+          <input
+            type="text"
+            value={editingTaskTitle}
+            onChange={(e) => setEditingTaskTitle(e.target.value)}
+            onBlur={() => onUpdateTask(task.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                onUpdateTask(task.id);
+              } else if (e.key === 'Escape') {
+                setEditingTaskId(null);
+                setEditingTaskTitle('');
+              }
+            }}
+            className="flex-1 px-2 py-1 text-xs border rounded bg-white text-gray-800"
+            autoFocus
+          />
+        </div>
+      ) : (
+        <>
+          {/* Drag Handle */}
+          <div
+            {...attributes}
+            {...listeners}
+            className="absolute top-2 left-2 cursor-grab active:cursor-grabbing p-1 opacity-40 hover:opacity-100 transition z-10"
+            title="Перетащить для изменения порядка"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z" />
+            </svg>
+          </div>
+          <span 
+            className="leading-tight cursor-pointer hover:underline"
+            onDoubleClick={() => onStartEditing(task)}
+            title="Двойной клик для редактирования"
+          >
+            {task.title}
+          </span>
+          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+            <button
+              onClick={() => onStartEditing(task)}
+              className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-200 rounded text-xs"
+              title="Редактировать"
+            >
+              ✏️
+            </button>
+            <button
+              onClick={() => onDelete(task.id)}
+              className="p-1 text-red-600 hover:text-red-800 hover:bg-red-200 rounded text-xs"
+              title="Удалить"
+            >
+              🗑️
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
