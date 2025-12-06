@@ -18,14 +18,10 @@ import useStories from './hooks/useStories';
 import useDnD from './hooks/useDnD';
 import { useToast } from './hooks/useToast';
 import { useProjectRefreshContext } from './context/ProjectRefreshContext';
+import { STATUS_OPTIONS, getStatusToken } from './theme/tokens';
 
 const TASK_COLUMN_WIDTH = 220;
 const ACTIVITY_PADDING_COLUMNS = 1;
-const STATUS_OPTIONS = [
-  { value: 'todo', label: 'Todo', activeClass: 'bg-yellow-100 border-yellow-300 text-yellow-800' },
-  { value: 'in_progress', label: 'In Progress', activeClass: 'bg-blue-100 border-blue-300 text-blue-800' },
-  { value: 'done', label: 'Done', activeClass: 'bg-green-100 border-green-300 text-green-800' },
-];
 
 function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
   const toast = useToast();
@@ -491,20 +487,15 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
           <span className="text-sm font-semibold text-gray-700">Статусы:</span>
           {STATUS_OPTIONS.map((option) => {
             const isActive = statusFilter.includes(option.value);
-            const statusRingClass =
-              option.value === 'done'
-                ? 'ring-green-200'
-                : option.value === 'in_progress'
-                ? 'ring-blue-200'
-                : 'ring-yellow-200';
+            const token = getStatusToken(option.value);
             return (
               <button
                 key={option.value}
                 onClick={() => toggleStatus(option.value)}
-                className={`px-3 py-1 rounded-full border text-sm transition focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+                className={`px-3 py-1 rounded-full border text-sm transition focus:outline-none ${
                   isActive
-                    ? `${option.activeClass} ring-1 ring-offset-1 ${statusRingClass}`
-                    : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                    ? `${token.badge} ring-1 ring-offset-1 ${token.ring}`
+                    : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400 focus:ring-2 focus:ring-offset-1'
                 }`}
                 aria-pressed={isActive}
               >

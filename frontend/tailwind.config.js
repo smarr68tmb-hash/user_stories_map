@@ -22,15 +22,25 @@ export default {
         },
         // Status colors
         status: {
-          todo: '#6b7280',      // gray-500
-          progress: '#3b82f6',  // blue-500
-          done: '#22c55e',      // green-500
+          todo: '#f59e0b',          // amber-500
+          'in-progress': '#3b82f6', // blue-500
+          done: '#22c55e',          // green-500
+          blocked: '#ef4444',       // red-500
         },
         // Priority/Release colors
         priority: {
-          mvp: '#ef4444',       // red-500
-          release1: '#f97316',  // orange-500
-          later: '#6b7280',     // gray-500
+          low: '#6b7280',         // gray-500
+          medium: '#f59e0b',      // amber-500
+          high: '#ef4444',        // red-500
+          mvp: '#ef4444',         // backward compatibility
+          release1: '#f97316',    // backward compatibility
+          later: '#6b7280',       // backward compatibility
+        },
+        severity: {
+          low: '#38bdf8',       // sky-400
+          medium: '#f59e0b',    // amber-500
+          high: '#f97316',      // orange-500
+          critical: '#ef4444',  // red-500
         },
         // Surface colors
         surface: {

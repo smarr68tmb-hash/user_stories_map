@@ -3,6 +3,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Circle, Clock, Check, Sparkles, GripVertical } from 'lucide-react';
+import { getPriorityToken, getStatusToken, STATUS_FLOW } from '../../theme/tokens';
 
 function StoryCard({
   story,
@@ -38,34 +39,23 @@ function StoryCard({
     scale: isDragging ? '1.05' : undefined,
   };
 
-  // Цвет приоритета (WCAG AA compliant - минимум 4.5:1 контраст)
-  const priorityColors = {
-    'MVP': 'bg-red-100 text-red-800 border-red-300',
-    'Release 1': 'bg-orange-100 text-orange-800 border-orange-300',
-    'Later': 'bg-gray-100 text-gray-700 border-gray-300',
-  };
-
-  // Цвета статуса для левой полоски
-  const statusColors = {
-    'todo': 'bg-gray-300',
-    'in_progress': 'bg-blue-500',
-    'done': 'bg-green-500',
-  };
-
   // Иконки статуса
   const statusIcons = {
     'todo': <Circle className="w-4 h-4" />,
     'in_progress': <Clock className="w-4 h-4" />,
     'done': <Check className="w-4 h-4" />,
+    'blocked': <Circle className="w-4 h-4" />,
   };
 
   const currentStatus = story.status || 'todo';
+  const statusToken = getStatusToken(currentStatus);
+  const priorityToken = getPriorityToken(story.priority);
   
   // Следующий статус при клике
   const getNextStatus = (current) => {
-    const cycle = ['todo', 'in_progress', 'done'];
-    const idx = cycle.indexOf(current);
-    return cycle[(idx + 1) % cycle.length];
+    const idx = STATUS_FLOW.indexOf(current);
+    const safeIndex = idx === -1 ? 0 : idx;
+    return STATUS_FLOW[(safeIndex + 1) % STATUS_FLOW.length];
   };
 
   const handleStatusClick = (e) => {
@@ -78,17 +68,11 @@ function StoryCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative p-3 rounded-lg shadow-sm hover:shadow-lg transition-all duration-200 text-sm border group cursor-pointer overflow-hidden ${
-        currentStatus === 'done'
-          ? 'bg-green-50 border-green-200 hover:border-green-300'
-          : currentStatus === 'in_progress'
-          ? 'bg-blue-50 border-blue-200 hover:border-blue-300'
-          : 'bg-yellow-100 border-yellow-300 hover:border-yellow-400'
-      }`}
+      className={`relative p-3 rounded-lg shadow-sm hover:shadow-lg transition-all duration-200 text-sm border group cursor-pointer overflow-hidden ${statusToken.surface}`}
       onClick={onEdit}
     >
       {/* Status indicator bar (left side) */}
-      <div className={`absolute left-0 top-0 bottom-0 w-1 ${statusColors[currentStatus]}`} />
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${statusToken.indicator}`} />
 
       {/* Drag Handle - min 44x44px touch target */}
       <div
@@ -109,11 +93,7 @@ function StoryCard({
           onClick={handleStatusClick}
           disabled={statusLoading}
           className={`flex-shrink-0 w-7 h-7 min-w-[28px] min-h-[28px] rounded-full border-2 flex items-center justify-center text-sm font-bold transition-all hover:scale-110 ${
-            currentStatus === 'done'
-              ? 'bg-green-500 border-green-500 text-white'
-              : currentStatus === 'in_progress'
-              ? 'bg-blue-500 border-blue-500 text-white'
-              : 'bg-white border-gray-300 text-gray-400 hover:border-gray-400'
+            currentStatus === 'todo' ? statusToken.control.idle : statusToken.control.active
           }`}
           title={currentStatus === 'todo' ? 'Начать' : currentStatus === 'in_progress' ? 'Завершить' : 'Вернуть в работу'}
         >
@@ -134,7 +114,7 @@ function StoryCard({
       {/* Footer: Priority + AC count */}
       <div className="flex items-center gap-2 mt-auto pt-1 ml-7">
         {story.priority && (
-          <span className={`text-[10px] uppercase px-2 py-0.5 rounded border font-semibold ${priorityColors[story.priority] || priorityColors['Later']}`}>
+          <span className={`text-[10px] uppercase px-2 py-0.5 rounded border font-semibold ${priorityToken.badge}`}>
             {story.priority}
           </span>
         )}

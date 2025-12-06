@@ -1,6 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Pencil, Trash2, Check } from 'lucide-react';
+import { getSeverityToken } from '../../theme/tokens';
 
 function TaskColumn({ 
   task, 
@@ -27,6 +28,9 @@ function TaskColumn({
   } = useSortable({
     id: `task-${task.id}`,
   });
+
+  const dangerTone = getSeverityToken('high');
+  const confirmTone = getSeverityToken('critical');
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -93,7 +97,11 @@ function TaskColumn({
             </button>
             <button
               onClick={() => onDelete(task.id)}
-              className={`min-w-[36px] min-h-[36px] flex items-center justify-center text-red-600 hover:text-red-800 hover:bg-red-200 rounded ${pendingDelete ? 'bg-red-100 border border-red-300' : ''}`}
+              className={`min-w-[36px] min-h-[36px] flex items-center justify-center rounded ${
+                pendingDelete
+                  ? `${confirmTone.badgeStrong} border`
+                  : dangerTone.textButton
+              }`}
               disabled={isDeleting || isUpdating}
               title="Удалить"
             >
