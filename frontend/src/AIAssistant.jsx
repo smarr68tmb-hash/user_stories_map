@@ -4,6 +4,7 @@ import {
   Loader2, CheckCircle, Info
 } from 'lucide-react';
 import api from './api';
+import AutoResizeTextarea from './components/common/AutoResizeTextarea.jsx';
 import useFocusTrap from './hooks/useFocusTrap';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 
@@ -209,7 +210,7 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
           {/* Custom Prompt */}
           <div className="mb-6">
             <h3 className="font-semibold text-gray-800 mb-3">Или напишите свой запрос:</h3>
-            <textarea
+            <AutoResizeTextarea
               value={prompt}
               onChange={(e) => {
                 setPrompt(e.target.value);
@@ -218,9 +219,10 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
                   setSelectedActionId(null);
                 }
               }}
+              minHeight={80}
+              maxHeight={300}
               placeholder="Например: Улучши описание истории по best практикам User Story, добавь больше контекста и деталей..."
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none resize-none"
-              rows="3"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
               disabled={loading}
             />
           </div>

@@ -140,12 +140,14 @@ function EnhancementPreview({
                     <button
                       onClick={handleSaveEdit}
                       className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition"
+                      aria-label="Сохранить редактированный текст"
                     >
                       Использовать этот текст
                     </button>
                     <button
                       onClick={handleCancelEdit}
                       className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition"
+                      aria-label="Отменить редактирование"
                     >
                       Отмена
                     </button>
@@ -226,22 +228,25 @@ function EnhancementPreview({
             <button
               onClick={onUseOriginal}
               className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-100 hover:border-gray-400 transition"
+              aria-label="Использовать оригинальный текст без улучшений"
             >
               Использовать мой текст
             </button>
-            
+
             {!isEditing && (
               <button
                 onClick={handleStartEdit}
                 className="flex-1 px-6 py-3 border-2 border-indigo-300 text-indigo-700 rounded-xl font-medium hover:bg-indigo-50 hover:border-indigo-400 transition"
+                aria-label="Редактировать улучшенный текст"
               >
                 ✏️ Редактировать
               </button>
             )}
-            
+
             <button
               onClick={() => onUseEnhanced(enhanced_text)}
               className="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition shadow-lg shadow-indigo-200"
+              aria-label="Использовать улучшенный текст от AI"
             >
               ✨ Использовать улучшенный
             </button>

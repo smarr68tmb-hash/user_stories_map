@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import ConfirmDialog from './components/common/ConfirmDialog';
+import AutoResizeTextarea from './components/common/AutoResizeTextarea.jsx';
 import useFocusTrap from './hooks/useFocusTrap';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 
@@ -169,11 +170,12 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Описание
               </label>
-              <textarea
+              <AutoResizeTextarea
                 value={editDescription}
                 onChange={(e) => setEditDescription(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none transition"
-                rows="3"
+                minHeight={80}
+                maxHeight={300}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                 placeholder="Подробное описание функциональности..."
                 disabled={saving}
               />
@@ -193,6 +195,8 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
                     onClick={() => setEditReleaseId(release.id)}
                     disabled={saving}
                     className={getReleaseStyle(release.title, editReleaseId === release.id)}
+                    aria-label={`Переместить в релиз ${release.title}`}
+                    aria-pressed={editReleaseId === release.id}
                   >
                     {release.title}
                   </button>
@@ -221,6 +225,8 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
                       ? 'border-gray-500 bg-gray-50 text-gray-700'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                   }`}
+                  aria-label="Изменить статус на 'К выполнению'"
+                  aria-pressed={editStatus === 'todo'}
                 >
                   <span className="text-lg">○</span>
                   <span>К выполнению</span>
@@ -234,6 +240,8 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
                       ? 'border-blue-500 bg-blue-50 text-blue-700'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                   }`}
+                  aria-label="Изменить статус на 'В работе'"
+                  aria-pressed={editStatus === 'in_progress'}
                 >
                   <span className="text-lg">◐</span>
                   <span>В работе</span>
@@ -247,6 +255,8 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
                       ? 'border-green-500 bg-green-50 text-green-700'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                   }`}
+                  aria-label="Изменить статус на 'Готово'"
+                  aria-pressed={editStatus === 'done'}
                 >
                   <span className="text-lg">✓</span>
                   <span>Готово</span>
@@ -260,11 +270,12 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
                 Критерии приёмки
                 <span className="text-gray-400 font-normal ml-2">(каждый критерий с новой строки)</span>
               </label>
-              <textarea
+              <AutoResizeTextarea
                 value={editAC}
                 onChange={(e) => setEditAC(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none transition font-mono text-sm"
-                rows="4"
+                minHeight={100}
+                maxHeight={400}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-mono text-sm"
                 placeholder="• Пользователь может войти с email и паролем&#10;• Показывается сообщение об ошибке при неверных данных&#10;• После входа перенаправляется на главную"
                 disabled={saving}
               />
@@ -283,6 +294,7 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
                 onClick={handleDelete}
                 disabled={saving}
                 className="text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg font-medium transition disabled:opacity-50"
+                aria-label="Удалить историю"
               >
                 Удалить
               </button>
@@ -292,6 +304,7 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
                   onClick={onClose}
                   disabled={saving}
                   className="px-5 py-2 rounded-lg font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 transition disabled:opacity-50"
+                  aria-label="Отменить изменения"
                 >
                   Отмена
                 </button>
@@ -299,6 +312,7 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
                   onClick={handleSave}
                   disabled={saving || !editTitle.trim()}
                   className="px-5 py-2 rounded-lg font-medium text-white bg-blue-600 hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  aria-label="Сохранить изменения"
                 >
                   {saving ? (
                     <>

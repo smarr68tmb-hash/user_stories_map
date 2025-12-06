@@ -6,6 +6,7 @@ import Auth from './Auth.jsx';
 import ProjectList from './ProjectList.jsx';
 import EnhancementPreview from './EnhancementPreview.jsx';
 import Breadcrumb from './components/common/Breadcrumb.jsx';
+import AutoResizeTextarea from './components/common/AutoResizeTextarea.jsx';
 import { ToastProvider, useToast } from './hooks/useToast';
 import { ProjectRefreshProvider, useProjectRefreshContext } from './context/ProjectRefreshContext';
 
@@ -427,18 +428,20 @@ function AppContent() {
           </div>
           
           <div className="mb-2">
-            <textarea
-              className={`w-full h-40 p-4 border rounded-lg mb-2 focus:ring-2 focus:ring-blue-500 outline-none resize-none ${
-                !isValidInput && input.length > 0
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-gray-300'
-              }`}
-              placeholder="Опишите ваш продукт (например: Приложение для доставки пиццы с ролями курьера и клиента. Клиент может выбрать пиццу, оформить заказ и отслеживать доставку. Курьер получает заказы, видит маршрут и отмечает доставку...)"
+            <AutoResizeTextarea
               value={input}
               onChange={(e) => {
                 setInput(e.target.value);
                 setError(null);
               }}
+              minHeight={160}
+              maxHeight={600}
+              className={`w-full p-4 border rounded-lg mb-2 focus:ring-2 focus:ring-blue-500 outline-none ${
+                !isValidInput && input.length > 0
+                  ? 'border-red-300 bg-red-50'
+                  : 'border-gray-300'
+              }`}
+              placeholder="Опишите ваш продукт (например: Приложение для доставки пиццы с ролями курьера и клиента. Клиент может выбрать пиццу, оформить заказ и отслеживать доставку. Курьер получает заказы, видит маршрут и отмечает доставку...)"
               disabled={loading}
               maxLength={MAX_CHARS}
               aria-label="Описание продукта"
