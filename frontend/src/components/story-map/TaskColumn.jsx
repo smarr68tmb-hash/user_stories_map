@@ -1,5 +1,6 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { GripVertical, Pencil, Trash2, Check } from 'lucide-react';
 
 function TaskColumn({ 
   task, 
@@ -29,8 +30,11 @@ function TaskColumn({
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging || dragDisabled ? 0.5 : 1,
+    transition: transition || 'transform 200ms ease',
+    opacity: dragDisabled ? 0.5 : 1,
+    zIndex: isDragging ? 1000 : 'auto',
+    boxShadow: isDragging ? '0 8px 20px rgba(0,0,0,0.15)' : undefined,
+    cursor: isDragging ? 'grabbing' : undefined,
   };
 
   return (
@@ -61,17 +65,15 @@ function TaskColumn({
         </div>
       ) : (
         <>
-          {/* Drag Handle */}
+          {/* Drag Handle - min 44x44px touch target */}
           <div
             {...(!handleDisabled ? attributes : {})}
             {...(!handleDisabled ? listeners : {})}
             aria-disabled={handleDisabled}
-            className="absolute top-2 left-2 cursor-grab active:cursor-grabbing p-1 opacity-40 hover:opacity-100 transition z-10"
+            className="absolute top-0 left-0 cursor-grab active:cursor-grabbing min-w-[44px] min-h-[44px] flex items-center justify-center opacity-40 hover:opacity-100 hover:bg-blue-100 rounded transition z-10"
             title="Перетащить для изменения порядка"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z" />
-            </svg>
+            <GripVertical className="w-5 h-5 text-gray-500" />
           </div>
           <span 
             className="leading-tight cursor-pointer hover:underline"
@@ -80,22 +82,28 @@ function TaskColumn({
           >
             {task.title}
           </span>
-          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+          <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex">
             <button
               onClick={() => onStartEditing(task)}
-              className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-200 rounded text-xs disabled:opacity-60"
+              className="min-w-[36px] min-h-[36px] flex items-center justify-center text-blue-600 hover:text-blue-800 hover:bg-blue-200 rounded disabled:opacity-60"
               disabled={isUpdating || isDeleting}
               title="Редактировать"
             >
-              ✏️
+              <Pencil className="w-4 h-4" />
             </button>
             <button
               onClick={() => onDelete(task.id)}
-              className={`p-1 text-red-600 hover:text-red-800 hover:bg-red-200 rounded text-xs ${pendingDelete ? 'bg-red-100 border border-red-300' : ''}`}
+              className={`min-w-[36px] min-h-[36px] flex items-center justify-center text-red-600 hover:text-red-800 hover:bg-red-200 rounded ${pendingDelete ? 'bg-red-100 border border-red-300' : ''}`}
               disabled={isDeleting || isUpdating}
               title="Удалить"
             >
-              {isDeleting ? '…' : pendingDelete ? 'Подтвердить' : '🗑️'}
+              {isDeleting ? (
+                <span className="animate-pulse">…</span>
+              ) : pendingDelete ? (
+                <Check className="w-4 h-4" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
             </button>
           </div>
         </>

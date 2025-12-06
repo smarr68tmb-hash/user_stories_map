@@ -122,22 +122,83 @@ export function useStories({ project, onUpdate, refreshProject, onUnauthorized, 
     }
   }, [onUnauthorized, onUpdate, project, refreshProject, setScopedLoading, toast]);
 
+  // Store pending deletes for undo functionality
+  const [pendingDeletes, setPendingDeletes] = useState({});
+
   const deleteStory = useCallback(async (storyId) => {
     const prev = project;
+
+    // Find the story before removing it (for undo)
+    let deletedStory = null;
+    let deletedFromTask = null;
+    let deletedFromRelease = null;
+
+    for (const activity of project.activities || []) {
+      for (const task of activity.tasks || []) {
+        const story = task.stories?.find(s => s.id === storyId);
+        if (story) {
+          deletedStory = { ...story };
+          deletedFromTask = task.id;
+          deletedFromRelease = story.release_id;
+          break;
+        }
+      }
+      if (deletedStory) break;
+    }
+
+    if (!deletedStory) {
+      toast?.error('История не найдена');
+      return;
+    }
+
     setScopedLoading('delete', storyId, true);
     onUpdate(removeStoryTransform(project, storyId));
 
-    try {
-      await api.delete(`/story/${storyId}`);
-      toast?.success('История удалена');
-      await refreshProject?.({ silent: true });
-    } catch (error) {
+    // Set up pending delete with timeout
+    const deleteTimeout = setTimeout(async () => {
+      try {
+        await api.delete(`/story/${storyId}`);
+        await refreshProject?.({ silent: true });
+      } catch (error) {
+        // If deletion fails, restore the story
+        onUpdate(prev);
+        const msg = handleApiError(error, onUnauthorized);
+        toast?.error(msg);
+      } finally {
+        setPendingDeletes((p) => {
+          const newPending = { ...p };
+          delete newPending[storyId];
+          return newPending;
+        });
+        setScopedLoading('delete', storyId, false);
+      }
+    }, 8000);
+
+    // Store pending delete info
+    setPendingDeletes((p) => ({
+      ...p,
+      [storyId]: {
+        story: deletedStory,
+        taskId: deletedFromTask,
+        releaseId: deletedFromRelease,
+        timeout: deleteTimeout,
+        prevProject: prev,
+      },
+    }));
+
+    // Show undo toast
+    toast?.showWithUndo('Карточка удалена', () => {
+      // Undo: cancel the delete
+      clearTimeout(deleteTimeout);
+      setPendingDeletes((p) => {
+        const newPending = { ...p };
+        delete newPending[storyId];
+        return newPending;
+      });
       onUpdate(prev);
-      const msg = handleApiError(error, onUnauthorized);
-      toast?.error(msg);
-    } finally {
       setScopedLoading('delete', storyId, false);
-    }
+      toast?.success('Карточка восстановлена');
+    });
   }, [onUnauthorized, onUpdate, project, refreshProject, setScopedLoading, toast]);
 
   const moveStory = useCallback(async (storyId, targetTaskId, targetReleaseId, targetPosition) => {

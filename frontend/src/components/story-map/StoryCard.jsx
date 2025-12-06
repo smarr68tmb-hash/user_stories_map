@@ -29,8 +29,12 @@ function StoryCard({
   const style = {
     ...containerStyle,
     transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging || dragDisabled ? 0.5 : 1,
+    transition: transition || 'transform 200ms ease',
+    opacity: dragDisabled ? 0.5 : 1,
+    zIndex: isDragging ? 1000 : 'auto',
+    boxShadow: isDragging ? '0 12px 28px rgba(0,0,0,0.2), 0 4px 10px rgba(0,0,0,0.1)' : undefined,
+    cursor: isDragging ? 'grabbing' : undefined,
+    scale: isDragging ? '1.02' : undefined,
   };
 
   // Цвет приоритета
@@ -85,16 +89,16 @@ function StoryCard({
       {/* Status indicator bar (left side) */}
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${statusColors[currentStatus]}`} />
 
-      {/* Drag Handle */}
+      {/* Drag Handle - min 44x44px touch target */}
       <div
         {...(!handleDisabled ? attributes : {})}
         {...(!handleDisabled ? listeners : {})}
         onClick={(e) => e.stopPropagation()}
         aria-disabled={handleDisabled}
-        className="absolute top-2 right-2 cursor-grab active:cursor-grabbing p-1.5 hover:bg-white/50 rounded-md opacity-40 hover:opacity-100 transition z-10"
+        className="absolute top-0 right-0 cursor-grab active:cursor-grabbing min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-white/50 rounded-md opacity-40 hover:opacity-100 transition z-10"
         title="Перетащить"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
           <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z" />
         </svg>
       </div>
@@ -104,9 +108,9 @@ function StoryCard({
         <button
           onClick={handleStatusClick}
           disabled={statusLoading}
-          className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all hover:scale-110 ${
-            currentStatus === 'done' 
-              ? 'bg-green-500 border-green-500 text-white' 
+          className={`flex-shrink-0 w-7 h-7 min-w-[28px] min-h-[28px] rounded-full border-2 flex items-center justify-center text-sm font-bold transition-all hover:scale-110 ${
+            currentStatus === 'done'
+              ? 'bg-green-500 border-green-500 text-white'
               : currentStatus === 'in_progress'
               ? 'bg-blue-500 border-blue-500 text-white'
               : 'bg-white border-gray-300 text-gray-400 hover:border-gray-400'
@@ -136,20 +140,20 @@ function StoryCard({
         )}
         {story.acceptance_criteria && story.acceptance_criteria.length > 0 && (
           <span className="text-[10px] text-gray-500 bg-white/60 px-1.5 py-0.5 rounded">
-            {story.acceptance_criteria.length} AC
+            {story.acceptance_criteria.length} КП
           </span>
         )}
         
-        {/* AI Button - показывается при hover */}
+        {/* AI Button - показывается при hover, min 44px touch target */}
         <button
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
             onOpenAI();
           }}
-          className="ml-auto text-[10px] bg-gradient-to-r from-purple-500 to-blue-500 text-white px-2 py-1 rounded hover:from-purple-600 hover:to-blue-600 transition opacity-0 group-hover:opacity-100"
+          className="ml-auto text-xs bg-gradient-to-r from-purple-500 to-blue-500 text-white px-3 py-1.5 min-h-[32px] rounded hover:from-purple-600 hover:to-blue-600 transition opacity-0 group-hover:opacity-100"
           type="button"
-          title="AI Assistant"
+          title="AI Ассистент"
         >
           ✨ AI
         </button>

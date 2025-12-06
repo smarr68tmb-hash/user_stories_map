@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import ConfirmDialog from './components/common/ConfirmDialog';
 import useFocusTrap from './hooks/useFocusTrap';
+import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 
 function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) {
   const [editTitle, setEditTitle] = useState('');
@@ -10,8 +11,13 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
   const [editAC, setEditAC] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [titleTouched, setTitleTouched] = useState(false);
   const modalRef = useRef(null);
   useFocusTrap(modalRef, isOpen);
+
+  // Validation
+  const titleError = titleTouched && !editTitle.trim() ? 'Название обязательно' : null;
+  const titleWarning = editTitle.length > 200 ? 'Рекомендуется сократить название' : null;
 
   // Синхронизация с story при открытии
   useEffect(() => {
@@ -21,6 +27,7 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
       setEditReleaseId(story.release_id);
       setEditStatus(story.status || 'todo');
       setEditAC((story.acceptance_criteria || []).join('\n'));
+      setTitleTouched(false);
     }
   }, [story, isOpen]);
 
@@ -65,16 +72,11 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
     }
   };
 
-  // Закрытие по Escape
-  useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen, onClose]);
+  // Keyboard shortcuts
+  useKeyboardShortcuts([
+    { key: 'Escape', handler: onClose },
+    { key: 's', ctrl: true, handler: () => !saving && editTitle.trim() && handleSave() },
+  ], isOpen && !confirmDeleteOpen);
 
   if (!isOpen || !story) return null;
 
@@ -97,209 +99,237 @@ function EditStoryModal({ story, releases, isOpen, onClose, onSave, onDelete }) 
   };
 
   return (
-    <div 
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-      role="dialog"
-      aria-modal="true"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        ref={modalRef}
-        className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden"
-        tabIndex={-1}
+    <>
+      <div 
+        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
       >
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold">Редактирование истории</h2>
-            <button
-              onClick={onClose}
-              className="text-white/80 hover:text-white text-2xl font-light transition"
-              disabled={saving}
-            >
-              ×
-            </button>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div className="p-6 space-y-5">
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Название истории *
-            </label>
-            <input
-              type="text"
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-              placeholder="Как пользователь, я хочу..."
-              autoFocus
-              disabled={saving}
-            />
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Описание
-            </label>
-            <textarea
-              value={editDescription}
-              onChange={(e) => setEditDescription(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none transition"
-              rows="3"
-              placeholder="Подробное описание функциональности..."
-              disabled={saving}
-            />
-          </div>
-
-          {/* Release/Priority - теперь выбирает строку куда переместить */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Релиз
-              <span className="text-gray-400 font-normal ml-2">(строка на карте)</span>
-            </label>
-            <div className="grid grid-cols-3 gap-3">
-              {releases?.map((release) => (
-                <button
-                  key={release.id}
-                  type="button"
-                  onClick={() => setEditReleaseId(release.id)}
-                  disabled={saving}
-                  className={getReleaseStyle(release.title, editReleaseId === release.id)}
-                >
-                  {release.title}
-                </button>
-              ))}
-            </div>
-            {editReleaseId !== story.release_id && (
-              <p className="text-xs text-orange-600 mt-2 flex items-center gap-1">
-                <span>⚠️</span>
-                <span>Карточка будет перемещена в строку "{currentRelease?.title}"</span>
-              </p>
-            )}
-          </div>
-
-          {/* Status */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Статус
-            </label>
-            <div className="grid grid-cols-3 gap-3">
+        <div
+          ref={modalRef}
+          className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden"
+          tabIndex={-1}
+        >
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold">Редактирование истории</h2>
               <button
-                type="button"
-                onClick={() => setEditStatus('todo')}
+                onClick={onClose}
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-white/80 hover:text-white text-2xl font-light transition rounded-lg hover:bg-white/10"
                 disabled={saving}
-                className={`p-3 rounded-lg border-2 font-medium transition flex items-center justify-center gap-2 ${
-                  editStatus === 'todo'
-                    ? 'border-gray-500 bg-gray-50 text-gray-700'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                }`}
+                aria-label="Закрыть"
               >
-                <span className="text-lg">○</span>
-                <span>To Do</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditStatus('in_progress')}
-                disabled={saving}
-                className={`p-3 rounded-lg border-2 font-medium transition flex items-center justify-center gap-2 ${
-                  editStatus === 'in_progress'
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                }`}
-              >
-                <span className="text-lg">◐</span>
-                <span>In Progress</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditStatus('done')}
-                disabled={saving}
-                className={`p-3 rounded-lg border-2 font-medium transition flex items-center justify-center gap-2 ${
-                  editStatus === 'done'
-                    ? 'border-green-500 bg-green-50 text-green-700'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                }`}
-              >
-                <span className="text-lg">✓</span>
-                <span>Done</span>
+                ×
               </button>
             </div>
           </div>
 
-          {/* Acceptance Criteria */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Acceptance Criteria
-              <span className="text-gray-400 font-normal ml-2">(каждый критерий с новой строки)</span>
-            </label>
-            <textarea
-              value={editAC}
-              onChange={(e) => setEditAC(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none transition font-mono text-sm"
-              rows="4"
-              placeholder="• Пользователь может войти с email и паролем&#10;• Показывается сообщение об ошибке при неверных данных&#10;• После входа перенаправляется на главную"
-              disabled={saving}
-            />
-            {editAC.trim() && (
-              <p className="text-xs text-gray-500 mt-1">
-                {editAC.split('\n').filter(l => l.trim()).length} критериев
-              </p>
-            )}
-          </div>
-        </div>
+          {/* Body */}
+          <div className="p-6 space-y-5">
+            {/* Title */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Название истории *
+              </label>
+              <input
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                onBlur={() => setTitleTouched(true)}
+                className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
+                  titleError
+                    ? 'border-red-400 bg-red-50'
+                    : titleWarning
+                    ? 'border-orange-400 bg-orange-50'
+                    : editTitle.trim()
+                    ? 'border-green-400'
+                    : 'border-gray-300'
+                }`}
+                placeholder="Как пользователь, я хочу..."
+                autoFocus
+                disabled={saving}
+              />
+              <div className="flex justify-between mt-1">
+                <div>
+                  {titleError && <p className="text-xs text-red-600">{titleError}</p>}
+                  {!titleError && titleWarning && <p className="text-xs text-orange-600">{titleWarning}</p>}
+                </div>
+                <span className={`text-xs ${editTitle.length > 200 ? 'text-orange-600' : 'text-gray-400'}`}>
+                  {editTitle.length}/200
+                </span>
+              </div>
+            </div>
 
-        {/* Footer */}
-        <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-t">
-          <button
-            onClick={handleDelete}
-            disabled={saving}
-            className="text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg font-medium transition disabled:opacity-50"
-          >
-            Удалить
-          </button>
-          
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              disabled={saving}
-              className="px-5 py-2 rounded-lg font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 transition disabled:opacity-50"
-            >
-              Отмена
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving || !editTitle.trim()}
-              className="px-5 py-2 rounded-lg font-medium text-white bg-blue-600 hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {saving ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                  <span>Сохранение...</span>
-                </>
-              ) : (
-                'Сохранить'
+            {/* Description */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Описание
+              </label>
+              <textarea
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none transition"
+                rows="3"
+                placeholder="Подробное описание функциональности..."
+                disabled={saving}
+              />
+            </div>
+
+            {/* Release/Priority - теперь выбирает строку куда переместить */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Релиз
+                <span className="text-gray-400 font-normal ml-2">(строка на карте)</span>
+              </label>
+              <div className="grid grid-cols-3 gap-3">
+                {releases?.map((release) => (
+                  <button
+                    key={release.id}
+                    type="button"
+                    onClick={() => setEditReleaseId(release.id)}
+                    disabled={saving}
+                    className={getReleaseStyle(release.title, editReleaseId === release.id)}
+                  >
+                    {release.title}
+                  </button>
+                ))}
+              </div>
+              {editReleaseId !== story.release_id && (
+                <p className="text-xs text-orange-600 mt-2 flex items-center gap-1">
+                  <span>⚠️</span>
+                  <span>Карточка будет перемещена в строку "{currentRelease?.title}"</span>
+                </p>
               )}
-            </button>
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Статус
+              </label>
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditStatus('todo')}
+                  disabled={saving}
+                  className={`p-3 rounded-lg border-2 font-medium transition flex items-center justify-center gap-2 ${
+                    editStatus === 'todo'
+                      ? 'border-gray-500 bg-gray-50 text-gray-700'
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-lg">○</span>
+                  <span>К выполнению</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditStatus('in_progress')}
+                  disabled={saving}
+                  className={`p-3 rounded-lg border-2 font-medium transition flex items-center justify-center gap-2 ${
+                    editStatus === 'in_progress'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-lg">◐</span>
+                  <span>В работе</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditStatus('done')}
+                  disabled={saving}
+                  className={`p-3 rounded-lg border-2 font-medium transition flex items-center justify-center gap-2 ${
+                    editStatus === 'done'
+                      ? 'border-green-500 bg-green-50 text-green-700'
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-lg">✓</span>
+                  <span>Готово</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Acceptance Criteria */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Критерии приёмки
+                <span className="text-gray-400 font-normal ml-2">(каждый критерий с новой строки)</span>
+              </label>
+              <textarea
+                value={editAC}
+                onChange={(e) => setEditAC(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none transition font-mono text-sm"
+                rows="4"
+                placeholder="• Пользователь может войти с email и паролем&#10;• Показывается сообщение об ошибке при неверных данных&#10;• После входа перенаправляется на главную"
+                disabled={saving}
+              />
+              {editAC.trim() && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {editAC.split('\n').filter(l => l.trim()).length} критериев
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="bg-gray-50 px-6 py-4 border-t">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={handleDelete}
+                disabled={saving}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg font-medium transition disabled:opacity-50"
+              >
+                Удалить
+              </button>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={onClose}
+                  disabled={saving}
+                  className="px-5 py-2 rounded-lg font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 transition disabled:opacity-50"
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !editTitle.trim()}
+                  className="px-5 py-2 rounded-lg font-medium text-white bg-blue-600 hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {saving ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                      <span>Сохранение...</span>
+                    </>
+                  ) : (
+                    'Сохранить'
+                  )}
+                </button>
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-gray-400 text-center">
+              <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-gray-600">⌘S</kbd> сохранить
+              <span className="mx-2">·</span>
+              <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-gray-600">Esc</kbd> закрыть
+            </div>
           </div>
         </div>
       </div>
-    </div>
-    <ConfirmDialog
-      isOpen={confirmDeleteOpen}
-      title="Удалить эту карточку?"
-      description="Действие нельзя отменить. Карточка будет удалена без возможности восстановления."
-      confirmText="Удалить"
-      cancelText="Отмена"
-      onConfirm={handleConfirmDelete}
-      onCancel={() => setConfirmDeleteOpen(false)}
-      loading={saving}
-    />
+      <ConfirmDialog
+        isOpen={confirmDeleteOpen}
+        title="Удалить эту карточку?"
+        description="Действие нельзя отменить. Карточка будет удалена без возможности восстановления."
+        confirmText="Удалить"
+        cancelText="Отмена"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        loading={saving}
+      />
+    </>
   );
 }
 

@@ -108,10 +108,21 @@ function StoryCell({
                 placeholder="Название истории"
                 value={draft.title}
                 onChange={(e) => onUpdateDraft(cellId, { title: e.target.value, error: null })}
-                className="w-full mb-2 p-2 text-sm border rounded"
+                className={`w-full mb-1 p-2 text-sm border rounded transition ${
+                  draft.error
+                    ? 'border-red-400 bg-red-50'
+                    : draft.title && draft.title.length < 3
+                    ? 'border-orange-400 bg-orange-50'
+                    : draft.title && draft.title.length >= 3
+                    ? 'border-green-400'
+                    : 'border-gray-300'
+                }`}
                 autoFocus
                 aria-label="Название истории"
               />
+              {draft.title && draft.title.length > 0 && draft.title.length < 3 && (
+                <p className="text-[11px] text-orange-600 mb-1">Минимум 3 символа</p>
+              )}
               <textarea
                 placeholder="Описание (опционально)"
                 value={draft.description}
@@ -164,7 +175,7 @@ function StoryCell({
 }
 
 function DroppableCell({ cellId, taskId, releaseId, children }) {
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef, isOver, active } = useDroppable({
     id: cellId,
     data: {
       type: 'cell',
@@ -173,13 +184,23 @@ function DroppableCell({ cellId, taskId, releaseId, children }) {
     },
   });
 
+  // Показываем visual feedback только когда есть активный drag
+  const showDropIndicator = isOver && active;
+
   return (
     <div
       ref={setNodeRef}
-      className={`w-[220px] flex-shrink-0 p-2 border-r border-dashed border-gray-300 transition-colors ${
-        isOver ? 'bg-blue-50 border-blue-400' : 'bg-white'
+      className={`w-[220px] flex-shrink-0 p-2 border-r transition-all duration-200 ${
+        showDropIndicator
+          ? 'bg-blue-100 border-2 border-blue-500 border-dashed shadow-inner'
+          : 'bg-white border-dashed border-gray-300'
       }`}
     >
+      {showDropIndicator && (
+        <div className="mb-2 py-2 border-2 border-dashed border-blue-400 rounded-lg bg-blue-50 text-center text-xs text-blue-600 font-medium animate-pulse">
+          Отпустите здесь
+        </div>
+      )}
       {children}
     </div>
   );

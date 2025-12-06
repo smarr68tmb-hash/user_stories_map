@@ -1,6 +1,11 @@
 import { useRef, useState } from 'react';
+import {
+  Sparkles, X, FileText, CheckSquare, Scissors, AlertTriangle,
+  Loader2, CheckCircle, Info
+} from 'lucide-react';
 import api from './api';
 import useFocusTrap from './hooks/useFocusTrap';
+import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 
 function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImproved }) {
   const [prompt, setPrompt] = useState('');
@@ -12,25 +17,35 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
   const modalRef = useRef(null);
   useFocusTrap(modalRef, isOpen);
 
+  // Keyboard shortcuts
+  useKeyboardShortcuts([
+    { key: 'Escape', handler: onClose },
+    { key: 'Enter', ctrl: true, handler: () => !loading && prompt.trim() && handleImprove() },
+  ], isOpen);
+
   const quickActions = [
     {
       id: 'details',
-      label: '📝 Улучшить описание',
+      label: 'Улучшить описание',
+      icon: FileText,
       prompt: 'Сделай лучше и понятнее описание по best практикам User Story. Добавь контекст использования, бизнес-ценность и детали реализации. Убедись, что описание следует формату "Как [роль], я хочу [действие], чтобы [результат]" и содержит достаточно информации для понимания функциональности.'
     },
     {
       id: 'criteria',
-      label: '✅ Улучшить критерии',
+      label: 'Улучшить критерии',
+      icon: CheckSquare,
       prompt: 'Улучши и расширь acceptance criteria. Сделай их более конкретными, измеримыми и полными. Каждый критерий должен быть проверяемым, содержать конкретные условия и ожидаемые результаты. Добавь критерии для успешных сценариев и обработки ошибок.'
     },
     {
       id: 'split',
-      label: '✂️ Разделить',
+      label: 'Разделить',
+      icon: Scissors,
       prompt: 'Проанализируй историю и предложи, как её можно разделить на 2-3 более мелкие, независимые истории. Каждая новая история должна быть самодостаточной и иметь четкую бизнес-ценность.'
     },
     {
       id: 'edge_cases',
-      label: '⚠️ Edge cases',
+      label: 'Edge cases',
+      icon: AlertTriangle,
       prompt: 'Добавь edge cases (граничные случаи) в acceptance criteria. Подумай об ошибках, крайних ситуациях, невалидных данных, сетевых проблемах и других исключительных сценариях, которые нужно обработать.'
     }
   ];
@@ -117,13 +132,13 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in"
       role="dialog"
       aria-modal="true"
     >
       <div
         ref={modalRef}
-        className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto animate-scale-in"
         tabIndex={-1}
       >
         {/* Header */}
@@ -131,8 +146,8 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
           <div className="flex justify-between items-start">
             <div>
               <h2 className="text-2xl font-bold flex items-center gap-2">
-                <span>✨</span>
-                AI Assistant
+                <Sparkles className="w-6 h-6" />
+                AI Ассистент
               </h2>
               <p className="text-sm text-purple-100 mt-1">
                 Интерактивное улучшение карточки через AI
@@ -140,9 +155,10 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
             </div>
             <button
               onClick={onClose}
-              className="text-white hover:text-gray-200 text-2xl font-bold"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center text-white hover:text-gray-200 rounded-lg hover:bg-white/10 transition"
+              aria-label="Закрыть"
             >
-              ×
+              <X className="w-6 h-6" />
             </button>
           </div>
         </div>
@@ -163,7 +179,7 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
                 </span>
                 {story.acceptance_criteria && story.acceptance_criteria.length > 0 && (
                   <span className="text-xs px-2 py-1 bg-white rounded border border-yellow-300">
-                    {story.acceptance_criteria.length} AC
+                    {story.acceptance_criteria.length} КП
                   </span>
                 )}
               </div>
@@ -174,15 +190,19 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
           <div className="mb-6">
             <h3 className="font-semibold text-gray-800 mb-3">Быстрые действия:</h3>
             <div className="grid grid-cols-2 gap-3">
-              {quickActions.map(action => (
-                <button
-                  key={action.id}
-                  onClick={() => handleQuickAction(action)}
-                  className="p-3 text-left border-2 border-gray-200 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition"
-                >
-                  <span className="font-medium text-sm">{action.label}</span>
-                </button>
-              ))}
+              {quickActions.map(action => {
+                const IconComponent = action.icon;
+                return (
+                  <button
+                    key={action.id}
+                    onClick={() => handleQuickAction(action)}
+                    className="p-3 text-left border-2 border-gray-200 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition flex items-center gap-2"
+                  >
+                    <IconComponent className="w-4 h-4 text-purple-600" />
+                    <span className="font-medium text-sm">{action.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -213,12 +233,12 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
           >
             {loading ? (
               <>
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                <Loader2 className="w-5 h-5 animate-spin" />
                 <span>Улучшаем...</span>
               </>
             ) : (
               <>
-                <span>✨</span>
+                <Sparkles className="w-5 h-5" />
                 <span>Улучшить историю</span>
               </>
             )}
@@ -234,8 +254,8 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
           {/* Result */}
           {result && (
             <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <div className="flex items-start gap-2 mb-3">
-                <span className="text-2xl">✅</span>
+              <div className="flex items-start gap-3 mb-3">
+                <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0" />
                 <div className="flex-1">
                   <h4 className="font-semibold text-green-800">{result.message}</h4>
                   {result.suggestion && (
@@ -263,7 +283,7 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
                           </span>
                           {newStory.acceptance_criteria && newStory.acceptance_criteria.length > 0 && (
                             <span className="text-xs px-2 py-1 bg-gray-100 rounded">
-                              {newStory.acceptance_criteria.length} AC
+                              {newStory.acceptance_criteria.length} КП
                             </span>
                           )}
                         </div>
@@ -289,7 +309,7 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
                   )}
                   {result.improved_story.acceptance_criteria && result.improved_story.acceptance_criteria.length > 0 && (
                     <div className="mt-2">
-                      <p className="text-xs font-semibold text-gray-700">Acceptance Criteria:</p>
+                      <p className="text-xs font-semibold text-gray-700">Критерии приёмки:</p>
                       <ul className="text-xs text-gray-600 mt-1 space-y-1">
                         {result.improved_story.acceptance_criteria.map((ac, idx) => (
                           <li key={idx} className="flex items-start">
@@ -314,8 +334,8 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
                   <div key={idx} className="p-3 bg-gray-50 border border-gray-200 rounded text-sm">
                     <div className="flex justify-between items-start mb-1">
                       <span className="text-xs text-gray-500">{item.timestamp}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded ${item.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {item.success ? '✓' : '✗'}
+                      <span className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${item.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {item.success ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
                       </span>
                     </div>
                     <p className="text-gray-700">{item.prompt}</p>
@@ -329,7 +349,7 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
           {/* Rate Limit Info */}
           <div className="mt-6 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
             <p className="flex items-center gap-2">
-              <span>ℹ️</span>
+              <Info className="w-4 h-4" />
               <span>Лимит: 20 запросов в час на карточку</span>
             </p>
           </div>

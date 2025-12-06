@@ -45,7 +45,7 @@ function ActivityHeader({
     <div className="sticky top-0 z-10 bg-gray-50 border-b-2 border-gray-300">
       <div className="flex border-b border-gray-200">
         <div className="w-32 flex-shrink-0 bg-gray-100 border-r-2 border-gray-300 p-2 flex items-center justify-center">
-          <span className="text-xs font-bold text-gray-600 uppercase">Releases</span>
+          <span className="text-xs font-bold text-gray-600 uppercase">Релизы</span>
         </div>
         {activities.map((act) => {
           const activityWidth = activityWidths?.[act.id] ?? (act.tasks.length + 1) * taskColumnWidth;
@@ -89,10 +89,10 @@ function ActivityHeader({
                   >
                     {act.title}
                   </span>
-                  <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                  <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex">
                     <button
                       onClick={() => onStartEditingActivity(act)}
-                      className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-200 rounded disabled:opacity-50"
+                      className="min-w-[40px] min-h-[40px] flex items-center justify-center text-blue-600 hover:text-blue-800 hover:bg-blue-200 rounded disabled:opacity-50"
                       disabled={isDeleting || isUpdating}
                       title="Редактировать"
                     >
@@ -100,11 +100,11 @@ function ActivityHeader({
                     </button>
                     <button
                       onClick={() => onDeleteActivity(act.id)}
-                      className={`p-1 text-red-600 hover:text-red-800 hover:bg-red-200 rounded ${pendingDelete ? 'bg-red-100 border border-red-300' : ''}`}
+                      className={`min-w-[40px] min-h-[40px] flex items-center justify-center text-red-600 hover:text-red-800 hover:bg-red-200 rounded ${pendingDelete ? 'bg-red-100 border border-red-300' : ''}`}
                       disabled={isDeleting || isUpdating}
                       title="Удалить"
                     >
-                      {isDeleting ? '…' : pendingDelete ? 'Подтвердить' : '🗑️'}
+                      {isDeleting ? '…' : pendingDelete ? '✓' : '🗑️'}
                     </button>
                   </div>
                 </>
@@ -153,7 +153,7 @@ function ActivityHeader({
               className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 border-2 border-dashed border-gray-300 rounded transition"
               title="Добавить активность"
             >
-              + Activity
+              + Активность
             </button>
           )}
         </div>
@@ -240,7 +240,7 @@ function ActivityHeader({
                       className="w-full h-[60px] text-gray-400 hover:text-gray-600 hover:bg-gray-100 border-2 border-dashed border-gray-300 rounded transition text-xs flex items-center justify-center"
                       title="Добавить задачу"
                     >
-                      + Task
+                      + Задача
                     </button>
                   )}
                 </div>
@@ -254,7 +254,7 @@ function ActivityHeader({
 }
 
 function DroppableTaskZone({ activityId, children, className = '', style, id }) {
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef, isOver, active } = useDroppable({
     id: `activity-tasks-${activityId}`,
     data: {
       type: 'activity-tasks',
@@ -262,7 +262,10 @@ function DroppableTaskZone({ activityId, children, className = '', style, id }) 
     },
   });
 
-  const zoneClassName = `${className} ${isOver ? 'bg-blue-50' : ''}`.trim();
+  const showDropIndicator = isOver && active;
+  const zoneClassName = `${className} transition-all duration-200 ${
+    showDropIndicator ? 'bg-blue-100 ring-2 ring-blue-400 ring-inset rounded' : ''
+  }`.trim();
 
   return (
     <div

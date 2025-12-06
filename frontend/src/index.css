@@ -2,13 +2,106 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design Tokens as CSS Custom Properties */
+:root {
+  /* Colors - Primary */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+
+  /* Colors - Status */
+  --color-status-todo: #6b7280;
+  --color-status-progress: #3b82f6;
+  --color-status-done: #22c55e;
+
+  /* Colors - Priority */
+  --color-priority-mvp: #ef4444;
+  --color-priority-release1: #f97316;
+  --color-priority-later: #6b7280;
+
+  /* Colors - Surface */
+  --color-surface: #ffffff;
+  --color-surface-muted: #f9fafb;
+  --color-surface-subtle: #f3f4f6;
+  --color-surface-border: #e5e7eb;
+
+  /* Colors - Content */
+  --color-content: #111827;
+  --color-content-secondary: #4b5563;
+  --color-content-muted: #6b7280;
+  --color-content-subtle: #9ca3af;
+
+  /* Spacing */
+  --spacing-touch: 44px;
+  --spacing-touch-sm: 36px;
+
+  /* Border Radius */
+  --radius-card: 0.75rem;
+  --radius-button: 0.5rem;
+  --radius-input: 0.5rem;
+  --radius-modal: 0.75rem;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-card-drag: 0 12px 28px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.1);
+  --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+
+  /* Transitions */
+  --transition-fast: 150ms;
+  --transition-normal: 200ms;
+  --transition-slow: 300ms;
+}
+
 body {
-  background-color: #f3f4f6;
+  background-color: var(--color-surface-subtle);
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  color: var(--color-content);
+}
+
+/* Skeleton Loading */
+@layer components {
+  .skeleton {
+    @apply bg-gray-200 animate-pulse rounded;
+  }
+
+  .skeleton-text {
+    @apply skeleton h-4 w-full;
+  }
+
+  .skeleton-title {
+    @apply skeleton h-5 w-3/4;
+  }
+
+  .skeleton-card {
+    @apply skeleton rounded-card p-4;
+  }
+
+  .skeleton-avatar {
+    @apply skeleton rounded-full w-10 h-10;
+  }
+
+  .skeleton-button {
+    @apply skeleton h-9 w-24 rounded-button;
+  }
+}
+
+/* Focus styles for accessibility */
+@layer base {
+  *:focus-visible {
+    @apply outline-none ring-2 ring-primary-500 ring-offset-2;
+  }
+
+  button:focus-visible,
+  [role="button"]:focus-visible {
+    @apply ring-offset-0;
+  }
 }
 

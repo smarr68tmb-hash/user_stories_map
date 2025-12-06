@@ -10,6 +10,26 @@ function Auth({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [rememberCredentials, setRememberCredentials] = useState(false);
 
+  // Inline validation state
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+
+  // Validation functions
+  const validateEmail = (value) => {
+    if (!value) return 'Email обязателен';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Некорректный формат email';
+    return null;
+  };
+
+  const validatePassword = (value) => {
+    if (!value) return 'Пароль обязателен';
+    if (value.length < 8) return 'Минимум 8 символов';
+    return null;
+  };
+
+  const emailError = emailTouched ? validateEmail(email) : null;
+  const passwordError = passwordTouched ? validatePassword(password) : null;
+
   // Инициализируем состояние "запоминания" из пользовательской настройки
   useEffect(() => {
     const remember = localStorage.getItem('remember_credentials') === 'true';
@@ -97,10 +117,21 @@ function Auth({ onLogin }) {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onBlur={() => setEmailTouched(true)}
               required
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              autoComplete="email"
+              className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition ${
+                emailError
+                  ? 'border-red-400 bg-red-50'
+                  : emailTouched && !emailError
+                  ? 'border-green-400 bg-green-50'
+                  : 'border-gray-300'
+              }`}
               placeholder="your@email.com"
             />
+            {emailError && (
+              <p className="text-xs text-red-600 mt-1">{emailError}</p>
+            )}
           </div>
 
           <div>
@@ -111,11 +142,22 @@ function Auth({ onLogin }) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onBlur={() => setPasswordTouched(true)}
               required
               minLength={8}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              autoComplete={isLogin ? 'current-password' : 'new-password'}
+              className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition ${
+                passwordError
+                  ? 'border-red-400 bg-red-50'
+                  : passwordTouched && !passwordError
+                  ? 'border-green-400 bg-green-50'
+                  : 'border-gray-300'
+              }`}
               placeholder="Минимум 8 символов"
             />
+            {isLogin && passwordError && (
+              <p className="text-xs text-red-600 mt-1">{passwordError}</p>
+            )}
             {!isLogin && password && (
               <div className="mt-2 text-xs space-y-1">
                 <p className={password.length >= 8 ? "text-green-600" : "text-gray-400"}>
