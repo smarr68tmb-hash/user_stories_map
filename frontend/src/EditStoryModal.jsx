@@ -115,11 +115,11 @@ function EditStoryModal({
       }
     }
     
-    // Закрываем только AI Assistant, форму редактирования оставляем открытой
-    setAiAssistantOpen(false);
+    // НЕ закрываем AI Assistant - оставляем его открытым, чтобы пользователь видел результат
+    // Пользователь сам закроет окно когда захочет
+    // Также НЕ закрываем форму редактирования - она остается открытой с обновленными данными
     
     // Обновляем проект в фоне для синхронизации данных
-    // Форма редактирования останется открытой с уже обновленными данными
     if (onStoryImproved) {
       // Вызываем в фоне, не блокируя UI
       // Передаем улучшенную историю, callback может использовать или проигнорировать
@@ -171,7 +171,21 @@ function EditStoryModal({
           {/* Header */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-5 flex-shrink-0">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold">Редактирование истории</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold">Редактирование истории</h2>
+                {/* AI Button in header */}
+                {taskId && releaseId && (
+                  <button
+                    onClick={handleOpenAI}
+                    disabled={saving}
+                    className="px-4 py-2 rounded-lg font-medium transition-all duration-200 bg-white/10 hover:bg-white/20 text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 border border-white/20"
+                    aria-label="Улучшить с помощью AI"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>AI Улучшение</span>
+                  </button>
+                )}
+              </div>
               <button
                 onClick={onClose}
                 className="min-w-[44px] min-h-[44px] flex items-center justify-center text-white/90 hover:text-white text-2xl font-light transition rounded-lg hover:bg-white/10"
@@ -270,14 +284,14 @@ function EditStoryModal({
               <label className="block text-sm font-semibold text-gray-700 mb-2.5">
                 Статус
               </label>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => setEditStatus('todo')}
                   disabled={saving}
                   className={`px-4 py-3.5 rounded-lg border-2 font-medium transition-all duration-200 flex items-center justify-center gap-2.5 ${
                     editStatus === 'todo'
-                      ? 'border-gray-500 bg-gray-50 text-gray-700 shadow-sm'
+                      ? 'border-amber-500 bg-amber-50 text-amber-800 shadow-sm'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400 hover:bg-gray-50'
                   }`}
                   aria-label="Изменить статус на 'К выполнению'"
@@ -316,6 +330,21 @@ function EditStoryModal({
                   <span className="text-xl">✓</span>
                   <span>Готово</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setEditStatus('blocked')}
+                  disabled={saving}
+                  className={`px-4 py-3.5 rounded-lg border-2 font-medium transition-all duration-200 flex items-center justify-center gap-2.5 ${
+                    editStatus === 'blocked'
+                      ? 'border-rose-500 bg-rose-50 text-rose-700 shadow-sm'
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400 hover:bg-gray-50'
+                  }`}
+                  aria-label="Изменить статус на 'Заблокировано'"
+                  aria-pressed={editStatus === 'blocked'}
+                >
+                  <span className="text-xl">⊘</span>
+                  <span>Заблокировано</span>
+                </button>
               </div>
             </div>
 
@@ -347,30 +376,20 @@ function EditStoryModal({
               <button
                 onClick={handleDelete}
                 disabled={saving}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2.5 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2.5 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 aria-label="Удалить историю"
               >
-                Удалить
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>Удалить</span>
               </button>
-
-              {/* AI Button */}
-              {taskId && releaseId && (
-                <button
-                  onClick={handleOpenAI}
-                  disabled={saving}
-                  className="px-4 py-2.5 rounded-lg font-medium transition-all duration-200 bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:from-purple-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
-                  aria-label="Улучшить с помощью AI"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>AI Улучшение</span>
-                </button>
-              )}
 
               <div className="flex gap-3">
                 <button
                   onClick={onClose}
                   disabled={saving}
-                  className="px-5 py-2.5 rounded-lg font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2.5 rounded-lg font-semibold text-gray-700 bg-white border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label="Отменить изменения"
                 >
                   Отмена
@@ -378,7 +397,7 @@ function EditStoryModal({
                 <button
                   onClick={handleSave}
                   disabled={saving || !editTitle.trim()}
-                  className="px-5 py-2.5 rounded-lg font-medium text-white bg-blue-600 hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
+                  className="px-6 py-2.5 rounded-lg font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
                   aria-label="Сохранить изменения"
                 >
                   {saving ? (
@@ -387,15 +406,20 @@ function EditStoryModal({
                       <span>Сохранение...</span>
                     </>
                   ) : (
-                    'Сохранить'
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>Сохранить</span>
+                    </>
                   )}
                 </button>
               </div>
             </div>
-            <div className="text-xs text-gray-400 text-center">
-              <kbd className="px-2 py-1 bg-gray-200 rounded text-gray-600 font-mono">⌘S</kbd> сохранить
+            <div className="text-xs text-gray-500 text-center font-medium">
+              <kbd className="px-2 py-1 bg-white border border-gray-300 rounded text-gray-700 font-mono shadow-sm">⌘S</kbd> сохранить
               <span className="mx-2">·</span>
-              <kbd className="px-2 py-1 bg-gray-200 rounded text-gray-600 font-mono">Esc</kbd> закрыть
+              <kbd className="px-2 py-1 bg-white border border-gray-300 rounded text-gray-700 font-mono shadow-sm">Esc</kbd> закрыть
             </div>
           </div>
         </div>

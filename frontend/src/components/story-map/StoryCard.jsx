@@ -57,7 +57,12 @@ function StoryCard({
     'todo': <Circle className="w-4 h-4" />,
     'in_progress': <Clock className="w-4 h-4" />,
     'done': <Check className="w-4 h-4" />,
-    'blocked': <Circle className="w-4 h-4" />,
+    'blocked': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" strokeWidth="2" />
+        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" strokeWidth="2" />
+      </svg>
+    ),
   };
 
   const currentStatus = story.status || 'todo';
@@ -82,13 +87,13 @@ function StoryCard({
       <div
         ref={setNodeRef}
         style={style}
-        className={`relative p-3 rounded-lg shadow-sm hover:shadow-lg transition-all duration-200 text-sm border group cursor-pointer overflow-hidden ${statusToken.surface}`}
+        className={`relative p-4 rounded-xl shadow-md hover:shadow-xl transition-all duration-200 text-sm border-2 group cursor-pointer overflow-hidden ${statusToken.surface}`}
         onClick={onEdit}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
       {/* Status indicator bar (left side) */}
-      <div className={`absolute left-0 top-0 bottom-0 w-1 ${statusToken.indicator}`} />
+      <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${statusToken.indicator}`} />
 
       {/* Drag Handle - min 44x44px touch target */}
       <div
@@ -104,42 +109,42 @@ function StoryCard({
       </div>
 
       {/* Title with status toggle */}
-      <div className="flex items-start gap-2 pr-7">
+      <div className="flex items-start gap-3 pr-10">
         <button
           onClick={handleStatusClick}
           disabled={statusLoading}
-          className={`flex-shrink-0 w-7 h-7 min-w-[28px] min-h-[28px] rounded-full border-2 flex items-center justify-center text-sm font-bold transition-all hover:scale-110 ${
+          className={`flex-shrink-0 w-8 h-8 min-w-[32px] min-h-[32px] rounded-full border-2 flex items-center justify-center text-sm font-bold transition-all hover:scale-110 shadow-sm ${
             currentStatus === 'todo' ? statusToken.control.idle : statusToken.control.active
           }`}
           title={currentStatus === 'todo' ? 'Начать' : currentStatus === 'in_progress' ? 'Завершить' : 'Вернуть в работу'}
         >
           {statusLoading ? '…' : statusIcons[currentStatus]}
         </button>
-        <div className={`font-medium leading-snug mb-1.5 line-clamp-2 ${currentStatus === 'done' ? TEXT_TOKENS.done : TEXT_TOKENS.primary}`}>
+        <div className={`font-semibold text-base leading-snug mb-2 line-clamp-3 ${currentStatus === 'done' ? TEXT_TOKENS.done : TEXT_TOKENS.primary}`}>
           {story.title}
         </div>
       </div>
 
       {/* Description */}
       {story.description && (
-        <div className={`text-xs line-clamp-2 mb-2 ml-7 ${currentStatus === 'done' ? TEXT_TOKENS.muted : TEXT_TOKENS.secondary}`}>
+        <div className={`text-sm line-clamp-3 mb-3 ml-11 leading-relaxed ${currentStatus === 'done' ? TEXT_TOKENS.muted : TEXT_TOKENS.secondary}`}>
           {story.description}
         </div>
       )}
 
       {/* Footer: Priority + AC count */}
-      <div className="flex items-center gap-2 mt-auto pt-1 ml-7">
+      <div className="flex items-center gap-2 mt-auto pt-2 ml-11">
         {story.priority && (
-          <Badge variant={priorityVariant} size="xs" className="uppercase font-semibold">
+          <Badge variant={priorityVariant} size="sm" className="uppercase font-bold">
             {story.priority}
           </Badge>
         )}
         {story.acceptance_criteria && story.acceptance_criteria.length > 0 && (
-          <Badge variant="ghost" size="xs">
+          <Badge variant="ghost" size="sm" className="font-semibold">
             {story.acceptance_criteria.length} КП
           </Badge>
         )}
-        
+
         {/* AI Button - показывается при hover, min 44px touch target */}
         <button
           onClick={(e) => {
@@ -147,13 +152,13 @@ function StoryCard({
             e.stopPropagation();
             onOpenAI();
           }}
-          className={`ml-auto text-xs ${ACTION_TOKENS.ai.buttonSmall} transition opacity-0 group-hover:opacity-100 flex items-center gap-1`}
+          className={`ml-auto text-sm ${ACTION_TOKENS.ai.buttonSmall} transition opacity-0 group-hover:opacity-100 flex items-center gap-1.5 shadow-sm`}
           type="button"
           title="AI Ассистент"
           aria-label={`Улучшить историю "${story.title}" с помощью AI`}
         >
-          <Sparkles className="w-3 h-3" />
-          AI
+          <Sparkles className="w-4 h-4" />
+          <span className="font-medium">AI</span>
         </button>
       </div>
       </div>

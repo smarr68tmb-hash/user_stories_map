@@ -15,7 +15,7 @@ import { useToast } from './hooks/useToast';
 import { useProjectRefreshContext } from './context/ProjectRefreshContext';
 import { STATUS_OPTIONS } from './theme/tokens';
 
-const TASK_COLUMN_WIDTH = 220;
+const TASK_COLUMN_WIDTH = 280;
 const ACTIVITY_PADDING_COLUMNS = 1;
 
 function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
