@@ -91,31 +91,22 @@ User → POST /generate-map-async → 202 Accepted (job_id) [1 second]
 - ✅ Priority queues (важные задачи первыми)
 - ✅ Dead Letter Queue (анализ сбоев)
 
-### 1.4. Новая фича: Wireframe Generation
+### 1.4. Новая фича: Text-Based Wireframe Generation
 
-**Что делает:**
+**Что делает (актуально):**
 ```
-User Story: "Как пользователь, я хочу зарегистрироваться через email"
-                              ↓
-                         AI Analysis
-                              ↓
-              UI Description: "Registration form with:
-              - Email input field
-              - Password input field
-              - Confirm password field
-              - Submit button
-              - Link to login page"
-                              ↓
-                         DALL-E 3
-                              ↓
-              Wireframe Image (PNG, 1024x1024)
+User Story → AI (Gemini/Groq/Perplexity) → ASCII схема + Markdown описание
 ```
+
+- ASCII-вайрфрейм (box drawing)
+- Layout/Navigation/UI Elements в Markdown
+- Легко редактировать и хранить в git, нет изображений
 
 **Use cases:**
-1. **Product Manager:** Быстрая визуализация требований для обсуждения с командой
-2. **Designer:** Базовые wireframes как starting point
-3. **Developer:** Понимание ожидаемого UI до начала разработки
-4. **Stakeholder:** Наглядная демонстрация функциональности
+1. **Product Manager:** Быстрая визуализация требований в тексте
+2. **Designer:** Стартовая схема без графики
+3. **Developer:** Чёткое описание UI/flows
+4. **Stakeholder:** Быстрый просмотр без тяжёлых файлов
 
 ---
 
@@ -181,15 +172,15 @@ User Story: "Как пользователь, я хочу зарегистрир
 │  │  2. Update job  │  │  2. Update job   │  │  2. Process    │ │
 │  │     status:     │  │     status:      │  │     parallel   │ │
 │  │     processing  │  │     processing   │  │  3. Notify     │ │
-│  │  3. Call Groq/  │  │  3. Get stories  │  │                │ │
-│  │     OpenAI      │  │  4. Generate     │  │                │ │
-│  │  4. Save to DB  │  │     prompts      │  │                │ │
-│  │  5. Update job  │  │  5. Call GPT-4   │  │                │ │
-│  │     status:     │  │  6. Call DALL-E  │  │                │ │
-│  │     completed   │  │  7. Upload to    │  │                │ │
-│  │  6. Notify WS   │  │     Cloudinary   │  │                │ │
-│  │                 │  │  8. Update job   │  │                │ │
-│  │  Scale: N×      │  │  9. Notify WS    │  │                │ │
+│  │  3. Call AI     │  │  3. Get stories  │  │                │ │
+│  │     (Gemini/    │  │  4. Generate     │  │                │ │
+│  │      Groq/      │  │     text prompt  │  │                │ │
+│  │      Perplexity)│  │  5. Call AI      │  │                │ │
+│  │  4. Save to DB  │  │     (ASCII/MD)   │  │                │ │
+│  │  5. Update job  │  │  6. Update job   │  │                │ │
+│  │     status:     │  │     status       │  │                │ │
+│  │     completed   │  │  7. Notify WS    │  │                │ │
+│  │  6. Notify WS   │  │                  │  │                │ │
 │  │                 │  │                  │  │                │ │
 │  └────────┬────────┘  └────────┬─────────┘  └────────┬───────┘ │
 └───────────┼──────────────────┼───────────────────────┼─────────┘
@@ -197,14 +188,13 @@ User Story: "Как пользователь, я хочу зарегистрир
             ↓                  ↓                       ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │                    EXTERNAL SERVICES                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │     Groq     │  │   OpenAI     │  │  Cloudinary  │          │
-│  │     API      │  │   GPT-4 +    │  │  (Image      │          │
-│  │              │  │   DALL-E 3   │  │   Storage)   │          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│  ┌──────────────┐  ┌──────────────┐                             │
+│  │   Gemini     │  │    Groq      │                             │
+│  │ /Perplexity  │  │ (fallback)   │                             │
+│  └──────────────┘  └──────────────┘                             │
 └─────────────────────────────────────────────────────────────────┘
-            │                  │                       │
-            ↓                  ↓                       ↓
+            │                  │
+            ↓                  ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │                    DATA LAYER                                   │
 │  ┌──────────────┐  ┌──────────────┐                            │
@@ -308,7 +298,7 @@ User Story: "Как пользователь, я хочу зарегистрир
 33s   Frontend loads project
 ```
 
-#### 2.2.2. Wireframe Generation Flow (NEW)
+#### 2.2.2. Wireframe Generation Flow (Text-Based)
 
 ```
 [1] User selects stories + clicks "Generate Wireframes"
@@ -332,88 +322,32 @@ User Story: "Как пользователь, я хочу зарегистрир
        ↓
 [4] RabbitMQ: Route to "ai.wireframe.generation" queue
        ↓
-[5] Wireframe Worker (workers/wireframe_worker.py):
+[5] Wireframe Worker (workers/wireframe_worker_text.py):
        • Consume message
        • Update status: "processing"
 
        FOR EACH story:
          [5.1] Load story from DB (with context: task, activity)
 
-         [5.2] Build UI description prompt:
-               """
-               User Story: "Как пользователь, я хочу зарегистрироваться..."
+         [5.2] Build text wireframe prompt (style/platform-aware)
 
-               Создай детальное описание UI:
-               - Какие элементы (кнопки, поля)
-               - Расположение (header, main, footer)
-               - Навигация и flow
+         [5.3] Call AI provider (Gemini/Groq/Perplexity) via generate_ai_response()
+               → получаем текст с блоком ```ascii``` + разделы
 
-               Стиль: low-fidelity
-               Платформа: web
-               """
+         [5.4] Parse response:
+               - ascii_wireframe
+               - layout_description
+               - ui_elements
+               - navigation
+               - notes
 
-         [5.3] Call GPT-4:
-               response = openai.chat.completions.create(
-                 model="gpt-4o",
-                 messages=[...],
-               )
-               ui_description = response.choices[0].message.content
+         [5.5] Update progress in Redis (ascii + markdown, без изображений)
 
-               Example output:
-               "Экран регистрации состоит из:
-                1. Header с логотипом и навигацией
-                2. Центральная форма:
-                   - Email input (с валидацией)
-                   - Password input (с индикатором силы)
-                   - Confirm password
-                   - Чекбокс 'Согласен с условиями'
-                   - Кнопка 'Зарегистрироваться'
-                3. Footer с ссылками"
-
-         [5.4] Build DALL-E prompt:
-               """
-               Create a low-fidelity wireframe for web interface.
-
-               Black and white, simple boxes and lines, minimal detail.
-
-               UI Description:
-               [ui_description from step 5.3]
-
-               Style: Simple wireframe sketch
-               """
-
-         [5.5] Call DALL-E 3:
-               image_response = openai.images.generate(
-                 model="dall-e-3",
-                 prompt=image_prompt,
-                 size="1024x1024",
-                 quality="standard"
-               )
-               temp_image_url = image_response.data[0].url
-
-         [5.6] Upload to Cloudinary:
-               import cloudinary.uploader
-               result = cloudinary.uploader.upload(
-                 temp_image_url,
-                 folder=f"wireframes/{project_id}",
-                 public_id=f"story_{story.id}_{timestamp}"
-               )
-               permanent_url = result["secure_url"]
-
-         [5.7] Update progress in Redis:
-               result = {
-                 "progress": "2/3",
-                 "completed": [
-                   {story_id: 1, image_url: "..."},
-                   {story_id: 2, image_url: "..."}
-                 ]
-               }
-
-       [5.8] Update status: "completed"
+       [5.6] Update status: "completed"
        ↓
 [6] WebSocket notification to user
        ↓
-[7] Frontend displays wireframe gallery
+[7] Frontend renders ASCII/Markdown wireframe
 ```
 
 ### 2.3. RabbitMQ Exchange & Queue Topology
@@ -441,7 +375,7 @@ Exchange: ai.tasks (type: topic, durable: true)
 │        - x-message-ttl: 3600000
 │        - x-max-priority: 10
 │        - x-dead-letter-exchange: "dlx.ai.tasks"
-│      • consumers: wireframe_worker.py (1-N instances)
+│      • consumers: wireframe_worker_text.py (1-N instances)
 │
 └─ Binding: routing_key = "ai.task.bulk.#"
    │
@@ -618,42 +552,11 @@ brew install redis
    amqps://username:password@host.cloudamqp.com/vhost
 ```
 
-**2. Cloudinary (Image hosting)**
-- URL: https://cloudinary.com/
-- План: Free tier
-- Лимиты:
-  - 25 GB storage
-  - 25 GB bandwidth/month
-  - 25k transformations/month
+**2. AI API (для text wireframes)**
+- Ключи: GEMINI_API_KEY / GROQ_API_KEY / PERPLEXITY_API_KEY
+- Модели текстовые; изображения не требуются
 
-**Регистрация:**
-```
-1. Перейти на cloudinary.com
-2. Sign Up (Email)
-3. Dashboard → Settings → Security
-4. Скопировать credentials:
-   CLOUDINARY_CLOUD_NAME=your-cloud-name
-   CLOUDINARY_API_KEY=123456789012345
-   CLOUDINARY_API_SECRET=abcdefghijklmnopqrstuvwxyz
-```
-
-**3. OpenAI API (для wireframes)**
-- URL: https://platform.openai.com/
-- Необходимо: GPT-4 + DALL-E 3 access
-- Стоимость:
-  - GPT-4: ~$0.03 per 1K tokens (~$0.10 per wireframe description)
-  - DALL-E 3: $0.04 per image (1024x1024, standard quality)
-  - **Итого:** ~$0.14 per wireframe
-
-**Получение API Key:**
-```
-1. platform.openai.com → Sign in
-2. API Keys → Create new secret key
-3. Скопировать: OPENAI_API_KEY=sk-...
-4. Установить billing limits для безопасности
-```
-
-**4. Supabase (PostgreSQL) - уже используется**
+**3. Supabase (PostgreSQL) - уже используется**
 - URL: https://supabase.com/
 - План: Free tier
 - Лимиты:
@@ -743,15 +646,13 @@ check_env() {
 
 check_env "DATABASE_URL"
 check_env "REDIS_URL"
-check_env "OPENAI_API_KEY"
+check_env "GEMINI_API_KEY"
 check_env "GROQ_API_KEY"
+check_env "PERPLEXITY_API_KEY"
 
 echo ""
 echo "=== New Required Variables ==="
 check_env "RABBITMQ_URL"
-check_env "CLOUDINARY_CLOUD_NAME"
-check_env "CLOUDINARY_API_KEY"
-check_env "CLOUDINARY_API_SECRET"
 
 echo ""
 echo "✅ Environment check complete!"
@@ -836,18 +737,12 @@ CLOUDAMQP_URL=amqps://username:password@host.cloudamqp.com/vhost
 # RABBITMQ_URL=amqp://admin:admin123@localhost:5672/
 
 # ========================================
-# Image Storage (Cloudinary)
 # ========================================
-CLOUDINARY_CLOUD_NAME=your-cloud-name
-CLOUDINARY_API_KEY=123456789012345
-CLOUDINARY_API_SECRET=abcdefghijklmnopqrstuvwxyz
-
+# AI API Keys (text wireframes)
 # ========================================
-# AI API Keys (existing)
-# ========================================
-GROQ_API_KEY=gsk-your-key-here
-OPENAI_API_KEY=sk-your-key-here
-PERPLEXITY_API_KEY=pplx-your-key-here
+GEMINI_API_KEY=AIza...
+GROQ_API_KEY=gsk-...
+PERPLEXITY_API_KEY=pplx-...
 
 # ========================================
 # Database (existing)
@@ -1611,16 +1506,16 @@ class Settings:
         # ==========================================
         # API Keys (existing)
         # ==========================================
-        self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-        self.PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
+        self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
         self.GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+        self.PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
         self.API_PROVIDER = os.getenv("API_PROVIDER", "")
         self.API_MODEL = os.getenv("API_MODEL", "")
         self.API_TEMPERATURE = float(os.getenv("API_TEMPERATURE", "0.7"))
 
-        # Приоритет провайдеров для fallback
+        # Приоритет провайдеров для fallback (текстовые)
         self.AI_PROVIDER_PRIORITY = [
-            p.strip() for p in os.getenv("AI_PROVIDER_PRIORITY", "groq,perplexity,openai").split(",")
+            p.strip() for p in os.getenv("AI_PROVIDER_PRIORITY", "gemini,groq,perplexity").split(",")
             if p.strip()
         ]
 
@@ -1654,7 +1549,7 @@ class Settings:
         )
 
         # ==========================================
-        # RabbitMQ Configuration (NEW)
+        # RabbitMQ Configuration
         # ==========================================
         self.RABBITMQ_ENABLED = os.getenv("RABBITMQ_ENABLED", "false").lower() == "true"
 
@@ -1683,19 +1578,9 @@ class Settings:
         self.RABBITMQ_HEARTBEAT = 60  # seconds
 
         # ==========================================
-        # Cloudinary (для хранения wireframes) (NEW)
-        # ==========================================
-        self.CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
-        self.CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "")
-        self.CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "")
-
-        # ==========================================
-        # Wireframe Generation Settings (NEW)
+        # Wireframe Generation Settings (text)
         # ==========================================
         self.WIREFRAME_MAX_STORIES = int(os.getenv("WIREFRAME_MAX_STORIES", "10"))
-        self.WIREFRAME_DALLE_MODEL = os.getenv("WIREFRAME_DALLE_MODEL", "dall-e-3")
-        self.WIREFRAME_IMAGE_SIZE = os.getenv("WIREFRAME_IMAGE_SIZE", "1024x1024")
-        self.WIREFRAME_IMAGE_QUALITY = os.getenv("WIREFRAME_IMAGE_QUALITY", "standard")
 
         # ==========================================
         # Logging (existing)
@@ -1726,37 +1611,37 @@ class Settings:
             return
 
         for provider in self.AI_PROVIDER_PRIORITY:
-            if provider == "groq" and self.GROQ_API_KEY:
+            if provider == "gemini" and self.GEMINI_API_KEY:
+                self.API_PROVIDER = "gemini"
+                return
+            elif provider == "groq" and self.GROQ_API_KEY:
                 self.API_PROVIDER = "groq"
                 return
             elif provider == "perplexity" and self.PERPLEXITY_API_KEY:
                 self.API_PROVIDER = "perplexity"
                 return
-            elif provider == "openai" and self.OPENAI_API_KEY:
-                self.API_PROVIDER = "openai"
-                return
 
         # Fallback: определяем по формату ключа
         api_key = self.get_api_key()
         if api_key:
-            if api_key.startswith("gsk_"):
+            if api_key.startswith("AIza"):
+                self.API_PROVIDER = "gemini"
+            elif api_key.startswith("gsk_"):
                 self.API_PROVIDER = "groq"
             elif api_key.startswith("pplx-"):
                 self.API_PROVIDER = "perplexity"
-            elif api_key.startswith("sk-"):
-                self.API_PROVIDER = "openai"
 
     def _set_default_model(self):
         """Установка модели по умолчанию"""
         if self.API_MODEL:
             return
 
-        if self.API_PROVIDER == "groq":
+        if self.API_PROVIDER == "gemini":
+            self.API_MODEL = "gemini-2.0-flash-exp"
+        elif self.API_PROVIDER == "groq":
             self.API_MODEL = "llama-3.3-70b-versatile"
         elif self.API_PROVIDER == "perplexity":
             self.API_MODEL = "sonar"
-        elif self.API_PROVIDER == "openai":
-            self.API_MODEL = "gpt-4o"
 
     def _validate_settings(self):
         """Валидация настроек при запуске"""
@@ -1789,18 +1674,8 @@ class Settings:
             else:
                 logger.info(f"✅ RabbitMQ enabled: {self._mask_url(self.RABBITMQ_URL)}")
 
-                # Check OpenAI API key for wireframes
-                if not self.OPENAI_API_KEY:
-                    warnings.append("OPENAI_API_KEY not set. Wireframe generation will not work.")
         else:
             logger.info("ℹ️ RabbitMQ disabled - using synchronous processing")
-
-        # Cloudinary (NEW)
-        if self.CLOUDINARY_CLOUD_NAME and self.CLOUDINARY_API_KEY:
-            logger.info("✅ Cloudinary configured for image storage")
-        else:
-            if self.RABBITMQ_ENABLED:
-                warnings.append("Cloudinary not configured. Wireframes will use temporary URLs.")
 
         # Отображение ошибок и предупреждений
         if errors:
@@ -1815,22 +1690,22 @@ class Settings:
     def get_api_key(self) -> str:
         """Возвращает активный API ключ"""
         for provider in self.AI_PROVIDER_PRIORITY:
-            if provider == "groq" and self.GROQ_API_KEY:
+            if provider == "gemini" and self.GEMINI_API_KEY:
+                return self.GEMINI_API_KEY
+            elif provider == "groq" and self.GROQ_API_KEY:
                 return self.GROQ_API_KEY
             elif provider == "perplexity" and self.PERPLEXITY_API_KEY:
                 return self.PERPLEXITY_API_KEY
-            elif provider == "openai" and self.OPENAI_API_KEY:
-                return self.OPENAI_API_KEY
-        return self.OPENAI_API_KEY or self.PERPLEXITY_API_KEY or self.GROQ_API_KEY
+        return self.GEMINI_API_KEY or self.GROQ_API_KEY or self.PERPLEXITY_API_KEY
 
     def get_api_key_for_provider(self, provider: str) -> Optional[str]:
         """Возвращает API ключ для конкретного провайдера"""
-        if provider == "groq":
+        if provider == "gemini":
+            return self.GEMINI_API_KEY
+        elif provider == "groq":
             return self.GROQ_API_KEY
         elif provider == "perplexity":
             return self.PERPLEXITY_API_KEY
-        elif provider == "openai":
-            return self.OPENAI_API_KEY
         return None
 
     def get_available_providers(self) -> List[str]:
@@ -1853,11 +1728,6 @@ class Settings:
         """Проверяет, используется ли SQLite"""
         return self.DATABASE_URL.startswith("sqlite")
 
-    def _mask_url(self, url: str) -> str:
-        """Маскировка пароля в URL для логов"""
-        import re
-        return re.sub(r'://([^:]+):([^@]+)@', r'://\1:***@', url)
-
 
 # Singleton instance
 settings = Settings()
@@ -1872,9 +1742,8 @@ python -c "from config import settings; print('Config loaded successfully!')"
 
 **Ожидаемый вывод:**
 ```
-✅ AI providers available: groq, openai
+✅ AI providers available: gemini, groq, perplexity
 ✅ RabbitMQ enabled: amqps://vrcptkqu:***@hawk-01.rmq.cloudamqp.com/vrcptkqu
-✅ Cloudinary configured for image storage
 Config loaded successfully!
 ```
 

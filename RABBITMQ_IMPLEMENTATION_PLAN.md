@@ -552,30 +552,28 @@ python workers/map_worker.py
 
 ---
 
-## 3.2. Wireframe Generation Worker
+## 3.2. Wireframe Generation Worker (текстовый)
 
-### 3.2.1. Полный код Wireframe Worker
+### 3.2.1. Актуальный воркер
 
-Создайте `backend/workers/wireframe_worker.py`:
+Используется существующий `backend/workers/wireframe_worker_text.py` (ASCII/Markdown, без изображений):
 
 ```python
 #!/usr/bin/env python3
 """
-RabbitMQ Consumer для генерации Wireframes/Прототипов
+RabbitMQ Consumer для генерации Text-based Wireframes
 
 Функции:
 - Потребление из очереди ai.wireframe.generation
-- Генерация UI описаний через GPT-4
-- Генерация изображений через DALL-E 3
-- Загрузка в Cloudinary
+- Генерация ASCII/Markdown UI wireframes через AI (Gemini/Groq/Perplexity)
+- Структурированные описания UI (layout/navigation/ui elements)
 - Обновление прогресса в Redis
 
 Зависимости:
-- OpenAI API (GPT-4 + DALL-E 3)
-- Cloudinary (optional, для permanent storage)
+- AI ключи: GEMINI_API_KEY / GROQ_API_KEY / PERPLEXITY_API_KEY
 
 Запуск:
-    python workers/wireframe_worker.py
+    python workers/wireframe_worker_text.py
 """
 import asyncio
 import logging
