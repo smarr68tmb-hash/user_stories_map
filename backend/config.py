@@ -14,16 +14,16 @@ class Settings:
     
     def __init__(self):
         # API Keys
-        self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-        self.PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
+        self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
         self.GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+        self.PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
         self.API_PROVIDER = os.getenv("API_PROVIDER", "")
         self.API_MODEL = os.getenv("API_MODEL", "")
         self.API_TEMPERATURE = float(os.getenv("API_TEMPERATURE", "0.7"))
-        
-        # Приоритет провайдеров для fallback (через запятую: "groq,perplexity,openai")
+
+        # Приоритет провайдеров для fallback (через запятую: "gemini,groq,perplexity")
         self.AI_PROVIDER_PRIORITY = [
-            p.strip() for p in os.getenv("AI_PROVIDER_PRIORITY", "groq,perplexity,openai").split(",")
+            p.strip() for p in os.getenv("AI_PROVIDER_PRIORITY", "gemini,groq,perplexity").split(",")
             if p.strip()
         ]
         
@@ -65,29 +65,29 @@ class Settings:
         """Автоопределение API провайдера по ключу"""
         if self.API_PROVIDER:
             return
-        
+
         # Определяем провайдера по первому доступному ключу в порядке приоритета
         for provider in self.AI_PROVIDER_PRIORITY:
-            if provider == "groq" and self.GROQ_API_KEY:
+            if provider == "gemini" and self.GEMINI_API_KEY:
+                self.API_PROVIDER = "gemini"
+                return
+            elif provider == "groq" and self.GROQ_API_KEY:
                 self.API_PROVIDER = "groq"
                 return
             elif provider == "perplexity" and self.PERPLEXITY_API_KEY:
                 self.API_PROVIDER = "perplexity"
                 return
-            elif provider == "openai" and self.OPENAI_API_KEY:
-                self.API_PROVIDER = "openai"
-                return
-        
+
         # Fallback: определяем по формату ключа (для обратной совместимости)
         api_key = self.get_api_key()
         if api_key:
             # Только если ключ существует, определяем провайдера по формату
-            if api_key.startswith("gsk_"):
+            if api_key.startswith("AIza"):
+                self.API_PROVIDER = "gemini"
+            elif api_key.startswith("gsk_"):
                 self.API_PROVIDER = "groq"
             elif api_key.startswith("pplx-"):
                 self.API_PROVIDER = "perplexity"
-            elif api_key.startswith("sk-"):
-                self.API_PROVIDER = "openai"
             # Если ключ есть, но формат не распознан, не устанавливаем провайдера
             # (оставляем пустую строку, что означает "не определен")
         # Если ключа нет, оставляем API_PROVIDER пустым (не устанавливаем по умолчанию)
@@ -96,14 +96,14 @@ class Settings:
         """Установка модели по умолчанию"""
         if self.API_MODEL:
             return
-        
+
         # Устанавливаем модель только если провайдер определен
-        if self.API_PROVIDER == "groq":
+        if self.API_PROVIDER == "gemini":
+            self.API_MODEL = "gemini-2.0-flash-exp"
+        elif self.API_PROVIDER == "groq":
             self.API_MODEL = "llama-3.3-70b-versatile"
         elif self.API_PROVIDER == "perplexity":
             self.API_MODEL = "sonar"
-        elif self.API_PROVIDER == "openai":
-            self.API_MODEL = "gpt-4o"
         # Если провайдер не определен (нет ключей), оставляем API_MODEL пустым
         # Это предотвращает вводящее в заблуждение состояние
     
@@ -132,22 +132,22 @@ class Settings:
         """Возвращает активный API ключ (для обратной совместимости)"""
         # Возвращаем первый доступный ключ в порядке приоритета
         for provider in self.AI_PROVIDER_PRIORITY:
-            if provider == "groq" and self.GROQ_API_KEY:
+            if provider == "gemini" and self.GEMINI_API_KEY:
+                return self.GEMINI_API_KEY
+            elif provider == "groq" and self.GROQ_API_KEY:
                 return self.GROQ_API_KEY
             elif provider == "perplexity" and self.PERPLEXITY_API_KEY:
                 return self.PERPLEXITY_API_KEY
-            elif provider == "openai" and self.OPENAI_API_KEY:
-                return self.OPENAI_API_KEY
-        return self.OPENAI_API_KEY or self.PERPLEXITY_API_KEY or self.GROQ_API_KEY
+        return self.GEMINI_API_KEY or self.GROQ_API_KEY or self.PERPLEXITY_API_KEY
     
     def get_api_key_for_provider(self, provider: str) -> Optional[str]:
         """Возвращает API ключ для конкретного провайдера"""
-        if provider == "groq":
+        if provider == "gemini":
+            return self.GEMINI_API_KEY
+        elif provider == "groq":
             return self.GROQ_API_KEY
         elif provider == "perplexity":
             return self.PERPLEXITY_API_KEY
-        elif provider == "openai":
-            return self.OPENAI_API_KEY
         return None
     
     def get_available_providers(self) -> List[str]:
