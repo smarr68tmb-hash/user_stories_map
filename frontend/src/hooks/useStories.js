@@ -45,16 +45,18 @@ export function useStories({ project, onUpdate, refreshProject, onUnauthorized, 
 
   const withSyncedRelease = useCallback(
     (updates = {}) => {
-      if (updates.release_id !== undefined && updates.release_id !== null) {
-        return updates;
-      }
-
       if (!updates.priority) {
         return updates;
       }
 
       const mappedRelease = findReleaseByPriority(updates.priority);
-      if (mappedRelease?.id) {
+      if (!mappedRelease?.id) {
+        return updates;
+      }
+
+      // Приоритет важнее выбранной колонки: если priority указывает на другой релиз,
+      // синхронизируем release_id под него.
+      if (updates.release_id === undefined || updates.release_id === null || updates.release_id !== mappedRelease.id) {
         return { ...updates, release_id: mappedRelease.id };
       }
 

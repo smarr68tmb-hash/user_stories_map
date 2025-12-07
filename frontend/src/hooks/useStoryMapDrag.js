@@ -30,6 +30,15 @@ function useStoryMapDrag({
     [allTasks],
   );
 
+  const findStoriesInCell = useCallback(
+    (taskId, releaseId) => {
+      const task = allTasks.find((t) => t.id === taskId);
+      if (!task) return [];
+      return task.stories.filter((s) => s.release_id === releaseId);
+    },
+    [allTasks],
+  );
+
   const handleDragEnd = useCallback(
     async (event) => {
       const { active, over } = event;
@@ -68,8 +77,10 @@ function useStoryMapDrag({
       if (overId.startsWith('cell-')) {
         const cellParts = overId.replace('cell-', '').split('-');
         const targetTaskId = Number(cellParts[0]);
-        const targetReleaseId = Number(cellParts[1]);
-        await moveStory(storyId, targetTaskId, targetReleaseId, 0);
+        const targetReleaseIdRaw = Number(cellParts[1]);
+        const targetReleaseId = Number.isNaN(targetReleaseIdRaw) ? null : targetReleaseIdRaw;
+        const storiesInCell = findStoriesInCell(targetTaskId, targetReleaseId);
+        await moveStory(storyId, targetTaskId, targetReleaseId, storiesInCell.length);
         return;
       }
 
@@ -77,17 +88,25 @@ function useStoryMapDrag({
       if (overParts.length === 3) {
         const targetStoryId = Number(overParts[0]);
         const targetTaskId = Number(overParts[1]);
-        const targetReleaseId = Number(overParts[2]);
+        const targetReleaseIdRaw = Number(overParts[2]);
+        const targetReleaseId = Number.isNaN(targetReleaseIdRaw) ? null : targetReleaseIdRaw;
 
         if (targetStoryId !== storyId) {
           const targetStory = findStory(targetTaskId, targetReleaseId, targetStoryId);
           if (targetStory) {
-            await moveStory(storyId, targetTaskId, targetReleaseId, targetStory.position);
+            const sortableIndex = over?.data?.current?.sortable?.index;
+            const targetPosition =
+              typeof sortableIndex === 'number'
+                ? sortableIndex
+                : typeof targetStory.position === 'number'
+                  ? targetStory.position
+                  : 0;
+            await moveStory(storyId, targetTaskId, targetReleaseId, targetPosition);
           }
         }
       }
     },
-    [findStory, isStoryDragDisabled, isTaskDragDisabled, moveStory, moveTask, project.activities],
+    [findStoriesInCell, findStory, isStoryDragDisabled, isTaskDragDisabled, moveStory, moveTask, project.activities],
   );
 
   return { sensors, handleDragEnd };

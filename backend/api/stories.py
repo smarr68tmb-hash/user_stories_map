@@ -3,6 +3,7 @@ User Story CRUD endpoints
 """
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -29,6 +30,22 @@ limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
 
 
+def _find_release_by_priority(db: Session, project_id: int, priority: str):
+    """
+    Return a release that matches the given priority (case-insensitive) inside the project.
+    Priority acts as a source of truth: if it points to another release, use that release.
+    """
+    if not priority or not project_id:
+        return None
+
+    return (
+        db.query(Release)
+        .filter(Release.project_id == project_id)
+        .filter(func.lower(Release.title) == func.lower(priority))
+        .first()
+    )
+
+
 @router.post("/story", response_model=StoryResponse)
 @limiter.limit("30/minute")
 def create_story(
@@ -48,12 +65,18 @@ def create_story(
     
     if not task:
         raise HTTPException(status_code=404, detail="Task not found or access denied")
+
+    project_id = task.activity.project_id if task.activity else None
+
+    # Priority has precedence over the column: map priority to matching release, if any
+    priority_release = _find_release_by_priority(db, project_id, story.priority)
+    target_release_id = priority_release.id if priority_release else story.release_id
     
     # Если release_id указан, проверяем его существование и владельца
-    if story.release_id:
+    if target_release_id:
         release = db.query(Release)\
             .join(Project)\
-            .filter(Release.id == story.release_id)\
+            .filter(Release.id == target_release_id)\
             .filter(Project.user_id == current_user.id)\
             .first()
         if not release:
@@ -62,12 +85,12 @@ def create_story(
     # Определяем позицию (в конец списка)
     max_position = db.query(UserStory)\
         .filter(UserStory.task_id == story.task_id)\
-        .filter(UserStory.release_id == story.release_id)\
+        .filter(UserStory.release_id == target_release_id)\
         .count()
     
     new_story = UserStory(
         task_id=story.task_id,
-        release_id=story.release_id,
+        release_id=target_release_id,
         title=story.title,
         description=story.description,
         priority=story.priority or "Later",
@@ -113,6 +136,14 @@ def update_story(
     
     if not story:
         raise HTTPException(status_code=404, detail="Story not found or access denied")
+
+    project_id = story.task.activity.project_id if story.task and story.task.activity else None
+
+    # Determine target release respecting priority (priority wins over provided release_id)
+    target_release_id = story_update.release_id if story_update.release_id is not None else story.release_id
+    priority_release = _find_release_by_priority(db, project_id, story_update.priority)
+    if priority_release:
+        target_release_id = priority_release.id
     
     # Обновляем только переданные поля
     if story_update.title is not None:
@@ -123,13 +154,17 @@ def update_story(
         story.priority = story_update.priority
     if story_update.acceptance_criteria is not None:
         story.acceptance_criteria = story_update.acceptance_criteria
-    if story_update.release_id is not None:
+    if target_release_id is not None:
         # Проверяем существование release
-        if story_update.release_id:
-            release = db.query(Release).filter(Release.id == story_update.release_id).first()
+        if target_release_id:
+            release = db.query(Release)\
+                .join(Project)\
+                .filter(Release.id == target_release_id)\
+                .filter(Project.user_id == current_user.id)\
+                .first()
             if not release:
-                raise HTTPException(status_code=404, detail="Release not found")
-        story.release_id = story_update.release_id
+                raise HTTPException(status_code=404, detail="Release not found or access denied")
+        story.release_id = target_release_id
     if story_update.status is not None:
         story.status = story_update.status
     
