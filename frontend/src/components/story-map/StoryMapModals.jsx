@@ -4,6 +4,8 @@ import AnalysisPanel from '../../AnalysisPanel';
 
 function StoryMapModals({
   editingStory,
+  editingStoryTaskId,
+  editingStoryReleaseId,
   releases,
   onCloseEdit,
   onSaveStory,
@@ -22,11 +24,14 @@ function StoryMapModals({
     <>
       <EditStoryModal
         story={editingStory}
+        taskId={editingStoryTaskId}
+        releaseId={editingStoryReleaseId}
         releases={releases}
         isOpen={!!editingStory}
         onClose={onCloseEdit}
         onSave={onSaveStory}
         onDelete={onDeleteStory}
+        onStoryImproved={onStoryImproved}
       />
 
       {aiAssistantOpen && aiAssistantStory && (
