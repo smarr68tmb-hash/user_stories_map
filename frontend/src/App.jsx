@@ -44,24 +44,33 @@ function AppContent() {
   const [updatingProjectName, setUpdatingProjectName] = useState(false);
   
   // Проверка текущей сессии при загрузке
+  // Используем tryRestoreSession для восстановления сессии из localStorage (refresh token)
   useEffect(() => {
     let mounted = true;
-    auth.getMe()
-      .then((res) => {
+
+    const checkSession = async () => {
+      try {
+        // Сначала пробуем восстановить сессию из localStorage (refresh token)
+        const restoredUser = await auth.tryRestoreSession();
         if (mounted) {
-          setUser(res.data);
+          if (restoredUser) {
+            setUser(restoredUser);
+          } else {
+            setUser(null);
+          }
         }
-      })
-      .catch(() => {
+      } catch {
         if (mounted) {
           setUser(null);
         }
-      })
-      .finally(() => {
+      } finally {
         if (mounted) {
           setAuthChecked(true);
         }
-      });
+      }
+    };
+
+    checkSession();
 
     return () => {
       mounted = false;

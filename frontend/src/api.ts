@@ -15,31 +15,73 @@ import type {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
+// Хранение токенов в памяти (для cross-domain запросов)
+// В production на разных доменах httpOnly cookies не работают из-за ограничений браузера
+const tokenStorage = {
+  accessToken: null as string | null,
+  refreshToken: null as string | null,
+
+  setTokens(access: string | null, refresh: string | null) {
+    this.accessToken = access;
+    this.refreshToken = refresh;
+    // Сохраняем refresh token в localStorage для восстановления сессии
+    if (refresh) {
+      localStorage.setItem('refresh_token', refresh);
+    } else {
+      localStorage.removeItem('refresh_token');
+    }
+  },
+
+  getAccessToken() {
+    return this.accessToken;
+  },
+
+  getRefreshToken() {
+    // Пробуем получить из памяти, затем из localStorage
+    return this.refreshToken || localStorage.getItem('refresh_token');
+  },
+
+  clear() {
+    this.accessToken = null;
+    this.refreshToken = null;
+    localStorage.removeItem('refresh_token');
+  },
+};
+
 const api: AxiosInstance = axios.create({
   baseURL: API_URL,
   withCredentials: true,
 });
 
+// Request interceptor - добавляет Authorization header
 api.interceptors.request.use(
   (config) => {
     const nextConfig = { ...config, withCredentials: true } as AxiosRequestConfig;
+
+    // Добавляем access token в заголовок Authorization
+    const accessToken = tokenStorage.getAccessToken();
+    if (accessToken && nextConfig.headers) {
+      (nextConfig.headers as Record<string, string>)['Authorization'] = `Bearer ${accessToken}`;
+    }
+
     return nextConfig;
   },
   (error) => Promise.reject(error),
 );
 
 let isRefreshing = false;
-let refreshSubscribers: Array<() => void> = [];
+let refreshSubscribers: Array<(token: string) => void> = [];
 
-const subscribeTokenRefresh = (callback: () => void) => {
+const subscribeTokenRefresh = (callback: (token: string) => void) => {
   refreshSubscribers.push(callback);
 };
 
-const onRefreshed = () => {
-  refreshSubscribers.forEach((cb) => cb());
+const onRefreshed = (newToken: string) => {
+  refreshSubscribers.forEach((cb) => cb(newToken));
   refreshSubscribers = [];
 };
 
+// Response interceptor - обрабатывает 401 и обновляет токен
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -48,13 +90,23 @@ api.interceptors.response.use(
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest?.url?.includes('/refresh')
+      !originalRequest?.url?.includes('/refresh') &&
+      !originalRequest?.url?.includes('/token')
     ) {
       originalRequest._retry = true;
 
+      const refreshToken = tokenStorage.getRefreshToken();
+      if (!refreshToken) {
+        tokenStorage.clear();
+        return Promise.reject(error);
+      }
+
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
-          subscribeTokenRefresh(() => {
+          subscribeTokenRefresh((newToken: string) => {
+            if (originalRequest.headers) {
+              (originalRequest.headers as Record<string, string>)['Authorization'] = `Bearer ${newToken}`;
+            }
             api(originalRequest).then(resolve).catch(reject);
           });
         });
@@ -63,15 +115,32 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        await axios.post(`${API_URL}/refresh`, {}, { withCredentials: true });
+        // Отправляем refresh token в теле запроса (не полагаемся на cookies)
+        const response = await axios.post<TokenResponse>(
+          `${API_URL}/refresh`,
+          { refresh_token: refreshToken },
+          { withCredentials: true }
+        );
+
+        const { access_token, refresh_token: newRefreshToken } = response.data;
+        tokenStorage.setTokens(access_token, newRefreshToken);
+
         isRefreshing = false;
-        onRefreshed();
+        onRefreshed(access_token);
+
+        // Повторяем оригинальный запрос с новым токеном
+        if (originalRequest.headers) {
+          (originalRequest.headers as Record<string, string>)['Authorization'] = `Bearer ${access_token}`;
+        }
         return api(originalRequest);
       } catch (refreshError) {
         isRefreshing = false;
         refreshSubscribers = [];
+        tokenStorage.clear();
+
         try {
-          await axios.post(`${API_URL}/logout`, {}, { withCredentials: true });
+          const rt = tokenStorage.getRefreshToken();
+          await axios.post(`${API_URL}/logout`, { refresh_token: rt }, { withCredentials: true });
         } catch (logoutError) {
           console.error('Logout after refresh failure error:', logoutError);
         }
@@ -110,6 +179,10 @@ export const auth = {
       withCredentials: true,
     });
 
+    // Сохраняем токены после успешного логина
+    const { access_token, refresh_token } = response.data;
+    tokenStorage.setTokens(access_token, refresh_token);
+
     return response.data;
   },
 
@@ -124,13 +197,43 @@ export const auth = {
 
   logout: async () => {
     try {
-      await api.post('/logout', {}, { withCredentials: true });
+      const refreshToken = tokenStorage.getRefreshToken();
+      await api.post('/logout', { refresh_token: refreshToken }, { withCredentials: true });
     } catch (e) {
       console.error('Logout error:', e);
+    } finally {
+      tokenStorage.clear();
     }
   },
 
   getMe: () => api.get<User>('/me'),
+
+  // Метод для восстановления сессии из localStorage при загрузке страницы
+  tryRestoreSession: async (): Promise<User | null> => {
+    const refreshToken = tokenStorage.getRefreshToken();
+    if (!refreshToken) {
+      return null;
+    }
+
+    try {
+      // Пробуем обновить access token
+      const response = await axios.post<TokenResponse>(
+        `${API_URL}/refresh`,
+        { refresh_token: refreshToken },
+        { withCredentials: true }
+      );
+
+      const { access_token, refresh_token: newRefreshToken } = response.data;
+      tokenStorage.setTokens(access_token, newRefreshToken);
+
+      // Получаем данные пользователя
+      const userResponse = await api.get<User>('/me');
+      return userResponse.data;
+    } catch {
+      tokenStorage.clear();
+      return null;
+    }
+  },
 };
 
 export const activities = {
@@ -174,4 +277,3 @@ export const stories = {
 };
 
 export default api;
-

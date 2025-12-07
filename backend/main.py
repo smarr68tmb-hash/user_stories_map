@@ -107,6 +107,8 @@ logger.info(f"📦 Database: {settings.DATABASE_URL.split('@')[0] if '@' in sett
 logger.info(f"🤖 AI Provider: {settings.API_PROVIDER}")
 logger.info(f"🌍 Environment: {settings.ENVIRONMENT}")
 logger.info(f"🔒 Secure logging: enabled (sensitive data masked)")
+logger.info(f"🍪 Cookie settings: SameSite={settings.COOKIE_SAMESITE}, Secure={settings.COOKIE_SECURE}, Domain={settings.COOKIE_DOMAIN or '(not set)'}")
+logger.info(f"🌐 CORS origins: {settings.get_allowed_origins_list()}")
 
 # Предупреждения о безопасности
 if settings.ENVIRONMENT == "production":
