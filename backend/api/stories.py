@@ -2,6 +2,7 @@
 User Story CRUD endpoints
 """
 import logging
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -44,6 +45,64 @@ def _find_release_by_priority(db: Session, project_id: int, priority: str):
         .filter(func.lower(Release.title) == func.lower(priority))
         .first()
     )
+
+
+def _get_story_for_user(db: Session, story_id: int, user_id: int) -> Optional[UserStory]:
+    """Возвращает историю, если она принадлежит пользователю, иначе None."""
+    return (
+        db.query(UserStory)
+        .join(UserTask)
+        .join(Activity)
+        .join(Project)
+        .filter(UserStory.id == story_id)
+        .filter(Project.user_id == user_id)
+        .first()
+    )
+
+
+def _require_story_for_user(db: Session, story_id: int, user_id: int) -> UserStory:
+    """Возвращает историю или выбрасывает 404 если не найдена/нет доступа."""
+    story = _get_story_for_user(db, story_id, user_id)
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found or access denied")
+    return story
+
+
+def _serialize_story(story: UserStory) -> StoryResponse:
+    """Единая точка сериализации UserStory -> StoryResponse."""
+    return StoryResponse(
+        id=story.id,
+        title=story.title,
+        description=story.description,
+        priority=story.priority,
+        acceptance_criteria=story.acceptance_criteria or [],
+        release_id=story.release_id,
+        position=story.position,
+        status=story.status or "todo"
+    )
+
+
+def _get_redis_client():
+    """Инициализирует Redis клиент, возвращает None при ошибке."""
+    redis_client = None
+    try:
+        import redis
+        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        redis_client.ping()
+    except Exception as e:
+        logger.warning(f"Redis not available: {e}")
+        redis_client = None
+    return redis_client
+
+
+def _story_to_ai_payload(story: UserStory) -> dict:
+    """Готовит словарь данных истории для AI вызовов."""
+    return {
+        'title': story.title,
+        'description': story.description or '',
+        'priority': story.priority or 'Later',
+        'acceptance_criteria': story.acceptance_criteria or []
+    }
 
 
 @router.post("/story", response_model=StoryResponse)
@@ -103,16 +162,7 @@ def create_story(
     db.commit()
     db.refresh(new_story)
     
-    return StoryResponse(
-        id=new_story.id,
-        title=new_story.title,
-        description=new_story.description,
-        priority=new_story.priority,
-        acceptance_criteria=new_story.acceptance_criteria or [],
-        release_id=new_story.release_id,
-        position=new_story.position,
-        status=new_story.status or "todo"
-    )
+    return _serialize_story(new_story)
 
 
 @router.put("/story/{story_id}", response_model=StoryResponse)
@@ -125,17 +175,7 @@ def update_story(
     db: Session = Depends(get_db)
 ):
     """Обновляет существующую пользовательскую историю"""
-    # Проверяем владельца проекта
-    story = db.query(UserStory)\
-        .join(UserTask)\
-        .join(Activity)\
-        .join(Project)\
-        .filter(UserStory.id == story_id)\
-        .filter(Project.user_id == current_user.id)\
-        .first()
-    
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found or access denied")
+    story = _require_story_for_user(db, story_id, current_user.id)
 
     project_id = story.task.activity.project_id if story.task and story.task.activity else None
 
@@ -171,16 +211,7 @@ def update_story(
     db.commit()
     db.refresh(story)
     
-    return StoryResponse(
-        id=story.id,
-        title=story.title,
-        description=story.description,
-        priority=story.priority,
-        acceptance_criteria=story.acceptance_criteria or [],
-        release_id=story.release_id,
-        position=story.position,
-        status=story.status or "todo"
-    )
+    return _serialize_story(story)
 
 
 @router.delete("/story/{story_id}")
@@ -192,17 +223,7 @@ def delete_story(
     db: Session = Depends(get_db)
 ):
     """Удаляет пользовательскую историю"""
-    # Проверяем владельца проекта
-    story = db.query(UserStory)\
-        .join(UserTask)\
-        .join(Activity)\
-        .join(Project)\
-        .filter(UserStory.id == story_id)\
-        .filter(Project.user_id == current_user.id)\
-        .first()
-    
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found or access denied")
+    story = _require_story_for_user(db, story_id, current_user.id)
     
     task_id = story.task_id
     release_id = story.release_id
@@ -236,17 +257,7 @@ def move_story(
     db: Session = Depends(get_db)
 ):
     """Перемещает пользовательскую историю в другую ячейку"""
-    # Проверяем владельца проекта для исходной истории
-    story = db.query(UserStory)\
-        .join(UserTask)\
-        .join(Activity)\
-        .join(Project)\
-        .filter(UserStory.id == story_id)\
-        .filter(Project.user_id == current_user.id)\
-        .first()
-    
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found or access denied")
+    story = _require_story_for_user(db, story_id, current_user.id)
     
     # Проверяем существование task и владельца для целевой ячейки
     task = db.query(UserTask)\
@@ -292,16 +303,7 @@ def move_story(
         db.commit()
         db.refresh(story)
 
-        return StoryResponse(
-            id=story.id,
-            title=story.title,
-            description=story.description,
-            priority=story.priority,
-            acceptance_criteria=story.acceptance_criteria or [],
-            release_id=story.release_id,
-            position=story.position,
-            status=story.status or "todo"
-        )
+        return _serialize_story(story)
     
     # Если перемещаем в другую ячейку, обновляем позиции в старой ячейке
     if old_task_id != move.task_id or old_release_id != target_release_id:
@@ -337,16 +339,7 @@ def move_story(
     db.commit()
     db.refresh(story)
     
-    return StoryResponse(
-        id=story.id,
-        title=story.title,
-        description=story.description,
-        priority=story.priority,
-        acceptance_criteria=story.acceptance_criteria or [],
-        release_id=story.release_id,
-        position=story.position,
-        status=story.status or "todo"
-    )
+    return _serialize_story(story)
 
 
 @router.patch("/story/{story_id}/status", response_model=StoryResponse)
@@ -359,32 +352,13 @@ def update_story_status(
     db: Session = Depends(get_db)
 ):
     """Быстрое обновление статуса истории (todo -> in_progress -> done)"""
-    # Проверяем владельца проекта
-    story = db.query(UserStory)\
-        .join(UserTask)\
-        .join(Activity)\
-        .join(Project)\
-        .filter(UserStory.id == story_id)\
-        .filter(Project.user_id == current_user.id)\
-        .first()
-    
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found or access denied")
+    story = _require_story_for_user(db, story_id, current_user.id)
     
     story.status = status_update.status
     db.commit()
     db.refresh(story)
     
-    return StoryResponse(
-        id=story.id,
-        title=story.title,
-        description=story.description,
-        priority=story.priority,
-        acceptance_criteria=story.acceptance_criteria or [],
-        release_id=story.release_id,
-        position=story.position,
-        status=story.status or "todo"
-    )
+    return _serialize_story(story)
 
 
 @router.post("/story/{story_id}/ai-improve", response_model=AIImproveResponse)
@@ -405,35 +379,9 @@ def ai_improve_story(
     - 'split': Разделить на несколько историй
     - 'edge_cases': Добавить edge cases
     """
-    # Проверяем владельца проекта
-    story = db.query(UserStory)\
-        .join(UserTask)\
-        .join(Activity)\
-        .join(Project)\
-        .filter(UserStory.id == story_id)\
-        .filter(Project.user_id == current_user.id)\
-        .first()
-    
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found or access denied")
-    
-    # Инициализация Redis (опционально)
-    redis_client = None
-    try:
-        import redis
-        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
-        redis_client.ping()
-    except Exception as e:
-        logger.warning(f"Redis not available: {e}")
-        redis_client = None
-    
-    # Подготовка данных истории
-    story_data = {
-        'title': story.title,
-        'description': story.description or '',
-        'priority': story.priority or 'Later',
-        'acceptance_criteria': story.acceptance_criteria or []
-    }
+    story = _require_story_for_user(db, story_id, current_user.id)
+    redis_client = _get_redis_client()
+    story_data = _story_to_ai_payload(story)
     
     try:
         # Вызов AI сервиса
@@ -468,16 +416,7 @@ def ai_improve_story(
             return AIImproveResponse(
                 success=True,
                 message="История успешно улучшена",
-                improved_story=StoryResponse(
-                    id=story.id,
-                    title=story.title,
-                    description=story.description,
-                    priority=story.priority,
-                    acceptance_criteria=story.acceptance_criteria or [],
-                    release_id=story.release_id,
-                    position=story.position,
-                    status=story.status or "todo"
-                ),
+                improved_story=_serialize_story(story),
                 additional_stories=None,
                 suggestion=ai_result.get('suggestion', '')
             )
@@ -512,15 +451,7 @@ def ai_bulk_improve_stories(
             detail="Maximum 10 stories can be improved at once"
         )
     
-    # Инициализация Redis
-    redis_client = None
-    try:
-        import redis
-        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
-        redis_client.ping()
-    except Exception as e:
-        logger.warning(f"Redis not available: {e}")
-        redis_client = None
+    redis_client = _get_redis_client()
     
     improved_count = 0
     failed_count = 0
@@ -528,15 +459,7 @@ def ai_bulk_improve_stories(
     
     for story_id in bulk_request.story_ids:
         try:
-            # Проверяем владельца проекта для каждой истории
-            story = db.query(UserStory)\
-                .join(UserTask)\
-                .join(Activity)\
-                .join(Project)\
-                .filter(UserStory.id == story_id)\
-                .filter(Project.user_id == current_user.id)\
-                .first()
-            
+            story = _get_story_for_user(db, story_id, current_user.id)
             if not story:
                 details.append({
                     'story_id': story_id,
@@ -547,12 +470,7 @@ def ai_bulk_improve_stories(
                 continue
             
             # Подготовка данных истории
-            story_data = {
-                'title': story.title,
-                'description': story.description or '',
-                'priority': story.priority or 'Later',
-                'acceptance_criteria': story.acceptance_criteria or []
-            }
+            story_data = _story_to_ai_payload(story)
             
             # Вызов AI сервиса
             ai_result = ai_improve_story_content(

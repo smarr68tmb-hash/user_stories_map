@@ -50,6 +50,10 @@ function StoryCard({
   
   // Следующий статус при клике
   const getNextStatus = (current) => {
+    // Если blocked, переводим в todo
+    if (current === 'blocked') {
+      return 'todo';
+    }
     const idx = STATUS_FLOW.indexOf(current);
     const safeIndex = idx === -1 ? 0 : idx;
     return STATUS_FLOW[(safeIndex + 1) % STATUS_FLOW.length];
@@ -95,7 +99,12 @@ function StoryCard({
           className={`flex-shrink-0 w-8 h-8 min-w-[32px] min-h-[32px] rounded-full border-2 flex items-center justify-center text-sm font-bold transition-all hover:scale-110 shadow-sm ${
             currentStatus === 'todo' ? statusToken.control.idle : statusToken.control.active
           }`}
-          title={currentStatus === 'todo' ? 'Начать' : currentStatus === 'in_progress' ? 'Завершить' : 'Вернуть в работу'}
+          title={
+            currentStatus === 'todo' ? 'Начать' :
+            currentStatus === 'in_progress' ? 'Завершить' :
+            currentStatus === 'blocked' ? 'Разблокировать' :
+            'Вернуть в работу'
+          }
         >
           {statusLoading ? '…' : statusIcons[currentStatus]}
         </button>

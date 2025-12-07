@@ -7,46 +7,21 @@ import {
   removeTask,
   updateTask as updateTaskTransform,
 } from '../utils/projectTransforms';
+import { useDraftMap, useScopedLoading } from './useSharedState';
 
 const defaultTaskDraft = { title: '', error: null };
 
 export function useTasks({ project, onUpdate, refreshProject, onUnauthorized, toast }) {
-  const [loading, setLoading] = useState({
-    create: {},
-    update: {},
-    delete: {},
-    move: {},
-  });
-  const [taskDrafts, setTaskDrafts] = useState({});
+  const { loading, setScopedLoading } = useScopedLoading(['create', 'update', 'delete', 'move']);
+  const { drafts: taskDrafts, ensureDraft, updateDraft, resetDraft } = useDraftMap(defaultTaskDraft);
   const [addingTaskActivityId, setAddingTaskActivityId] = useState(null);
-
-  const setScopedLoading = useCallback((key, id, value) => {
-    setLoading((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], [id]: value },
-    }));
-  }, []);
-
-  const ensureDraft = useCallback((activityId) => {
-    setTaskDrafts((prev) => {
-      if (prev[activityId]) return prev;
-      return { ...prev, [activityId]: { ...defaultTaskDraft } };
-    });
-  }, []);
-
   const updateTaskDraft = useCallback((activityId, patch) => {
-    setTaskDrafts((prev) => ({
-      ...prev,
-      [activityId]: { ...(prev[activityId] || defaultTaskDraft), ...patch },
-    }));
-  }, []);
+    updateDraft(activityId, patch);
+  }, [updateDraft]);
 
   const resetTaskDraft = useCallback((activityId) => {
-    setTaskDrafts((prev) => ({
-      ...prev,
-      [activityId]: { ...defaultTaskDraft },
-    }));
-  }, []);
+    resetDraft(activityId);
+  }, [resetDraft]);
 
   const startAddingTask = useCallback((activityId) => {
     ensureDraft(activityId);

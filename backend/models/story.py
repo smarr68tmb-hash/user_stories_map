@@ -7,7 +7,7 @@ from utils.database import Base
 
 
 # Допустимые статусы для истории
-STORY_STATUSES = ['todo', 'in_progress', 'done']
+STORY_STATUSES = ['todo', 'in_progress', 'done', 'blocked']
 
 
 class UserStory(Base):
@@ -22,7 +22,7 @@ class UserStory(Base):
     priority = Column(String)
     acceptance_criteria = Column(JSON)
     position = Column(Integer, default=0)
-    status = Column(String, default='todo')  # todo, in_progress, done
+    status = Column(String, default='todo')  # todo, in_progress, done, blocked
     
     # Relationships
     task = relationship("UserTask", back_populates="stories")
