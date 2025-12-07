@@ -1,6 +1,15 @@
 import { useEffect, useRef } from 'react';
-import { AlertTriangle, X, Loader2 } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 import useFocusTrap from '../../hooks/useFocusTrap';
+import { getSeverityToken, TEXT_TOKENS } from '../../theme/tokens';
+import { Button } from '../ui';
+
+// Dialog tokens
+const DIALOG_TOKENS = {
+  overlay: 'bg-black/50',
+  content: 'bg-white rounded-lg shadow-xl',
+  closeButton: 'text-gray-400 hover:text-gray-600 hover:bg-gray-100',
+};
 
 function ConfirmDialog({
   isOpen,
@@ -33,7 +42,7 @@ function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fade-in"
+      className={`fixed inset-0 ${DIALOG_TOKENS.overlay} flex items-center justify-center z-50 p-4 animate-fade-in`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
@@ -46,26 +55,26 @@ function ConfirmDialog({
     >
       <div
         ref={dialogRef}
-        className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 animate-scale-in"
+        className={`${DIALOG_TOKENS.content} max-w-md w-full p-6 animate-scale-in`}
         tabIndex={-1}
       >
         <div className="flex items-start gap-3 mb-4">
-          <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+          <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${getSeverityToken('critical').badge}`}>
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div className="flex-1">
-            <h3 id="confirm-dialog-title" className="text-lg font-semibold text-gray-900">
+            <h3 id="confirm-dialog-title" className={`text-lg font-semibold ${TEXT_TOKENS.primary}`}>
               {title}
             </h3>
             {description && (
-              <p id="confirm-dialog-description" className="text-sm text-gray-600 mt-1">
+              <p id="confirm-dialog-description" className={`text-sm mt-1 ${TEXT_TOKENS.secondary}`}>
                 {description}
               </p>
             )}
           </div>
           <button
             onClick={onCancel}
-            className="text-gray-400 hover:text-gray-600 min-w-[32px] min-h-[32px] flex items-center justify-center rounded hover:bg-gray-100 transition"
+            className={`min-w-[32px] min-h-[32px] flex items-center justify-center rounded transition ${DIALOG_TOKENS.closeButton}`}
             aria-label="Закрыть диалог"
           >
             <X className="w-5 h-5" />
@@ -73,22 +82,20 @@ function ConfirmDialog({
         </div>
 
         <div className="flex justify-end gap-3">
-          <button
+          <Button
+            variant="secondary"
             onClick={onCancel}
             disabled={loading}
-            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition font-medium disabled:opacity-50"
           >
             {cancelText}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="danger"
             onClick={onConfirm}
-            disabled={loading}
-            aria-busy={loading}
-            className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            loading={loading}
           >
-            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
             {confirmText}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

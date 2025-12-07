@@ -1,4 +1,14 @@
 import StoryCell from './StoryCell';
+import { getStatusToken, TEXT_TOKENS } from '../../theme/tokens';
+
+// Local tokens for release row
+const RELEASE_ROW_TOKENS = {
+  surface: 'bg-gray-100 border-r-2 border-gray-300',
+  rowHover: 'hover:bg-gray-50',
+  progressBg: 'bg-gray-200',
+  progressComplete: 'bg-green-500',
+  progressInProgress: 'bg-blue-500',
+};
 
 function ReleaseRow({
   release,
@@ -20,20 +30,20 @@ function ReleaseRow({
   taskColumnWidth = 220,
 }) {
   return (
-    <div className="flex border-b border-gray-200 min-h-[180px] hover:bg-gray-50 transition">
-      <div className="w-32 flex-shrink-0 bg-gray-100 p-3 font-bold flex flex-col items-center justify-center text-gray-700 border-r-2 border-gray-300 gap-2">
+    <div className={`flex border-b border-gray-200 min-h-[180px] transition ${RELEASE_ROW_TOKENS.rowHover}`}>
+      <div className={`w-32 flex-shrink-0 p-3 font-bold flex flex-col items-center justify-center gap-2 ${RELEASE_ROW_TOKENS.surface} ${TEXT_TOKENS.secondary}`}>
         <span className="text-sm text-center">{release.title}</span>
         {progress.total > 0 && (
           <div className="w-full px-1">
-            <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden" aria-label="Прогресс релиза">
+            <div className={`w-full rounded-full h-1.5 overflow-hidden ${RELEASE_ROW_TOKENS.progressBg}`} aria-label="Прогресс релиза">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
-                  progress.percent === 100 ? 'bg-green-500' : 'bg-blue-500'
+                  progress.percent === 100 ? RELEASE_ROW_TOKENS.progressComplete : RELEASE_ROW_TOKENS.progressInProgress
                 }`}
                 style={{ width: `${progress.percent}%` }}
               />
             </div>
-            <div className="text-[10px] text-gray-500 text-center mt-1">
+            <div className={`text-[10px] text-center mt-1 ${TEXT_TOKENS.muted}`}>
               {progress.done}/{progress.total}
             </div>
           </div>

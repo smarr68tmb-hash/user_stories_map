@@ -2,12 +2,14 @@ import React from 'react';
 import { cn } from './utils';
 
 type InputVariant = 'primary' | 'secondary' | 'ghost';
-type InputSize = 'sm' | 'md' | 'lg';
+type InputSize = 'xs' | 'sm' | 'md' | 'lg';
+type InputValidation = 'default' | 'error' | 'warning' | 'success';
 
 type InputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   variant?: InputVariant;
   size?: InputSize;
   loading?: boolean;
+  validation?: InputValidation;
   wrapperClassName?: string;
 };
 
@@ -18,9 +20,17 @@ const variantStyles: Record<InputVariant, string> = {
 };
 
 const sizeStyles: Record<InputSize, string> = {
+  xs: 'h-7 px-2 text-xs',
   sm: 'h-9 px-3 text-sm',
   md: 'h-10 px-3 text-sm',
   lg: 'h-11 px-4 text-base',
+};
+
+const validationStyles: Record<InputValidation, string> = {
+  default: '',
+  error: 'border-rose-400 bg-rose-50 focus-visible:ring-rose-400',
+  warning: 'border-amber-400 bg-amber-50 focus-visible:ring-amber-400',
+  success: 'border-emerald-400 focus-visible:ring-emerald-400',
 };
 
 const Spinner: React.FC<{ className?: string }> = ({ className }) => (
@@ -40,6 +50,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       size = 'md',
       loading = false,
       disabled = false,
+      validation = 'default',
       className,
       wrapperClassName,
       ...props
@@ -57,6 +68,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             'w-full rounded-input border text-content placeholder-content-subtle transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-content-muted disabled:placeholder-content-subtle',
             variantStyles[variant] ?? variantStyles.primary,
             sizeStyles[size] ?? sizeStyles.md,
+            validationStyles[validation] ?? validationStyles.default,
             loading && 'pr-10',
             className,
           )}

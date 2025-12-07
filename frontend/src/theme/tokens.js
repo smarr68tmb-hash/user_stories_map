@@ -148,3 +148,50 @@ export const getSeverityToken = (severity) => {
   return SEVERITY_TOKENS[key] || SEVERITY_TOKENS.medium;
 };
 
+// Text color tokens for content
+export const TEXT_TOKENS = {
+  primary: 'text-gray-800',
+  secondary: 'text-gray-700',
+  muted: 'text-gray-500',
+  subtle: 'text-gray-400',
+  inverse: 'text-white',
+  done: 'text-gray-500 line-through',
+};
+
+// Action button tokens for common UI actions
+export const ACTION_TOKENS = {
+  ai: {
+    button: 'bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-purple-600 hover:to-blue-600',
+    buttonSmall: 'bg-gradient-to-r from-purple-500 to-blue-500 text-white px-3 py-1.5 min-h-[32px] rounded hover:from-purple-600 hover:to-blue-600',
+  },
+  edit: {
+    textButton: 'text-blue-600 hover:text-blue-800 hover:bg-blue-100',
+    iconButton: 'text-blue-600 hover:text-blue-800 hover:bg-blue-200',
+  },
+  delete: {
+    textButton: 'text-rose-600 hover:text-rose-800 hover:bg-rose-100',
+    iconButton: 'text-rose-600 hover:text-rose-800 hover:bg-rose-200',
+  },
+  add: {
+    textButton: 'text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100',
+    iconButton: 'text-emerald-600 hover:text-emerald-800 hover:bg-emerald-200',
+    button: 'bg-emerald-600 text-white hover:bg-emerald-700',
+  },
+  cancel: {
+    textButton: 'text-gray-600 hover:text-gray-800 hover:bg-gray-100',
+    button: 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300',
+  },
+};
+
+// Surface tokens for containers
+export const SURFACE_TOKENS = {
+  card: 'bg-white border border-gray-200',
+  cardHover: 'bg-white border border-gray-200 hover:border-gray-300 hover:shadow-sm',
+  muted: 'bg-gray-50 border border-gray-200',
+  subtle: 'bg-gray-100 border border-gray-200',
+  input: 'bg-white border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500',
+};
+
+// Small badge for counts, metadata
+export const META_BADGE = 'text-[10px] text-gray-700 bg-white/80 px-1.5 py-0.5 rounded border border-gray-200';
+

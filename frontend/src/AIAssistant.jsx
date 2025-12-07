@@ -8,13 +8,44 @@ import AutoResizeTextarea from './components/common/AutoResizeTextarea.jsx';
 import useFocusTrap from './hooks/useFocusTrap';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 
+/**
+ * @typedef {Object} Story
+ * @property {number} id
+ * @property {string} title
+ * @property {string} description
+ * @property {string[]} acceptance_criteria
+ * @property {string} [priority]
+ */
+
+/**
+ * @typedef {Object} AIResult
+ * @property {boolean} success
+ * @property {string} message
+ * @property {string} [suggestion]
+ * @property {Story} [improved_story]
+ * @property {Story[]} [additional_stories]
+ */
+
+/**
+ * @typedef {Object} AIAssistantProps
+ * @property {Story} story
+ * @property {number} taskId
+ * @property {number} releaseId
+ * @property {boolean} isOpen
+ * @property {() => void} onClose
+ * @property {(story: Story) => void} onStoryImproved
+ */
+
+/**
+ * @param {AIAssistantProps} props
+ */
 function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImproved }) {
   const [prompt, setPrompt] = useState('');
-  const [selectedActionId, setSelectedActionId] = useState(null);
+  const [selectedActionId, setSelectedActionId] = useState(/** @type {string | null} */ (null));
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [result, setResult] = useState(null);
-  const [improvementHistory, setImprovementHistory] = useState([]);
+  const [error, setError] = useState(/** @type {string | null} */ (null));
+  const [result, setResult] = useState(/** @type {AIResult | null} */ (null));
+  const [improvementHistory, setImprovementHistory] = useState(/** @type {Array<{timestamp: string, prompt: string, success: boolean, message: string}>} */ ([]));
   const modalRef = useRef(null);
   useFocusTrap(modalRef, isOpen);
 
@@ -51,6 +82,9 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
     }
   ];
 
+  /**
+   * @param {typeof quickActions[0]} action
+   */
   const handleQuickAction = (action) => {
     setPrompt(action.prompt);
     setSelectedActionId(action.id);
@@ -95,7 +129,7 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
       }
     } catch (err) {
       console.error('Error improving story:', err);
-      setError(err.response?.data?.detail || 'Не удалось улучшить историю');
+      setError(/** @type {any} */ (err).response?.data?.detail || 'Не удалось улучшить историю');
     } finally {
       setLoading(false);
     }
@@ -212,7 +246,7 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
             <h3 className="font-semibold text-gray-800 mb-3">Или напишите свой запрос:</h3>
             <AutoResizeTextarea
               value={prompt}
-              onChange={(e) => {
+              onChange={(/** @type {React.ChangeEvent<HTMLTextAreaElement>} */ e) => {
                 setPrompt(e.target.value);
                 // Сбрасываем selectedActionId если пользователь редактирует промпт вручную
                 if (selectedActionId && e.target.value !== quickActions.find(a => a.id === selectedActionId)?.prompt) {

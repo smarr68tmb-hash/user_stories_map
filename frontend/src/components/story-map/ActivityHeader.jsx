@@ -5,6 +5,24 @@ import {
 import { useDroppable } from '@dnd-kit/core';
 import { Pencil, Trash2, Check } from 'lucide-react';
 import TaskColumn from './TaskColumn';
+import { TEXT_TOKENS, ACTION_TOKENS, getSeverityToken } from '../../theme/tokens';
+import { Button, Input } from '../ui';
+
+// Local surface tokens for activity header
+const ACTIVITY_HEADER_TOKENS = {
+  surface: 'bg-blue-100 border-r border-gray-200',
+  surfaceHover: 'hover:bg-blue-200',
+  title: 'text-blue-900',
+  input: 'bg-white text-gray-800',
+};
+
+const ADD_FORM_TOKENS = {
+  surface: 'bg-green-50 border border-green-300',
+};
+
+const ADD_PLACEHOLDER_TOKENS = {
+  button: 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 border-2 border-dashed border-gray-300',
+};
 
 function ActivityHeader({
   activities,
@@ -58,12 +76,12 @@ function ActivityHeader({
           return (
             <div
               key={act.id}
-              className="bg-blue-100 border-r border-gray-200 p-3 text-center font-bold text-blue-900 flex items-center justify-center group relative transition-colors duration-200 hover:bg-blue-200"
+              className={`${ACTIVITY_HEADER_TOKENS.surface} p-3 text-center font-bold ${ACTIVITY_HEADER_TOKENS.title} flex items-center justify-center group relative transition-colors duration-200 ${ACTIVITY_HEADER_TOKENS.surfaceHover}`}
               style={{ width: activityWidth, minWidth: taskColumnWidth }}
             >
               {isEditing ? (
                 <div className="flex items-center gap-2 w-full">
-                  <input
+                  <Input
                     type="text"
                     value={editingActivityTitle}
                     onChange={(e) => setEditingActivityTitle(e.target.value)}
@@ -76,7 +94,7 @@ function ActivityHeader({
                         setEditingActivityTitle('');
                       }
                     }}
-                    className="flex-1 px-2 py-1 text-sm border rounded bg-white text-gray-800"
+                    size="sm"
                     autoFocus
                     disabled={isUpdating}
                   />
@@ -93,7 +111,7 @@ function ActivityHeader({
                   <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex">
                     <button
                       onClick={() => onStartEditingActivity(act)}
-                      className="min-w-[40px] min-h-[40px] flex items-center justify-center text-blue-700 hover:text-blue-900 hover:bg-blue-200 rounded disabled:opacity-50 transition-colors duration-150"
+                      className={`min-w-[40px] min-h-[40px] flex items-center justify-center rounded disabled:opacity-50 transition-colors duration-150 ${ACTION_TOKENS.edit.iconButton}`}
                       disabled={isDeleting || isUpdating}
                       title="Редактировать"
                       aria-label={`Редактировать активность ${act.title}`}
@@ -102,7 +120,7 @@ function ActivityHeader({
                     </button>
                     <button
                       onClick={() => onDeleteActivity(act.id)}
-                      className={`min-w-[40px] min-h-[40px] flex items-center justify-center text-red-700 hover:text-red-900 hover:bg-red-200 rounded transition-all duration-150 ${pendingDelete ? 'bg-red-100 border border-red-300' : ''}`}
+                      className={`min-w-[40px] min-h-[40px] flex items-center justify-center rounded transition-all duration-150 ${pendingDelete ? getSeverityToken('critical').surface : ACTION_TOKENS.delete.iconButton}`}
                       disabled={isDeleting || isUpdating}
                       title="Удалить"
                       aria-label={`Удалить активность ${act.title}`}
@@ -123,8 +141,8 @@ function ActivityHeader({
         })}
         <div className="flex-shrink-0 border-r border-gray-200">
           {addingActivity ? (
-            <div className="p-3 bg-green-50 border border-green-300">
-              <input
+            <div className={`p-3 ${ADD_FORM_TOKENS.surface}`}>
+              <Input
                 type="text"
                 placeholder="Название активности"
                 value={newActivityTitle}
@@ -136,30 +154,33 @@ function ActivityHeader({
                     onCancelAddActivity();
                   }
                 }}
-                className="w-full px-2 py-1 text-sm border rounded"
+                size="sm"
                 autoFocus
               />
               <div className="flex gap-2 mt-2">
-                <button
+                <Button
+                  variant="success"
+                  size="xs"
                   onClick={onAddActivity}
-                  disabled={activityLoading.isCreating}
-                  aria-busy={activityLoading.isCreating}
-                  className={`flex-1 bg-green-600 text-white text-xs py-1 px-2 rounded hover:bg-green-700 ${activityLoading.isCreating ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  loading={activityLoading.isCreating}
+                  className="flex-1"
                 >
-                  {activityLoading.isCreating ? 'Добавление...' : 'Добавить'}
-                </button>
-                <button
+                  Добавить
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
                   onClick={onCancelAddActivity}
-                  className="flex-1 bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded hover:bg-gray-400"
+                  className="flex-1"
                 >
                   Отмена
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
             <button
               onClick={onStartAddActivity}
-              className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 border-2 border-dashed border-gray-300 rounded transition"
+              className={`p-3 rounded transition ${ADD_PLACEHOLDER_TOKENS.button}`}
               title="Добавить активность"
             >
               + Активность
@@ -207,8 +228,8 @@ function ActivityHeader({
                 })}
                 <div className="flex-shrink-0 border-r border-gray-200 w-[220px]">
                   {addingTaskActivityId === act.id ? (
-                    <div className="p-3 bg-green-50 border border-green-300 min-h-[60px]">
-                      <input
+                    <div className={`p-3 min-h-[60px] ${ADD_FORM_TOKENS.surface}`}>
+                      <Input
                         type="text"
                         placeholder="Название задачи"
                         value={taskDrafts[act.id]?.title || ''}
@@ -220,33 +241,37 @@ function ActivityHeader({
                             stopAddingTask();
                           }
                         }}
-                        className="w-full px-2 py-1 text-xs border rounded"
+                        size="xs"
+                        validation={taskDrafts[act.id]?.error ? 'error' : 'default'}
                         autoFocus
                       />
                       {taskDrafts[act.id]?.error && (
-                        <p className="text-[11px] text-red-600 mt-1">{taskDrafts[act.id]?.error}</p>
+                        <p className={`text-[11px] mt-1 ${getSeverityToken('critical').textButton.split(' ')[0]}`}>{taskDrafts[act.id]?.error}</p>
                       )}
                       <div className="flex gap-2 mt-2">
-                        <button
+                        <Button
+                          variant="success"
+                          size="xs"
                           onClick={() => onAddTask(act.id)}
-                          disabled={taskLoading.isCreating(act.id)}
-                          aria-busy={taskLoading.isCreating(act.id)}
-                          className={`flex-1 bg-green-600 text-white text-xs py-1 px-2 rounded hover:bg-green-700 ${taskLoading.isCreating(act.id) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          loading={taskLoading.isCreating(act.id)}
+                          className="flex-1"
                         >
-                          {taskLoading.isCreating(act.id) ? 'Добавление...' : 'Добавить'}
-                        </button>
-                        <button
+                          Добавить
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="xs"
                           onClick={stopAddingTask}
-                          className="flex-1 bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded hover:bg-gray-400"
+                          className="flex-1"
                         >
                           Отмена
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ) : (
                     <button
                       onClick={() => startAddingTask(act.id)}
-                      className="w-full h-[60px] text-gray-400 hover:text-gray-600 hover:bg-gray-100 border-2 border-dashed border-gray-300 rounded transition text-xs flex items-center justify-center"
+                      className={`w-full h-[60px] rounded transition text-xs flex items-center justify-center ${ADD_PLACEHOLDER_TOKENS.button}`}
                       title="Добавить задачу"
                     >
                       + Задача

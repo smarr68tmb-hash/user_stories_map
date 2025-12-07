@@ -3,21 +3,33 @@ import api from './api';
 import useFocusTrap from './hooks/useFocusTrap';
 
 /**
+ * @typedef {Object} AnalysisPanelProps
+ * @property {number} projectId
+ * @property {boolean} isOpen
+ * @property {() => void} onClose
+ */
+
+/**
  * Панель анализа User Story Map
- * 
+ *
  * Включает:
  * - Валидацию структуры карты
  * - Анализ схожести историй (поиск дубликатов)
  * - Полный отчет
+ *
+ * @param {AnalysisPanelProps} props
  */
 function AnalysisPanel({ projectId, isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState('full'); // 'full', 'validation', 'similarity'
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [analysisResult, setAnalysisResult] = useState(null);
+  const [error, setError] = useState(/** @type {string | null} */ (null));
+  const [analysisResult, setAnalysisResult] = useState(/** @type {any} */ (null));
   const modalRef = useRef(null);
   useFocusTrap(modalRef, isOpen);
 
+  /**
+   * @param {'full' | 'validation' | 'similarity'} type
+   */
   const runAnalysis = async (type) => {
     setLoading(true);
     setError(null);
@@ -40,7 +52,7 @@ function AnalysisPanel({ projectId, isOpen, onClose }) {
       setAnalysisResult({ type, data: response.data });
     } catch (err) {
       console.error('Analysis error:', err);
-      setError(err.response?.data?.detail || 'Ошибка при анализе');
+      setError(/** @type {any} */ (err).response?.data?.detail || 'Ошибка при анализе');
     } finally {
       setLoading(false);
     }

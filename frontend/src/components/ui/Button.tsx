@@ -1,8 +1,8 @@
 import React from 'react';
 import { cn } from './utils';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost';
-type ButtonSize = 'sm' | 'md' | 'lg';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
+type ButtonSize = 'sm' | 'md' | 'lg' | 'xs';
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
@@ -17,9 +17,12 @@ const variantStyles: Record<ButtonVariant, string> = {
   secondary:
     'bg-surface-subtle text-content border border-surface-border hover:bg-surface-muted focus-visible:ring-primary-600',
   ghost: 'bg-transparent text-content hover:bg-surface-subtle focus-visible:ring-primary-600',
+  danger: 'bg-rose-600 text-white hover:bg-rose-700 focus-visible:ring-rose-600',
+  success: 'bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-600',
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
+  xs: 'h-7 px-2 text-xs',
   sm: 'h-9 px-3 text-sm',
   md: 'h-10 px-4 text-sm',
   lg: 'h-11 px-5 text-base',

@@ -3,6 +3,23 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core';
 import { FixedSizeList as List } from 'react-window';
 import StoryCard from './StoryCard';
+import { getSeverityToken } from '../../theme/tokens';
+import { Button, Input } from '../ui';
+
+// Form tokens
+const ADD_FORM_TOKENS = {
+  surface: 'bg-green-50 border border-green-300',
+};
+
+const ADD_PLACEHOLDER_TOKENS = {
+  button: 'text-gray-400 hover:text-gray-600 border-2 border-dashed border-gray-300 hover:border-gray-400',
+};
+
+const DROP_ZONE_TOKENS = {
+  active: 'bg-blue-100 border-2 border-blue-500 border-dashed shadow-inner',
+  inactive: 'bg-white border-dashed border-gray-300',
+  indicator: 'border-2 border-dashed border-blue-400 bg-blue-50 text-blue-600',
+};
 
 const STORY_CARD_HEIGHT = 156;
 const STORY_ROW_GAP = 8;
@@ -102,26 +119,28 @@ function StoryCell({
           )}
 
           {isAdding ? (
-            <div className="bg-green-50 p-3 rounded border border-green-300">
-              <input
+            <div className={`p-3 rounded ${ADD_FORM_TOKENS.surface}`}>
+              <Input
                 type="text"
                 placeholder="Название истории"
                 value={draft.title}
                 onChange={(e) => onUpdateDraft(cellId, { title: e.target.value, error: null })}
-                className={`w-full mb-1 p-2 text-sm border rounded transition ${
+                size="sm"
+                validation={
                   draft.error
-                    ? 'border-red-400 bg-red-50'
+                    ? 'error'
                     : draft.title && draft.title.length < 3
-                    ? 'border-orange-400 bg-orange-50'
+                    ? 'warning'
                     : draft.title && draft.title.length >= 3
-                    ? 'border-green-400'
-                    : 'border-gray-300'
-                }`}
+                    ? 'success'
+                    : 'default'
+                }
+                wrapperClassName="mb-1"
                 autoFocus
                 aria-label="Название истории"
               />
               {draft.title && draft.title.length > 0 && draft.title.length < 3 && (
-                <p className="text-[11px] text-orange-600 mb-1">Минимум 3 символа</p>
+                <p className={`text-[11px] mb-1 ${getSeverityToken('medium').textButton.split(' ')[0]}`}>Минимум 3 символа</p>
               )}
               <textarea
                 placeholder="Описание (опционально)"
@@ -140,29 +159,32 @@ function StoryCell({
                 <option value="Later">Later</option>
               </select>
               {draft.error && (
-                <p className="text-[11px] text-red-600 mb-2">{draft.error}</p>
+                <p className={`text-[11px] mb-2 ${getSeverityToken('critical').textButton.split(' ')[0]}`}>{draft.error}</p>
               )}
               <div className="flex gap-2">
-                <button
+                <Button
+                  variant="success"
+                  size="xs"
                   onClick={() => onAddStory(taskId, releaseId)}
-                  disabled={storyLoading.isAdding(cellId)}
-                  aria-busy={storyLoading.isAdding(cellId)}
-                  className={`flex-1 bg-green-600 text-white text-xs py-1 px-2 rounded hover:bg-green-700 ${storyLoading.isAdding(cellId) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  loading={storyLoading.isAdding(cellId)}
+                  className="flex-1"
                 >
-                  {storyLoading.isAdding(cellId) ? 'Добавление...' : 'Добавить'}
-                </button>
-                <button
+                  Добавить
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
                   onClick={() => onCloseAddForm(cellId)}
-                  className="flex-1 bg-gray-300 text-gray-700 text-xs py-1 px-2 rounded hover:bg-gray-400"
+                  className="flex-1"
                 >
                   Отмена
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
             <button
               onClick={() => onOpenAddForm(cellId)}
-              className="text-xs text-gray-400 hover:text-gray-600 py-2 border-2 border-dashed border-gray-300 rounded hover:border-gray-400 transition disabled:opacity-60"
+              className={`text-xs py-2 rounded transition disabled:opacity-60 ${ADD_PLACEHOLDER_TOKENS.button}`}
               disabled={storyLoading.isAdding(cellId)}
             >
               + Добавить карточку
@@ -191,13 +213,11 @@ function DroppableCell({ cellId, taskId, releaseId, children }) {
     <div
       ref={setNodeRef}
       className={`w-[220px] flex-shrink-0 p-2 border-r transition-all duration-200 ${
-        showDropIndicator
-          ? 'bg-blue-100 border-2 border-blue-500 border-dashed shadow-inner'
-          : 'bg-white border-dashed border-gray-300'
+        showDropIndicator ? DROP_ZONE_TOKENS.active : DROP_ZONE_TOKENS.inactive
       }`}
     >
       {showDropIndicator && (
-        <div className="mb-2 py-2 border-2 border-dashed border-blue-400 rounded-lg bg-blue-50 text-center text-xs text-blue-600 font-medium animate-pulse">
+        <div className={`mb-2 py-2 rounded-lg text-center text-xs font-medium animate-pulse ${DROP_ZONE_TOKENS.indicator}`}>
           Отпустите здесь
         </div>
       )}
