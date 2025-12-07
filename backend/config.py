@@ -13,37 +13,23 @@ class Settings:
     """Настройки приложения (упрощенная версия для совместимости)"""
     
     def __init__(self):
-        # Основные переменные окружения
-        self.ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-
         # API Keys
-        self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-        self.PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
-        self.GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
         self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+        self.GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+        self.PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
         self.API_PROVIDER = os.getenv("API_PROVIDER", "")
         self.API_MODEL = os.getenv("API_MODEL", "")
         self.API_TEMPERATURE = float(os.getenv("API_TEMPERATURE", "0.7"))
 
-        # Приоритет провайдеров для fallback (через запятую)
-        # По умолчанию: gemini (бесплатно), groq, perplexity, openai
+        # Приоритет провайдеров для fallback (через запятую: "gemini,groq,perplexity")
         self.AI_PROVIDER_PRIORITY = [
-            p.strip() for p in os.getenv("AI_PROVIDER_PRIORITY", "gemini,groq,perplexity,openai").split(",")
+            p.strip() for p in os.getenv("AI_PROVIDER_PRIORITY", "gemini,groq,perplexity").split(",")
             if p.strip()
         ]
-
+        
         # Two-Stage AI Processing: модель для улучшения требований (Stage 1)
         # Если не указана, используется основная модель (API_MODEL)
         self.ENHANCEMENT_MODEL = os.getenv("ENHANCEMENT_MODEL", "")
-
-        # Gemini модели
-        self.GEMINI_ENHANCEMENT_MODEL = os.getenv("GEMINI_ENHANCEMENT_MODEL", "gemini-2.0-flash-exp")
-        self.GEMINI_GENERATION_MODEL = os.getenv("GEMINI_GENERATION_MODEL", "gemini-2.0-flash-exp")
-        self.GEMINI_ASSISTANT_MODEL = os.getenv("GEMINI_ASSISTANT_MODEL", "gemini-2.0-flash-exp")
-
-        # Проактивные лимиты (переключаемся ДО исчерпания)
-        self.GEMINI_PRO_LIMIT = int(os.getenv("GEMINI_PRO_LIMIT", "45"))  # Из 50 RPD
-        self.GEMINI_FLASH_LIMIT = int(os.getenv("GEMINI_FLASH_LIMIT", "230"))  # Из 250 RPD
         
         # Database
         self.DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./usm.db")
@@ -56,37 +42,19 @@ class Settings:
         self.JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
         self.JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
         self.JWT_REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7"))
-        self.ACCESS_TOKEN_COOKIE_NAME = os.getenv("ACCESS_TOKEN_COOKIE_NAME", "access_token")
-        self.REFRESH_TOKEN_COOKIE_NAME = os.getenv("REFRESH_TOKEN_COOKIE_NAME", "refresh_token")
-        self.COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
-        # Нормализуем SameSite: допускаем только lax|strict|none (в нижнем регистре)
-        default_samesite = os.getenv("COOKIE_SAMESITE")
-        if default_samesite is None and self.ENVIRONMENT == "production":
-            default_samesite = "none"  # по умолчанию разрешаем cross-site cookie в проде
-        self.COOKIE_SAMESITE = (default_samesite or "lax").lower()
-        if self.COOKIE_SAMESITE not in {"lax", "strict", "none"}:
-            logger.warning("Invalid COOKIE_SAMESITE value. Fallback to 'lax'.")
-            self.COOKIE_SAMESITE = "lax"
-        # Для SameSite=None требуется Secure=true
-        if self.COOKIE_SAMESITE == "none":
-            self.COOKIE_SECURE = True
-        # Пустая строка означает "не задавать домен" (важно для localhost)
-        self.COOKIE_DOMAIN = os.getenv("COOKIE_DOMAIN", "") or None
         
         # CORS
-        default_allowed_origins = [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "https://user-stories-map-ab.onrender.com",
-            "https://user-stories-map.onrender.com",
-        ]
-        self.ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", ",".join(default_allowed_origins))
+        self.ALLOWED_ORIGINS = os.getenv(
+            "ALLOWED_ORIGINS",
+            "http://localhost:5173,http://127.0.0.1:5173"
+        )
         
         # Logging
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
         
         # Sentry
         self.SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+        self.ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
         
         # Автоопределение провайдера
         self._set_api_provider()
@@ -109,22 +77,17 @@ class Settings:
             elif provider == "perplexity" and self.PERPLEXITY_API_KEY:
                 self.API_PROVIDER = "perplexity"
                 return
-            elif provider == "openai" and self.OPENAI_API_KEY:
-                self.API_PROVIDER = "openai"
-                return
 
         # Fallback: определяем по формату ключа (для обратной совместимости)
         api_key = self.get_api_key()
         if api_key:
             # Только если ключ существует, определяем провайдера по формату
-            if api_key.startswith("gsk_"):
+            if api_key.startswith("AIza"):
+                self.API_PROVIDER = "gemini"
+            elif api_key.startswith("gsk_"):
                 self.API_PROVIDER = "groq"
             elif api_key.startswith("pplx-"):
                 self.API_PROVIDER = "perplexity"
-            elif api_key.startswith("sk-"):
-                self.API_PROVIDER = "openai"
-            elif api_key.startswith("AIza"):
-                self.API_PROVIDER = "gemini"
             # Если ключ есть, но формат не распознан, не устанавливаем провайдера
             # (оставляем пустую строку, что означает "не определен")
         # Если ключа нет, оставляем API_PROVIDER пустым (не устанавливаем по умолчанию)
@@ -141,8 +104,6 @@ class Settings:
             self.API_MODEL = "llama-3.3-70b-versatile"
         elif self.API_PROVIDER == "perplexity":
             self.API_MODEL = "sonar"
-        elif self.API_PROVIDER == "openai":
-            self.API_MODEL = "gpt-4o"
         # Если провайдер не определен (нет ключей), оставляем API_MODEL пустым
         # Это предотвращает вводящее в заблуждение состояние
     
@@ -177,9 +138,7 @@ class Settings:
                 return self.GROQ_API_KEY
             elif provider == "perplexity" and self.PERPLEXITY_API_KEY:
                 return self.PERPLEXITY_API_KEY
-            elif provider == "openai" and self.OPENAI_API_KEY:
-                return self.OPENAI_API_KEY
-        return self.GEMINI_API_KEY or self.OPENAI_API_KEY or self.PERPLEXITY_API_KEY or self.GROQ_API_KEY
+        return self.GEMINI_API_KEY or self.GROQ_API_KEY or self.PERPLEXITY_API_KEY
     
     def get_api_key_for_provider(self, provider: str) -> Optional[str]:
         """Возвращает API ключ для конкретного провайдера"""
@@ -189,8 +148,6 @@ class Settings:
             return self.GROQ_API_KEY
         elif provider == "perplexity":
             return self.PERPLEXITY_API_KEY
-        elif provider == "openai":
-            return self.OPENAI_API_KEY
         return None
     
     def get_available_providers(self) -> List[str]:
