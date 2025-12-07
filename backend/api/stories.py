@@ -225,17 +225,51 @@ def move_story(
         raise HTTPException(status_code=404, detail="Task not found or access denied")
     
     # Если release_id указан, проверяем его существование
-    if move.release_id:
-        release = db.query(Release).filter(Release.id == move.release_id).first()
+    release = None
+    target_release_id = move.release_id if move.release_id is not None else story.release_id
+    if target_release_id:
+        release = db.query(Release).filter(Release.id == target_release_id).first()
         if not release:
             raise HTTPException(status_code=404, detail="Release not found")
     
     old_task_id = story.task_id
     old_release_id = story.release_id
     old_position = story.position
+
+    # Перестановка внутри одной ячейки: просто меняем порядок
+    if old_task_id == move.task_id and old_release_id == target_release_id:
+        stories_in_cell = db.query(UserStory)\
+            .filter(UserStory.task_id == move.task_id)\
+            .filter(UserStory.release_id == target_release_id)\
+            .order_by(UserStory.position)\
+            .all()
+
+        stories_in_cell = [s for s in stories_in_cell if s.id != story_id]
+        safe_position = max(0, min(move.position, len(stories_in_cell)))
+        stories_in_cell.insert(safe_position, story)
+
+        for idx, s in enumerate(stories_in_cell):
+            s.position = idx
+
+        if release:
+            story.priority = release.title
+
+        db.commit()
+        db.refresh(story)
+
+        return StoryResponse(
+            id=story.id,
+            title=story.title,
+            description=story.description,
+            priority=story.priority,
+            acceptance_criteria=story.acceptance_criteria or [],
+            release_id=story.release_id,
+            position=story.position,
+            status=story.status or "todo"
+        )
     
     # Если перемещаем в другую ячейку, обновляем позиции в старой ячейке
-    if old_task_id != move.task_id or old_release_id != move.release_id:
+    if old_task_id != move.task_id or old_release_id != target_release_id:
         # Уменьшаем позиции в старой ячейке
         stories_to_update = db.query(UserStory)\
             .filter(UserStory.task_id == old_task_id)\
@@ -249,7 +283,7 @@ def move_story(
         # Увеличиваем позиции в новой ячейке после целевой позиции
         stories_to_shift = db.query(UserStory)\
             .filter(UserStory.task_id == move.task_id)\
-            .filter(UserStory.release_id == move.release_id)\
+            .filter(UserStory.release_id == target_release_id)\
             .filter(UserStory.position >= move.position)\
             .all()
         
@@ -258,11 +292,11 @@ def move_story(
     
     # Обновляем историю
     story.task_id = move.task_id
-    story.release_id = move.release_id
+    story.release_id = target_release_id
     story.position = move.position
     
     # Синхронизируем priority с названием release
-    if move.release_id and release:
+    if target_release_id and release:
         story.priority = release.title
     
     db.commit()

@@ -23,6 +23,8 @@ function useStoryMapInteractions({
   refreshProject,
 }) {
   const [editingStory, setEditingStory] = useState(null);
+  const [editingStoryTaskId, setEditingStoryTaskId] = useState(null);
+  const [editingStoryReleaseId, setEditingStoryReleaseId] = useState(null);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [aiAssistantStory, setAiAssistantStory] = useState(null);
   const [aiAssistantTaskId, setAiAssistantTaskId] = useState(null);
@@ -60,7 +62,11 @@ function useStoryMapInteractions({
     setEditingStory(null);
   }, [deleteStory, editingStory]);
 
-  const handleOpenEditModal = useCallback((story) => setEditingStory(story), []);
+  const handleOpenEditModal = useCallback((story, taskId, releaseId) => {
+    setEditingStory(story);
+    setEditingStoryTaskId(taskId);
+    setEditingStoryReleaseId(releaseId);
+  }, []);
 
   const handleOpenAIAssistant = useCallback((story, taskId, releaseId) => {
     setAiAssistantStory(story);
@@ -76,10 +82,15 @@ function useStoryMapInteractions({
     setAiAssistantReleaseId(null);
   }, []);
 
-  const closeEditModal = useCallback(() => setEditingStory(null), []);
+  const closeEditModal = useCallback(() => {
+    setEditingStory(null);
+    setEditingStoryTaskId(null);
+    setEditingStoryReleaseId(null);
+  }, []);
 
   const handleStoryImproved = useCallback(async () => {
-    await refreshProject({ silent: false });
+    // Silent refresh to avoid full-page flicker after AI improvements
+    await refreshProject({ silent: true });
   }, [refreshProject]);
 
   const handleStatusChange = useCallback(async (storyId, newStatus) => {
@@ -212,6 +223,8 @@ function useStoryMapInteractions({
 
   return {
     editingStory,
+    editingStoryTaskId,
+    editingStoryReleaseId,
     editingTaskId,
     pendingDeleteTaskId,
     aiAssistantOpen,

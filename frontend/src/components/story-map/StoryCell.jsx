@@ -69,7 +69,7 @@ function StoryCell({
             story={story}
             taskId={taskId}
             releaseId={releaseId}
-            onEdit={() => onEditStory(story)}
+            onEdit={() => onEditStory(story, taskId, releaseId)}
             onOpenAI={() => onOpenAI(story, taskId, releaseId)}
             onStatusChange={onStatusChange}
             dragDisabled={isStoryDragDisabled(story.id)}
@@ -107,7 +107,7 @@ function StoryCell({
                   story={story}
                   taskId={taskId}
                   releaseId={releaseId}
-                  onEdit={() => onEditStory(story)}
+                  onEdit={() => onEditStory(story, taskId, releaseId)}
                   onOpenAI={() => onOpenAI(story, taskId, releaseId)}
                   onStatusChange={onStatusChange}
                   dragDisabled={isStoryDragDisabled(story.id)}

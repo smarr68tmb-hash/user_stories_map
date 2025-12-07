@@ -66,6 +66,8 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
 
   const {
     editingStory,
+    editingStoryTaskId,
+    editingStoryReleaseId,
     editingTaskId,
     pendingDeleteTaskId,
     aiAssistantOpen,
@@ -177,6 +179,8 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
 
       <StoryMapModals
         editingStory={editingStory}
+        editingStoryTaskId={editingStoryTaskId}
+        editingStoryReleaseId={editingStoryReleaseId}
         releases={project.releases}
         onCloseEdit={closeEditModal}
         onSaveStory={modalHandlers.handleUpdateStory}

@@ -34,6 +34,35 @@ export function useStories({ project, onUpdate, refreshProject, onUnauthorized, 
     }));
   }, []);
 
+  const findReleaseByPriority = useCallback(
+    (priority) => {
+      if (!priority || typeof priority !== 'string') return null;
+      const normalized = priority.toLowerCase();
+      return project.releases?.find((release) => release.title?.toLowerCase() === normalized) || null;
+    },
+    [project.releases],
+  );
+
+  const withSyncedRelease = useCallback(
+    (updates = {}) => {
+      if (updates.release_id !== undefined && updates.release_id !== null) {
+        return updates;
+      }
+
+      if (!updates.priority) {
+        return updates;
+      }
+
+      const mappedRelease = findReleaseByPriority(updates.priority);
+      if (mappedRelease?.id) {
+        return { ...updates, release_id: mappedRelease.id };
+      }
+
+      return updates;
+    },
+    [findReleaseByPriority],
+  );
+
   const ensureDraft = useCallback((cellId) => {
     setStoryDrafts((prev) => {
       if (prev[cellId]) return prev;
@@ -77,9 +106,11 @@ export function useStories({ project, onUpdate, refreshProject, onUnauthorized, 
     }
     const prev = project;
     setScopedLoading('add', cellId, true);
+    const mappedRelease = findReleaseByPriority(draft.priority);
+    const effectiveReleaseId = mappedRelease?.id ?? releaseId;
     const payload = {
       task_id: taskId,
-      release_id: releaseId,
+      release_id: effectiveReleaseId,
       title,
       description: draft.description || '',
       priority: draft.priority || 'MVP',
@@ -88,7 +119,8 @@ export function useStories({ project, onUpdate, refreshProject, onUnauthorized, 
     try {
       const res = await api.post('/story', payload);
       const story = res?.data || { id: `tmp-${Date.now()}`, ...payload };
-      onUpdate(addStoryTransform(project, taskId, releaseId, story));
+      const storyWithRelease = { ...story, release_id: effectiveReleaseId };
+      onUpdate(addStoryTransform(project, taskId, effectiveReleaseId, storyWithRelease));
       toast?.success('История добавлена');
       closeAddForm(cellId);
       await refreshProject?.({ silent: true });
@@ -100,16 +132,17 @@ export function useStories({ project, onUpdate, refreshProject, onUnauthorized, 
     } finally {
       setScopedLoading('add', cellId, false);
     }
-  }, [closeAddForm, onUnauthorized, onUpdate, project, refreshProject, setScopedLoading, storyDrafts, toast, updateDraft]);
+  }, [closeAddForm, findReleaseByPriority, onUnauthorized, onUpdate, project, refreshProject, setScopedLoading, storyDrafts, toast, updateDraft]);
 
   const updateStory = useCallback(async (storyId, updates) => {
     const prev = project;
     setScopedLoading('update', storyId, true);
-    onUpdate(updateStoryTransform(project, storyId, updates));
+    const normalizedUpdates = withSyncedRelease(updates);
+    onUpdate(updateStoryTransform(project, storyId, normalizedUpdates));
 
     try {
-      const res = await api.put(`/story/${storyId}`, updates);
-      const payload = res?.data || updates;
+      const res = await api.put(`/story/${storyId}`, normalizedUpdates);
+      const payload = res?.data || normalizedUpdates;
       onUpdate(updateStoryTransform(project, storyId, payload));
       toast?.success('История обновлена');
       await refreshProject?.({ silent: true });
@@ -120,7 +153,7 @@ export function useStories({ project, onUpdate, refreshProject, onUnauthorized, 
     } finally {
       setScopedLoading('update', storyId, false);
     }
-  }, [onUnauthorized, onUpdate, project, refreshProject, setScopedLoading, toast]);
+  }, [onUnauthorized, onUpdate, project, refreshProject, setScopedLoading, toast, withSyncedRelease]);
 
   // Store pending deletes for undo functionality
   const [, setPendingDeletes] = useState({});

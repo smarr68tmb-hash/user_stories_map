@@ -139,58 +139,55 @@ export function moveStory(project, storyId, targetTaskId, targetReleaseId, targe
   const location = findStoryLocation(project, storyId);
   if (!location) return project;
 
-  const { story: foundStory, taskIndex, activityIndex } = location;
-
-  let targetActivityIndex = -1;
-  let targetTaskIndex = -1;
-
-  project.activities.forEach((act, actIdx) => {
-    const tIdx = act.tasks.findIndex((t) => t.id === targetTaskId);
-    if (tIdx !== -1) {
-      targetActivityIndex = actIdx;
-      targetTaskIndex = tIdx;
-    }
-  });
-
-  if (targetActivityIndex === -1 || targetTaskIndex === -1) {
-    return project;
-  }
-
-  const updatedStory = { ...foundStory, release_id: targetReleaseId, position: targetPosition };
+  const { story: foundStory, task: sourceTask } = location;
+  const sourceReleaseId = foundStory.release_id;
 
   return {
     ...project,
-    activities: project.activities.map((act, actIdx) => {
-      if (actIdx !== activityIndex && actIdx !== targetActivityIndex) {
-        return act;
-      }
+    activities: project.activities.map((act) => ({
+      ...act,
+      tasks: act.tasks.map((task) => {
+        const isSourceTask = task.id === sourceTask.id;
+        const isTargetTask = task.id === targetTaskId;
 
-      return {
-        ...act,
-        tasks: act.tasks.map((t, tIdx) => {
-          const isSource = actIdx === activityIndex && tIdx === taskIndex;
-          const isTarget = actIdx === targetActivityIndex && tIdx === targetTaskIndex;
+        if (!isSourceTask && !isTargetTask) {
+          return task;
+        }
 
-          if (!isSource && !isTarget) return t;
+        // Start from a mutable copy
+        let stories = [...task.stories];
 
-          // Work on a mutable copy of stories for source/target
-          let stories = t.stories;
+        if (isSourceTask) {
+          stories = stories.filter((s) => s.id !== storyId);
+        }
 
-          if (isSource) {
-            stories = stories.filter((s) => s.id !== storyId);
-          }
+        // Prepare helper to renumber positions inside a single release
+        const renumberRelease = (list, releaseId) =>
+          list.map((s, idx) => (s.release_id === releaseId ? { ...s, position: idx } : s));
 
-          if (isTarget) {
-            const nextStories = [...stories];
-            const insertIndex = Math.max(0, Math.min(targetPosition, nextStories.length));
-            nextStories.splice(insertIndex, 0, updatedStory);
-            stories = nextStories;
-          }
+        // Insert into target release bucket (could be the same task)
+        if (isTargetTask) {
+          const targetStories = stories.filter((s) => s.release_id === targetReleaseId);
+          const otherStories = stories.filter((s) => s.release_id !== targetReleaseId);
 
-          return { ...t, stories };
-        }),
-      };
-    }),
+          const insertIndex = Math.max(0, Math.min(targetPosition, targetStories.length));
+          const storyToInsert = { ...foundStory, task_id: targetTaskId, release_id: targetReleaseId };
+
+          const nextTargetStories = [...targetStories];
+          nextTargetStories.splice(insertIndex, 0, storyToInsert);
+
+          const renumberedTarget = renumberRelease(nextTargetStories, targetReleaseId);
+          return { ...task, stories: [...otherStories, ...renumberedTarget] };
+        }
+
+        // If we moved away from this task, renumber the source release positions
+        const sourceStories = stories.filter((s) => s.release_id === sourceReleaseId);
+        const otherStories = stories.filter((s) => s.release_id !== sourceReleaseId);
+        const renumberedSource = renumberRelease(sourceStories, sourceReleaseId);
+
+        return { ...task, stories: [...otherStories, ...renumberedSource] };
+      }),
+    })),
   };
 }
 
