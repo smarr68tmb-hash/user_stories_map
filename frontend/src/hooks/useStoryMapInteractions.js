@@ -88,8 +88,10 @@ function useStoryMapInteractions({
     setEditingStoryReleaseId(null);
   }, []);
 
-  const handleStoryImproved = useCallback(async () => {
+  const handleStoryImproved = useCallback(async (improvedStory) => {
     // Silent refresh to avoid full-page flicker after AI improvements
+    // improvedStory параметр может использоваться для обновления формы редактирования
+    // но здесь мы просто обновляем весь проект
     await refreshProject({ silent: true });
   }, [refreshProject]);
 

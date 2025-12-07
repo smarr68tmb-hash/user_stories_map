@@ -120,11 +120,15 @@ function AIAssistant({ story, taskId, releaseId, isOpen, onClose, onStoryImprove
         message: data.message
       }]);
 
-      // Если успешно улучшена, обновляем карту
+      // Если успешно улучшена, передаем улучшенную историю в callback
       if (data.success && data.improved_story) {
+        // Не закрываем сразу, чтобы пользователь увидел результат
+        // Передаем улучшенную историю в callback (callback может принять или проигнорировать параметр)
         setTimeout(() => {
-          onStoryImproved();
-          // Не закрываем сразу, чтобы пользователь увидел результат
+          // Передаем улучшенную историю - callback сам решит, использовать ли параметр
+          if (onStoryImproved) {
+            onStoryImproved(data.improved_story);
+          }
         }, 1500);
       }
     } catch (err) {

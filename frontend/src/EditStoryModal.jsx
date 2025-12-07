@@ -95,13 +95,36 @@ function EditStoryModal({
     setAiAssistantOpen(false);
   };
 
-  const handleStoryImproved = async () => {
-    if (onStoryImproved) {
-      await onStoryImproved();
+  const handleStoryImproved = async (improvedStory) => {
+    // Обновляем форму с улучшенными данными из результата AI
+    if (improvedStory) {
+      if (improvedStory.title) {
+        setEditTitle(improvedStory.title);
+      }
+      if (improvedStory.description !== undefined) {
+        setEditDescription(improvedStory.description || '');
+      }
+      if (improvedStory.acceptance_criteria) {
+        setEditAC(improvedStory.acceptance_criteria.join('\n'));
+      }
+      if (improvedStory.status) {
+        setEditStatus(improvedStory.status);
+      }
+      if (improvedStory.release_id !== undefined) {
+        setEditReleaseId(improvedStory.release_id);
+      }
     }
-    // Close both modals - the updated story will be visible on the map
+    
+    // Закрываем только AI Assistant, форму редактирования оставляем открытой
     setAiAssistantOpen(false);
-    onClose();
+    
+    // Обновляем проект в фоне для синхронизации данных
+    // Форма редактирования останется открытой с уже обновленными данными
+    if (onStoryImproved) {
+      // Вызываем в фоне, не блокируя UI
+      // Передаем улучшенную историю, callback может использовать или проигнорировать
+      Promise.resolve(onStoryImproved(improvedStory)).catch(console.error);
+    }
   };
 
   // Keyboard shortcuts
