@@ -47,7 +47,7 @@ function TaskColumn({
     <div
       ref={setNodeRef}
       style={style}
-      className={`w-[220px] flex-shrink-0 ${TASK_COLUMN_SURFACE} p-3 text-sm font-semibold text-center ${TEXT_TOKENS.secondary} min-h-[60px] flex items-center justify-center group relative`}
+      className={`w-[280px] flex-shrink-0 ${TASK_COLUMN_SURFACE} p-3 text-sm font-semibold text-center ${TEXT_TOKENS.secondary} min-h-[60px] flex items-center justify-center group relative`}
     >
       {isEditing ? (
         <div className="flex items-center gap-2 w-full">

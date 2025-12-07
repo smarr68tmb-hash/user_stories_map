@@ -226,7 +226,7 @@ function ActivityHeader({
                     />
                   );
                 })}
-                <div className="flex-shrink-0 border-r border-gray-200 w-[220px]">
+                <div className="flex-shrink-0 border-r border-gray-200 w-[280px]">
                   {addingTaskActivityId === act.id ? (
                     <div className={`p-3 min-h-[60px] ${ADD_FORM_TOKENS.surface}`}>
                       <Input

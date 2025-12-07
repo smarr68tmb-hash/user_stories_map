@@ -86,7 +86,7 @@ function ReleaseRow({
                 />
               );
             })}
-            <div className="w-[220px] flex-shrink-0 border-r border-gray-200"></div>
+            <div className="w-[280px] flex-shrink-0 border-r border-gray-200"></div>
           </div>
         );
       })}

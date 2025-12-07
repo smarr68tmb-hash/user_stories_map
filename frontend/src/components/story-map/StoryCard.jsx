@@ -1,19 +1,11 @@
-import {
-  useSortable,
-} from '@dnd-kit/sortable';
+import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Circle, Clock, Check, Sparkles, GripVertical } from 'lucide-react';
+import { Sparkles, GripVertical } from 'lucide-react';
 import { getStatusToken, STATUS_FLOW, TEXT_TOKENS, ACTION_TOKENS } from '../../theme/tokens';
 import { Badge } from '../ui';
 import useHoverPreview from '../../hooks/useHoverPreview';
 import StoryCardPreview from './StoryCardPreview';
-
-// Map priority to Badge variant
-const priorityVariantMap = {
-  'MVP': 'mvp',
-  'Release 1': 'release1',
-  'Later': 'later',
-};
+import { statusIcons, getPriorityVariant } from './storyMeta';
 
 function StoryCard({
   story,
@@ -52,22 +44,9 @@ function StoryCard({
     scale: isDragging ? '1.05' : undefined,
   };
 
-  // Иконки статуса
-  const statusIcons = {
-    'todo': <Circle className="w-4 h-4" />,
-    'in_progress': <Clock className="w-4 h-4" />,
-    'done': <Check className="w-4 h-4" />,
-    'blocked': (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="10" strokeWidth="2" />
-        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" strokeWidth="2" />
-      </svg>
-    ),
-  };
-
   const currentStatus = story.status || 'todo';
   const statusToken = getStatusToken(currentStatus);
-  const priorityVariant = priorityVariantMap[story.priority] || 'secondary';
+  const priorityVariant = getPriorityVariant(story.priority);
   
   // Следующий статус при клике
   const getNextStatus = (current) => {
@@ -133,17 +112,19 @@ function StoryCard({
       )}
 
       {/* Footer: Priority + AC count */}
-      <div className="flex items-center gap-2 mt-auto pt-2 ml-11">
-        {story.priority && (
-          <Badge variant={priorityVariant} size="sm" className="uppercase font-bold">
-            {story.priority}
-          </Badge>
-        )}
-        {story.acceptance_criteria && story.acceptance_criteria.length > 0 && (
-          <Badge variant="ghost" size="sm" className="font-semibold">
-            {story.acceptance_criteria.length} КП
-          </Badge>
-        )}
+      <div className="flex items-center justify-between gap-2 mt-auto pt-2">
+        <div className="flex items-center gap-2 ml-11 flex-wrap">
+          {story.priority && (
+            <Badge variant={priorityVariant} size="xs" className="uppercase font-semibold text-[10px]">
+              {story.priority}
+            </Badge>
+          )}
+          {story.acceptance_criteria && story.acceptance_criteria.length > 0 && (
+            <Badge variant="ghost" size="xs" className="font-medium">
+              {story.acceptance_criteria.length} КП
+            </Badge>
+          )}
+        </div>
 
         {/* AI Button - показывается при hover, min 44px touch target */}
         <button
@@ -152,13 +133,13 @@ function StoryCard({
             e.stopPropagation();
             onOpenAI();
           }}
-          className={`ml-auto text-sm ${ACTION_TOKENS.ai.buttonSmall} transition opacity-0 group-hover:opacity-100 flex items-center gap-1.5 shadow-sm`}
+          className={`text-xs ${ACTION_TOKENS.ai.buttonSmall} transition opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-1 min-h-[28px]`}
           type="button"
           title="AI Ассистент"
           aria-label={`Улучшить историю "${story.title}" с помощью AI`}
         >
-          <Sparkles className="w-4 h-4" />
-          <span className="font-medium">AI</span>
+          <Sparkles className="w-3.5 h-3.5" />
+          <span className="font-medium text-[10px]">AI</span>
         </button>
       </div>
       </div>

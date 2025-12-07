@@ -1,38 +1,13 @@
-import { Circle, Clock, Check } from 'lucide-react';
 import { getStatusToken, TEXT_TOKENS } from '../../theme/tokens';
 import { Badge } from '../ui';
-
-const priorityVariantMap = {
-  'MVP': 'mvp',
-  'Release 1': 'release1',
-  'Later': 'later',
-};
-
-const statusLabels = {
-  'todo': 'К выполнению',
-  'in_progress': 'В работе',
-  'done': 'Готово',
-  'blocked': 'Заблокировано',
-};
-
-const statusIcons = {
-  'todo': <Circle className="w-4 h-4" />,
-  'in_progress': <Clock className="w-4 h-4" />,
-  'done': <Check className="w-4 h-4" />,
-  'blocked': (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="10" strokeWidth="2" />
-      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" strokeWidth="2" />
-    </svg>
-  ),
-};
+import { statusIcons, statusLabels, getPriorityVariant } from './storyMeta';
 
 function StoryCardPreview({ story, position }) {
   if (!story) return null;
 
   const currentStatus = story.status || 'todo';
   const statusToken = getStatusToken(currentStatus);
-  const priorityVariant = priorityVariantMap[story.priority] || 'secondary';
+  const priorityVariant = getPriorityVariant(story.priority);
 
   const acceptanceCriteria = story.acceptance_criteria || [];
   const hasContent = story.description || acceptanceCriteria.length > 0;

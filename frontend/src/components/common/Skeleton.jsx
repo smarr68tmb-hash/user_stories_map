@@ -52,7 +52,7 @@ export function ActivityHeaderSkeleton({ columns = 3 }) {
         <Skeleton variant="text" className="w-16 mx-auto" />
       </div>
       {Array.from({ length: columns }).map((_, i) => (
-        <div key={i} className="w-[220px] bg-blue-50 border-r border-gray-200 p-3">
+        <div key={i} className="w-[280px] bg-blue-50 border-r border-gray-200 p-3">
           <Skeleton variant="title" className="mx-auto" />
         </div>
       ))}
@@ -76,7 +76,7 @@ export function StoryMapSkeleton({ rows = 3, columns = 3 }) {
           {Array.from({ length: columns }).map((_, colIdx) => (
             <div
               key={colIdx}
-              className="w-[220px] border-r border-gray-200 p-2 space-y-2"
+              className="w-[280px] border-r border-gray-200 p-2 space-y-2"
             >
               <StoryCardSkeleton />
               {colIdx % 2 === 0 && <StoryCardSkeleton />}

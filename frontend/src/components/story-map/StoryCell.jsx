@@ -212,7 +212,7 @@ function DroppableCell({ cellId, taskId, releaseId, children }) {
   return (
     <div
       ref={setNodeRef}
-      className={`w-[220px] flex-shrink-0 p-2 border-r transition-all duration-200 ${
+      className={`w-[280px] flex-shrink-0 p-2 border-r transition-all duration-200 ${
         showDropIndicator ? DROP_ZONE_TOKENS.active : DROP_ZONE_TOKENS.inactive
       }`}
     >

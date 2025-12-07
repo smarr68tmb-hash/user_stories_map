@@ -55,13 +55,13 @@ function StoryMapSkeleton({ activityWidths = {}, releases = [], taskColumnWidth 
                     className="flex"
                     style={{ width, flexShrink: 0 }}
                   >
-                    <div className="w-[220px] flex-shrink-0 p-2 border-r border-dashed border-gray-200">
+                    <div className="w-[280px] flex-shrink-0 p-2 border-r border-dashed border-gray-200">
                       <div className="space-y-2">
                         <Skeleton className="h-20 w-full" />
                         <Skeleton className="h-14 w-full" />
                       </div>
                     </div>
-                    <div className="w-[220px] flex-shrink-0 p-2 border-r border-dashed border-gray-200">
+                    <div className="w-[280px] flex-shrink-0 p-2 border-r border-dashed border-gray-200">
                       <div className="space-y-2">
                         <Skeleton className="h-10 w-full" />
                         <Skeleton className="h-14 w-full" />
