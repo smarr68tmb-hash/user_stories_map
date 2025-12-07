@@ -21,14 +21,12 @@ pool_kwargs = {
 # Для PostgreSQL (включая Supabase) устанавливаем ограничения пула
 if not settings.is_sqlite():
     import os
-    # Supabase Session mode имеет очень строгое ограничение на количество соединений
-    # Для избежания ошибки MaxClientsInSessionMode используем минимальные настройки
-    # Рекомендуется использовать Transaction mode pooler Supabase (порт 6543) вместо Session mode (порт 5432)
-    # Можно переопределить через переменные окружения
-    # Для Supabase Session mode используем минимальный pool_size=1
-    # Это критично, так как при деплое может быть несколько процессов/воркеров
-    # Каждый воркер создает свой пул, поэтому pool_size=1 на воркер безопаснее
-    default_pool_size = int(os.getenv("DB_POOL_SIZE", "1"))  # Минимум 1 соединение на воркер
+    # Настройки пула для Supabase
+    # Transaction mode (порт 6543) позволяет больше соединений, чем Session mode (порт 5432)
+    # Transaction mode рекомендуется для production и stateless приложений
+    # Можно переопределить через переменные окружения DB_POOL_SIZE
+    # По умолчанию используем pool_size=3 для Transaction mode (можно увеличить до 5-10 при необходимости)
+    default_pool_size = int(os.getenv("DB_POOL_SIZE", "3"))  # Для Transaction mode можно использовать больше соединений
     pool_kwargs.update({
         "pool_size": default_pool_size,
         "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "0")),  # Не создавать дополнительные соединения сверх pool_size
@@ -48,11 +46,14 @@ if not settings.is_sqlite():
     logger.info(f"📊 Database pool settings: pool_size={pool_kwargs.get('pool_size')}, "
                 f"max_overflow={pool_kwargs.get('max_overflow')}, "
                 f"pool_recycle={pool_kwargs.get('pool_recycle')}s")
-    # Предупреждение о Supabase Session mode
-    if "pooler.supabase.com" in settings.DATABASE_URL and ":5432" in settings.DATABASE_URL:
-        logger.warning("⚠️  Используется Supabase Session mode (порт 5432) - очень строгие ограничения!")
-        logger.warning("💡 Рекомендуется использовать Transaction mode pooler (порт 6543) для лучшей производительности")
-        logger.warning("💡 Измените DATABASE_URL: замените порт 5432 на 6543 и добавьте ?pgbouncer=true")
+    # Проверка режима Supabase
+    if "pooler.supabase.com" in settings.DATABASE_URL:
+        if ":6543" in settings.DATABASE_URL:
+            logger.info("✅ Используется Supabase Transaction mode pooler (порт 6543) - оптимально для production")
+        elif ":5432" in settings.DATABASE_URL:
+            logger.warning("⚠️  Используется Supabase Session mode (порт 5432) - очень строгие ограничения!")
+            logger.warning("💡 Рекомендуется использовать Transaction mode pooler (порт 6543) для лучшей производительности")
+            logger.warning("💡 Измените DATABASE_URL: замените порт 5432 на 6543 и добавьте ?pgbouncer=true")
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
