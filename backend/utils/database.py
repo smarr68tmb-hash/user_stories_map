@@ -25,8 +25,12 @@ if not settings.is_sqlite():
     # Для избежания ошибки MaxClientsInSessionMode используем минимальные настройки
     # Рекомендуется использовать Transaction mode pooler Supabase (порт 6543) вместо Session mode (порт 5432)
     # Можно переопределить через переменные окружения
+    # Для Supabase Session mode используем минимальный pool_size=1
+    # Это критично, так как при деплое может быть несколько процессов/воркеров
+    # Каждый воркер создает свой пул, поэтому pool_size=1 на воркер безопаснее
+    default_pool_size = int(os.getenv("DB_POOL_SIZE", "1"))  # Минимум 1 соединение на воркер
     pool_kwargs.update({
-        "pool_size": int(os.getenv("DB_POOL_SIZE", "2")),  # Минимум 2 соединения (для Supabase Free/Pro планов)
+        "pool_size": default_pool_size,
         "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "0")),  # Не создавать дополнительные соединения сверх pool_size
         "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", "1800")),  # Переиспользовать соединения каждые 1800 секунд (30 минут)
         "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", "20")),  # Таймаут ожидания соединения из пула (20 секунд)

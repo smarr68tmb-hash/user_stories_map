@@ -55,10 +55,18 @@ if settings.SENTRY_DSN:
 else:
     logger.info("Sentry DSN not configured. Error tracking disabled.")
 
-# Создание таблиц в БД
+# Создание таблиц в БД (только для development, в production используйте миграции Alembic)
 from models import Base
 from utils.database import engine
-Base.metadata.create_all(bind=engine)
+# В production таблицы должны создаваться через миграции Alembic, а не автоматически
+# Это предотвращает создание лишних соединений при деплое
+if settings.ENVIRONMENT == "development":
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("✅ Database tables created/verified (development mode)")
+    except Exception as e:
+        logger.warning(f"⚠️  Could not create tables automatically: {e}")
+        logger.info("💡 Use 'alembic upgrade head' to run migrations in production")
 
 # Создание FastAPI приложения
 app = FastAPI(
