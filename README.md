@@ -13,7 +13,7 @@
 - Backend: FastAPI + PostgreSQL (Supabase)
 - Frontend: React + Vite
 - Deployment: Render.com
-- AI: Groq (приоритет) → Perplexity → OpenAI с автоматическим fallback
+- AI: Gemini (приоритет по умолчанию) → Groq → Perplexity → OpenAI с автоматическим fallback
 
 ## 🚀 Быстрый старт
 
@@ -35,19 +35,18 @@ source venv/bin/activate  # На Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Установите API ключ (рекомендуется Groq - бесплатный):
+4. Установите AI ключи (приоритет по умолчанию: gemini → groq → perplexity → openai):
 ```bash
-# Groq (рекомендуется - бесплатный и быстрый)
-export GROQ_API_KEY=gsk-your-api-key-here
+export GEMINI_API_KEY=your-gemini-key-here       # приоритетный
+export GROQ_API_KEY=gsk-your-api-key-here        # fallback 1
+export PERPLEXITY_API_KEY=pplx-your-api-key-here # fallback 2
+export OPENAI_API_KEY=sk-your-api-key-here       # fallback 3
 
-# Или Perplexity (резервный)
-export PERPLEXITY_API_KEY=pplx-your-api-key-here
-
-# Или OpenAI (резервный)
-export OPENAI_API_KEY=sk-your-api-key-here
+# Необязательно: переопределить порядок
+# export AI_PROVIDER_PRIORITY="gemini,groq,perplexity,openai"
 ```
 
-Система автоматически переключается между провайдерами при ошибках.
+Система автоматически переключается между провайдерами при ошибках или лимитах.
 
 5. Запустите сервер:
 ```bash
@@ -139,7 +138,7 @@ Frontend будет доступен на http://localhost:5173
 ### 📈 Статусы и прогресс (NEW!)
 Отслеживание выполнения историй:
 
-- **Три статуса**: `todo` → `in_progress` → `done`
+- **Четыре статуса**: `todo` → `in_progress` → `done` → `blocked` → `todo`
 - **Быстрое переключение** одним кликом на карточке
 - **Визуальная индикация**: цветная полоска + изменение фона
 - **Прогресс-бар по релизу**: X/Y выполненных задач
@@ -177,7 +176,7 @@ Frontend будет доступен на http://localhost:5173
 
 ## 🏗️ Архитектура
 
-### Backend (v2.0.0 - Модульная архитектура)
+### Backend (v2.0.0+ - Модульная архитектура)
 
 **Структура проекта:**
 ```
@@ -197,7 +196,7 @@ backend/
 - **SQLAlchemy** — ORM для работы с БД
 - **PostgreSQL (Supabase)** — облачная база данных
 - **Alembic** — миграции БД
-- **Groq/Perplexity/OpenAI API** — генерация карты через AI с автоматическим fallback
+- **Gemini/Groq/Perplexity/OpenAI API** — генерация карты через AI с автоматическим fallback
 - **Redis** — кеширование AI ответов
 - **JWT** — аутентификация
 - **Slowapi** — rate limiting
@@ -310,7 +309,7 @@ usm-service/
 - `PUT /story/{story_id}` — Обновление истории
 - `DELETE /story/{story_id}` — Удаление истории
 - `PATCH /story/{story_id}/move` — Перемещение истории (drag & drop)
-- `PATCH /story/{story_id}/status` — 📈 Обновление статуса (todo/in_progress/done)
+- `PATCH /story/{story_id}/status` — 📈 Обновление статуса (todo/in_progress/done/blocked)
 - `POST /story/{story_id}/ai-improve` — ✨ AI улучшение истории
 - `POST /stories/ai-bulk-improve` — ✨ Массовое AI улучшение
 
@@ -344,8 +343,12 @@ usm-service/
 Запуск через Docker Compose:
 
 ```bash
-# Создайте .env файл в корне проекта
-export OPENAI_API_KEY=sk-your-key-here
+# Создайте .env файл в корне проекта и задайте ключи (минимум один)
+export GEMINI_API_KEY=your-gemini-key-here
+# export GROQ_API_KEY=...
+# export PERPLEXITY_API_KEY=...
+# export OPENAI_API_KEY=...
+# export AI_PROVIDER_PRIORITY="gemini,groq,perplexity,openai"
 
 # Запустите все сервисы
 docker-compose up

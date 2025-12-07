@@ -12,14 +12,14 @@ source venv/bin/activate  # На Windows: venv\Scripts\activate
 # Установите зависимости
 pip install -r requirements.txt
 
-# Установите API ключ (рекомендуется Groq - бесплатный и быстрый)
-export GROQ_API_KEY=gsk-your-api-key-here
+# Установите API ключи AI (по умолчанию приоритет: gemini → groq → perplexity → openai)
+export GEMINI_API_KEY=your-gemini-key-here   # приоритетный
+export GROQ_API_KEY=gsk-your-api-key-here     # fallback 1
+export PERPLEXITY_API_KEY=pplx-your-api-key-here # fallback 2
+export OPENAI_API_KEY=sk-your-api-key-here    # fallback 3
 
-# Или используйте Perplexity (резервный)
-export PERPLEXITY_API_KEY=pplx-your-api-key-here
-
-# Или OpenAI (резервный)
-export OPENAI_API_KEY=sk-your-api-key-here
+# Настройка приоритета (опционально, если нужен иной порядок)
+# export AI_PROVIDER_PRIORITY="gemini,groq,perplexity,openai"
 
 # Запустите сервер
 python main.py
@@ -86,12 +86,13 @@ Frontend будет доступен на **http://localhost:5173**
 - Проверьте, что зависимости установлены: `npm install`
 
 ### Ошибка "AI API key not configured"
-- Установите хотя бы один API ключ:
-  - `export GROQ_API_KEY=gsk-your-key` (рекомендуется - бесплатный)
-  - `export PERPLEXITY_API_KEY=pplx-your-key` (резервный)
-  - `export OPENAI_API_KEY=sk-your-key` (резервный)
-- Или создайте файл `.env` в папке backend с содержимым: `GROQ_API_KEY=gsk-your-key`
-- Система автоматически переключается между провайдерами при ошибках
+- Установите хотя бы один API ключ (приоритет по умолчанию: gemini → groq → perplexity → openai):
+  - `export GEMINI_API_KEY=your-gemini-key` (приоритетный)
+  - `export GROQ_API_KEY=gsk-your-key` (fallback 1)
+  - `export PERPLEXITY_API_KEY=pplx-your-key` (fallback 2)
+  - `export OPENAI_API_KEY=sk-your-key` (fallback 3)
+- Или создайте файл `.env` в папке backend, задав нужные ключи
+- Система автоматически переключается между провайдерами при ошибках/лимитах
 
 ### Ошибка подключения к backend
 - Убедитесь, что backend запущен на порту 8000

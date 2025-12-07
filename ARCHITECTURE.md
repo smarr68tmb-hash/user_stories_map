@@ -6,7 +6,7 @@ AI User Story Mapper — это веб-приложение для автома�
 
 ## Технологический стек
 
-### Backend (v2.0.0 - Модульная архитектура)
+### Backend (v2.0.0+ - Модульная архитектура)
 
 **Структура:**
 ```
@@ -26,7 +26,8 @@ backend/
 - **SQLAlchemy** — ORM для работы с БД
 - **PostgreSQL** — база данных (production)
 - **Alembic** — миграции БД
-- **OpenAI/Perplexity API** — генерация карты через AI
+- **AI провайдеры** — Gemini (приоритет по умолчанию) → Groq → Perplexity → OpenAI с автоматическим fallback
+- **Two-Stage AI** — отдельные модели для enhancement/generation/assistant (по умолчанию Gemini `gemini-2.0-flash-exp`)
 - **Redis** — кеширование AI ответов
 - **JWT** — аутентификация
 - **Slowapi** — rate limiting
@@ -55,6 +56,7 @@ backend/
 │                   API Layer (api/)                      │
 │  ┌───────────┬──────────────┬──────────────┬─────────┐ │
 │  │ auth.py   │ projects.py  │ stories.py   │health.py│ │
+│  │           │ analysis.py  │              │         │ │
 │  └─────┬─────┴──────┬───────┴──────┬───────┴────┬────┘ │
 └────────┼────────────┼──────────────┼────────────┼──────┘
          │            │              │            │
@@ -63,9 +65,9 @@ backend/
 │              Service Layer (services/)                  │
 │  ┌──────────────────────┬──────────────────────────┐   │
 │  │  auth_service.py     │   ai_service.py          │   │
-│  │  - authenticate_user │   - generate_ai_map      │   │
-│  │  - create_tokens     │   - cache_results        │   │
-│  │  - verify_password   │   - parse_ai_response    │   │
+│  │  - authenticate_user │   - two-stage AI flow    │   │
+│  │  - create_tokens     │   - provider fallback    │   │
+│  │  - verify_password   │   - cache_results        │   │
 │  ├──────────────────────┼──────────────────────────┤   │
 │  │  similarity_service  │   validation_service     │   │
 │  │  - analyze_similarity│   - validate_project_map │   │
@@ -125,7 +127,8 @@ backend/
 │   │   ├── generate_ai_map()
 │   │   ├── enhance_requirements()
 │   │   ├── get_cache_key()
-│   │   └── OpenAI/Perplexity клиент
+│   │   ├── Fallback Gemini → Groq → Perplexity → OpenAI
+│   │   └── Настраиваемые модели для Stage1/Stage2/assistant
 │   │
 │   ├── similarity_service.py # Анализ схожести историй (v2.3.0)
 │   │   ├── analyze_similarity()
@@ -237,6 +240,8 @@ package "Frontend (React)" <<frontend>> {
   [Auth Component] as Auth
   [App Component] as App
   [StoryMap Component] as StoryMap
+  [Analysis Panel] as AnalysisPanel
+  [AI Assistant UI] as AIAssistantFE
   [API Client (Axios)] as ApiClient
 }
 
@@ -244,37 +249,57 @@ package "Backend (FastAPI)" <<backend>> {
   [Authentication] as AuthAPI
   [Projects API] as ProjectsAPI
   [Stories API] as StoriesAPI
+  [Analysis API] as AnalysisAPI
+  [AI Assistant API] as AIAssistantAPI
   [AI Generation] as AIGen
   [Rate Limiter] as RateLimit
 }
 
 package "Data Layer" <<database>> {
   database "PostgreSQL\n(Supabase)" as DB
-  database "Redis\n(Cache)" as Cache
+  database "Redis\n(Cache, optional)" as Cache
 }
 
 package "External Services" <<external>> {
-  [OpenAI/Perplexity API] as AI
+  [AI Providers\n(Gemini/Groq/Perplexity/OpenAI)] as AI
 }
 
 Auth --> ApiClient
 App --> ApiClient
 StoryMap --> ApiClient
+AnalysisPanel --> ApiClient
+AIAssistantFE --> ApiClient
 
 ApiClient --> AuthAPI : JWT Token
 ApiClient --> ProjectsAPI : CRUD Operations
 ApiClient --> StoriesAPI : CRUD Operations
+ApiClient --> AnalysisAPI : Analyze/Validate
+ApiClient --> AIAssistantAPI : Improve/Split
 
 AuthAPI --> DB : Users, Tokens
 ProjectsAPI --> DB : Projects, Activities
 StoriesAPI --> DB : Stories, Tasks
+AnalysisAPI --> DB : Projects, Stories
 AIGen --> AI : Generate Map
 AIGen --> Cache : Cache Results
 RateLimit --> Cache : Track Requests
+note right of Cache
+  Optional: AI cache + rate limit counters
+end note
 
 ProjectsAPI --> AIGen : Generate
+StoriesAPI --> AIAssistantAPI : AI Improve
+AnalysisAPI --> AIGen : Optional AI scoring
 @enduml
 ```
+
+**AI провайдеры и fallback**
+
+- Приоритет по умолчанию: `gemini → groq → perplexity → openai`
+- Gemini: модели `gemini-2.0-flash-exp` для enhancement/generation/assistant
+- Проактивные лимиты Gemini: 230 req/day (flash), 45 req/day (pro) для автопереключения
+- Настройка моделей: `GEMINI_*_MODEL`, `GROQ_*_MODEL`, `PERPLEXITY_*_MODEL`, `OPENAI_*_MODEL`, `ENHANCEMENT_MODEL`
+- Настройка приоритета: `AI_PROVIDER_PRIORITY`
 
 ---
 
@@ -349,6 +374,7 @@ entity "UserStory" as user_story {
   * title : String
   description : Text
   priority : String
+  status : String <<enum: todo|in_progress|done|blocked>>
   acceptance_criteria : JSON
   position : Integer
 }
@@ -360,6 +386,27 @@ project ||--o{ release : "has"
 activity ||--o{ user_task : "contains"
 user_task ||--o{ user_story : "has"
 release ||--o{ user_story : "categorizes"
+@enduml
+```
+
+### Сводный поток анализа/валидации
+
+```plantuml
+@startuml
+actor User
+participant "Frontend" as FE
+participant "AnalysisPanel" as Panel
+participant "Backend API" as BE
+participant "analysis services" as ASRV
+
+User -> FE: Открывает карту
+User -> Panel: Выбирает режим\nValidate / Similarity / Full
+Panel -> BE: REST call\n/validate | /analyze/similarity | /analyze/full
+BE -> BE: Загружает проект/истории
+BE -> ASRV: run_validation() or analyze_similarity() or full_report()
+ASRV --> BE: issues, groups, score
+BE --> Panel: JSON (score, issues, groups)
+Panel --> User: Отображает badge/группы/рекомендации
 @enduml
 ```
 
@@ -435,7 +482,7 @@ FE --> User: Перенаправление на страницу входа
 
 ---
 
-## Поток генерации User Story Map
+## Поток генерации User Story Map (Two-Stage)
 
 ```plantuml
 @startuml
@@ -448,35 +495,40 @@ database "PostgreSQL" as DB
 
 User -> FE: Вводит требования к продукту
 FE -> FE: Валидация (мин. 50 символов)
-FE -> BE: POST /generate-map\n{requirements_text}
 
-BE -> BE: Rate Limiting (5 req/min)
-BE -> BE: Генерирует cache_key\n(hash от requirements_text)
-BE -> Cache: Проверяет кеш
+== Stage 1: Enhancement (по умолчанию включен) ==
+FE -> BE: POST /enhance-requirements\n{requirements_text}
+BE -> BE: Rate Limiting (30 req/hour)
+BE -> Cache: Проверяет кеш (TTL 24ч)
 alt Кеш найден
-  Cache --> BE: Cached result
-  BE --> FE: 200 OK + cached map
-else Кеш не найден
-  BE -> AI: POST /chat/completions\n{model, messages, temperature}
-  note right
-    Промпт на русском языке:
-    - Определить персоны
-    - Создать Activities
-    - Разбить на Tasks
-    - Создать Stories с AC
-  end note
-  AI --> BE: JSON response
-  BE -> BE: Парсинг и валидация JSON
-  BE -> Cache: Сохраняет результат (TTL: 1 час)
-  BE -> DB: Создает Project
-  BE -> DB: Создает Activities
-  BE -> DB: Создает UserTasks
-  BE -> DB: Создает Releases (MVP, Release 1, Later)
-  BE -> DB: Создает UserStories
-  DB --> BE: Project created
-  BE --> FE: 200 OK + {project_id, map}
+  Cache --> BE: Cached enhancement
+else
+  BE -> AI: Enhance (выбор модели + fallback)
+  AI --> BE: Enhanced text + confidence
+  BE -> Cache: Сохраняет enhancement (TTL 24ч)
+end
+BE --> FE: {enhanced_text, added_aspects, confidence}
+alt Использовать enhanced
+  User -> FE: Выбирает enhanced_text
+else Оставить original
+  User -> FE: Выбирает original_text
 end
 
+== Stage 2: Generation ==
+FE -> BE: POST /generate-map\n{requirements_text, use_enhanced_text}
+BE -> BE: Rate Limiting (5 req/min)
+BE -> BE: Генерирует cache_key\n(hash от текста)
+BE -> Cache: Проверяет кеш (TTL 1ч)
+alt Кеш найден
+  Cache --> BE: Cached map
+else
+  BE -> AI: Generate map (fallback gemini→groq→perplexity→openai)
+  AI --> BE: JSON response
+  BE -> Cache: Сохраняет результат (TTL 1ч)
+  BE -> DB: Создает Project/Activities/Tasks/Releases/UserStories
+end
+
+BE --> FE: 200 OK + {project_id, map}
 FE -> FE: Рендерит StoryMap компонент
 FE --> User: Отображает интерактивную карту
 
@@ -595,6 +647,33 @@ Map --> User: Карточка перемещена
 
 ---
 
+## Быстрое изменение статуса истории
+
+```plantuml
+@startuml
+actor User
+participant "StoryCard (UI)" as Card
+participant "API Client" as Api
+participant "Backend API" as BE
+database "PostgreSQL" as DB
+
+User -> Card: Click status button
+Card -> Api: PATCH /story/{id}/status\nnext_status()
+Api -> BE: HTTP + JWT
+BE -> DB: UPDATE user_stories\nSET status = next
+DB --> BE: Updated
+BE --> Api: 200 OK {status}
+Api --> Card: Update UI (badge/progress)
+
+note right of Card
+  Цикл статусов:
+  todo → in_progress → done → blocked → todo
+end note
+@enduml
+```
+
+---
+
 ## Rate Limiting и Безопасность
 
 ```plantuml
@@ -635,9 +714,10 @@ else Лимит не превышен
 end
 
 note right of RL
-  Лимиты:
+  Лимиты (пример):
   - /register: 5 req/hour
   - /token: 10 req/hour
+  - /enhance-requirements: 30 req/hour
   - /generate-map: 5 req/min
   - Остальные: 100 req/min
 end note
@@ -685,7 +765,7 @@ cloud "Supabase" {
 }
 
 cloud "External Services" {
-  component "OpenAI/Perplexity\nAPI" as AI
+  component "AI Providers\n(Gemini/Groq/Perplexity/OpenAI)" as AI
 }
 
 User --> FE : HTTPS
@@ -699,9 +779,11 @@ note right of FE
 end note
 
 note right of BE
-  Environment Variables:
+  Environment Variables (основные):
   - DATABASE_URL
-  - PERPLEXITY_API_KEY
+  - GEMINI_API_KEY / GROQ_API_KEY / PERPLEXITY_API_KEY / OPENAI_API_KEY
+  - AI_PROVIDER_PRIORITY (default: gemini,groq,perplexity,openai)
+  - GEMINI_*_MODEL / GROQ_*_MODEL / PERPLEXITY_*_MODEL / OPENAI_*_MODEL / ENHANCEMENT_MODEL
   - JWT_SECRET_KEY
   - ALLOWED_ORIGINS
   - JWT_ALGORITHM
@@ -738,22 +820,26 @@ end note
 - Разные лимиты для разных эндпоинтов
 - Хранение счетчиков в Redis (если доступен)
 
-### 4. Кеширование
+### 4. Статусы историй и прогресс
+- Поле `status` в `UserStory`: `todo` → `in_progress` → `done` → `blocked` → `todo`
+- Быстрое переключение статуса с карточки; визуальные индикаторы и прогресс по релизу
+
+### 5. Кеширование
 - Redis для кеширования AI ответов (TTL: 1 час)
 - Уменьшение нагрузки на AI API
 - Экономия на API запросах
 
-### 5. Миграции БД
+### 6. Миграции БД
 - Alembic для версионирования схемы
 - Автоматический запуск миграций при деплое
 - Поддержка rollback
 
-### 6. Обработка ошибок
+### 7. Обработка ошибок
 - Централизованная обработка на frontend (api.js)
 - Детальные сообщения об ошибках
 - Логирование через Sentry (опционально)
 
-### 7. Производительность
+### 8. Производительность
 - Connection Pooling для PostgreSQL
 - Lazy loading для больших проектов
 - Оптимизация SQL запросов (joinedload)
