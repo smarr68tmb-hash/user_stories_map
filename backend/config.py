@@ -44,6 +44,13 @@ class Settings:
         self.JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
         self.JWT_REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7"))
         
+        # Cookie settings
+        self.COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax")
+        self.COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+        self.COOKIE_DOMAIN = os.getenv("COOKIE_DOMAIN", None)
+        self.ACCESS_TOKEN_COOKIE_NAME = os.getenv("ACCESS_TOKEN_COOKIE_NAME", "access_token")
+        self.REFRESH_TOKEN_COOKIE_NAME = os.getenv("REFRESH_TOKEN_COOKIE_NAME", "refresh_token")
+        
         # CORS
         self.ALLOWED_ORIGINS = os.getenv(
             "ALLOWED_ORIGINS",
