@@ -402,6 +402,7 @@ def get_project(
 @limiter.limit("20/hour")
 def generate_project_wireframe(
     project_id: int,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
