@@ -26,10 +26,19 @@ from schemas import (
     ProjectUpdate
 )
 from services.ai_service import generate_ai_map, enhance_requirements
-from services.wireframe_service import enqueue_wireframe_job
-from services.queue_provider import QueueAdapter
 from services.agent_service import generate_map_with_agent
 from dependencies import get_current_active_user
+
+# Lazy import для wireframe сервисов (чтобы не ломать импорт если Redis недоступен)
+try:
+    from services.wireframe_service import enqueue_wireframe_job
+    from services.queue_provider import QueueAdapter
+    WIREFRAME_AVAILABLE = True
+except Exception as e:
+    logger.warning(f"Wireframe services not available: {e}")
+    WIREFRAME_AVAILABLE = False
+    enqueue_wireframe_job = None
+    QueueAdapter = None
 
 router = APIRouter(prefix="", tags=["projects"])
 limiter = Limiter(key_func=get_remote_address)
@@ -407,6 +416,12 @@ def generate_project_wireframe(
     db: Session = Depends(get_db),
 ):
     """Ставит задачу генерации markdown wireframe для всей карты проекта."""
+    if not WIREFRAME_AVAILABLE or not enqueue_wireframe_job:
+        raise HTTPException(
+            status_code=503,
+            detail="Wireframe generation service is not available. Redis queue may be unavailable."
+        )
+    
     project = (
         db.query(Project)
         .options(
@@ -477,7 +492,7 @@ def get_project_wireframe_status(
         raise HTTPException(status_code=404, detail="Project not found")
 
     queue_status = None
-    if job_id:
+    if job_id and WIREFRAME_AVAILABLE and QueueAdapter:
         try:
             adapter = QueueAdapter(driver="redis")
             job = adapter.get_job(job_id)
@@ -554,28 +569,32 @@ def list_projects(
     db: Session = Depends(get_db)
 ):
     """Возвращает список проектов пользователя с пагинацией"""
-    projects = db.query(Project)\
-        .filter(Project.user_id == current_user.id)\
-        .order_by(Project.created_at.desc())\
-        .offset(skip)\
-        .limit(limit)\
-        .all()
-    
-    total = db.query(Project).filter(Project.user_id == current_user.id).count()
-    
-    return {
-        "items": [
-            {
-                "id": p.id,
-                "name": p.name,
-                "created_at": p.created_at.isoformat()
-            }
-            for p in projects
-        ],
-        "total": total,
-        "skip": skip,
-        "limit": limit
-    }
+    try:
+        projects = db.query(Project)\
+            .filter(Project.user_id == current_user.id)\
+            .order_by(Project.created_at.desc())\
+            .offset(skip)\
+            .limit(limit)\
+            .all()
+        
+        total = db.query(Project).filter(Project.user_id == current_user.id).count()
+        
+        return {
+            "items": [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "created_at": p.created_at.isoformat() if p.created_at else None
+                }
+                for p in projects
+            ],
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }
+    except Exception as e:
+        logger.error(f"Error listing projects for user {current_user.id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to list projects: {str(e)}")
 
 
 @router.delete("/project/{project_id}")
