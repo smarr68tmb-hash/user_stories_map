@@ -13,6 +13,8 @@ export type Priority =
   | 'MVP'
   | 'Later';
 
+export type WireframeStatus = 'idle' | 'pending' | 'success' | 'error';
+
 export interface Story {
   id: Identifier;
   title: string;
@@ -50,6 +52,18 @@ export interface Project {
   raw_requirements?: string | null;
   activities: Activity[];
   releases: Release[];
+  wireframe_markdown?: string | null;
+  wireframe_generated_at?: string | null;
+  wireframe_status?: WireframeStatus | null;
+  wireframe_error?: string | null;
+}
+
+export interface WireframeResponse {
+  markdown: string | null;
+  status: WireframeStatus | null;
+  generated_at?: string | null;
+  error?: string | null;
+  job_status?: string | null;
 }
 
 export interface User {

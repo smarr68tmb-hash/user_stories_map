@@ -5,6 +5,7 @@ import type {
   EnhancementResponse,
   GenerateMapResponse,
   Project,
+  WireframeResponse,
   Story,
   StoryPayload,
   Task,
@@ -264,6 +265,15 @@ export const projects = {
   update: (projectId: number | string, name: string) => api.put<Project>(`/project/${projectId}`, { name }),
 
   delete: (projectId: number | string) => api.delete(`/project/${projectId}`),
+};
+
+export const wireframes = {
+  generate: (projectId: number | string) => api.post<{ status: string; job_id: string }>(`/project/${projectId}/wireframe/generate`),
+  get: (projectId: number | string) => api.get<WireframeResponse>(`/project/${projectId}/wireframe`),
+  status: (projectId: number | string, jobId?: string | null) =>
+    api.get<WireframeResponse>(`/project/${projectId}/wireframe/status`, {
+      params: jobId ? { job_id: jobId } : undefined,
+    }),
 };
 
 export const stories = {

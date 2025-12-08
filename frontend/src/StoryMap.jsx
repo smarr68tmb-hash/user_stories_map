@@ -4,6 +4,7 @@ import StoryMapSkeleton from './components/story-map/StoryMapSkeleton';
 import FilterPanel from './components/story-map/FilterPanel';
 import SearchPanel from './components/story-map/SearchPanel';
 import StoryMapBoard from './components/story-map/StoryMapBoard';
+import WireframePanel from './components/story-map/WireframePanel';
 import useActivities from './hooks/useActivities';
 import useTasks from './hooks/useTasks';
 import useStories from './hooks/useStories';
@@ -167,6 +168,7 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
           statusSummary={{ shown: statusFilter.length, total: STATUS_OPTIONS.length }}
           releaseSummary={{ shown: releaseFilter.length, total: project.releases.length }}
         />
+        <WireframePanel project={project} refreshProject={refreshProject} toast={toast} />
       </div>
 
       <StoryMapBoard

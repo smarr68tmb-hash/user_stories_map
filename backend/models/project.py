@@ -16,6 +16,10 @@ class Project(Base):
     name = Column(String, index=True)
     raw_requirements = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    wireframe_markdown = Column(Text, nullable=True)
+    wireframe_generated_at = Column(DateTime(timezone=True), nullable=True)
+    wireframe_status = Column(String, default="idle", server_default="idle")
+    wireframe_error = Column(Text, nullable=True)
     
     # Relationships
     owner = relationship("User", back_populates="projects")

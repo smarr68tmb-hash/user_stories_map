@@ -26,6 +26,8 @@ from schemas import (
     ProjectUpdate
 )
 from services.ai_service import generate_ai_map, enhance_requirements
+from services.wireframe_service import enqueue_wireframe_job
+from services.queue_provider import QueueAdapter
 from services.agent_service import generate_map_with_agent
 from dependencies import get_current_active_user
 
@@ -88,7 +90,11 @@ def format_project_response(project: Project) -> ProjectResponse:
         name=project.name,
         raw_requirements=project.raw_requirements,
         activities=activities_data,
-        releases=releases_data
+        releases=releases_data,
+        wireframe_markdown=project.wireframe_markdown,
+        wireframe_generated_at=project.wireframe_generated_at,
+        wireframe_status=project.wireframe_status,
+        wireframe_error=project.wireframe_error,
     )
 
 
@@ -390,6 +396,101 @@ def get_project(
         raise HTTPException(status_code=404, detail="Project not found")
 
     return format_project_response(project)
+
+
+@router.post("/project/{project_id}/wireframe/generate")
+@limiter.limit("20/hour")
+def generate_project_wireframe(
+    project_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Ставит задачу генерации markdown wireframe для всей карты проекта."""
+    project = (
+        db.query(Project)
+        .options(
+            joinedload(Project.activities).subqueryload(Activity.tasks).subqueryload(UserTask.stories)
+        )
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if not project.activities:
+        raise HTTPException(status_code=400, detail="Project has no activities to generate wireframe")
+
+    try:
+        job_id = enqueue_wireframe_job(project_id, current_user.id)
+        project.wireframe_status = "pending"
+        project.wireframe_error = None
+        db.commit()
+        return {"status": "queued", "job_id": job_id}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        error_msg = str(e) if str(e) else repr(e)
+        logger.error(f"Failed to enqueue wireframe job: {error_msg}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to enqueue wireframe generation job")
+
+
+@router.get("/project/{project_id}/wireframe")
+def get_project_wireframe(
+    project_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Возвращает текущий wireframe markdown и статус."""
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    return {
+        "markdown": project.wireframe_markdown,
+        "status": project.wireframe_status,
+        "generated_at": project.wireframe_generated_at,
+        "error": project.wireframe_error,
+    }
+
+
+@router.get("/project/{project_id}/wireframe/status")
+def get_project_wireframe_status(
+    project_id: int,
+    job_id: str | None = None,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Возвращает статус wireframe и (опционально) статус задачи очереди."""
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    queue_status = None
+    if job_id:
+        try:
+            adapter = QueueAdapter(driver="redis")
+            job = adapter.get_job(job_id)
+            if job:
+                queue_status = job.get_status(refresh=True)
+        except Exception as e:  # pragma: no cover - только логирование статуса очереди
+            logger.warning(f"Failed to fetch queue status for job {job_id}: {e}")
+
+    return {
+        "status": project.wireframe_status,
+        "generated_at": project.wireframe_generated_at,
+        "error": project.wireframe_error,
+        "job_status": queue_status,
+    }
 
 
 @router.put("/project/{project_id}", response_model=ProjectResponse)

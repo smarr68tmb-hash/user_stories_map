@@ -2,6 +2,7 @@
 Project schemas
 """
 from typing import Optional, List
+from datetime import datetime
 from pydantic import BaseModel, Field
 from .story import StoryResponse
 
@@ -79,6 +80,10 @@ class ProjectResponse(BaseModel):
     raw_requirements: Optional[str]
     activities: List[ActivityResponse]
     releases: List[ReleaseResponse]
+    wireframe_markdown: Optional[str] = None
+    wireframe_generated_at: Optional[datetime] = None
+    wireframe_status: Optional[str] = None
+    wireframe_error: Optional[str] = None
     
     class Config:
         from_attributes = True

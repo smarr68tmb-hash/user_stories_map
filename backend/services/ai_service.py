@@ -840,6 +840,133 @@ def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool =
         )
 
 
+def _summarize_project_snapshot(project_snapshot: dict) -> str:
+    """Подготовка текста среза проекта для промпта wireframe."""
+    name = project_snapshot.get("name", "Project")
+    activities = project_snapshot.get("activities", [])
+    releases = project_snapshot.get("releases", [])
+    lines = [f"Проект: {name}", f"Всего активностей: {len(activities)}", f"Релизы: {', '.join(r.get('title','') for r in releases) or '—'}"]
+
+    for act_idx, activity in enumerate(activities, 1):
+        lines.append(f"\nActivity {act_idx}: {activity.get('title','')}")
+        tasks = activity.get("tasks", [])
+        lines.append(f"  Tasks: {len(tasks)}")
+        for task_idx, task in enumerate(tasks, 1):
+            lines.append(f"  Task {task_idx}: {task.get('title','')}")
+            stories = task.get("stories", [])
+            for story_idx, story in enumerate(stories, 1):
+                ac_text = "; ".join(story.get("acceptance_criteria", [])[:3])
+                lines.append(
+                    f"    Story {story_idx}: {story.get('title','')} "
+                    f"(priority: {story.get('priority','')}, status: {story.get('status','')})"
+                )
+                if story.get("description"):
+                    lines.append(f"      Desc: {story.get('description')}")
+                if ac_text:
+                    lines.append(f"      AC: {ac_text}")
+    return "\n".join(lines)
+
+
+def generate_markdown_wireframe(project_snapshot: dict, timeout: float = 60.0) -> str:
+    """
+    Генерирует markdown wireframe (ASCII схема + список UI элементов + описание layout)
+    для всей карты проекта.
+
+    Args:
+        project_snapshot: dict с полями name, activities[tasks[stories]], releases
+        timeout: таймаут запроса к AI
+
+    Returns:
+        str: markdown текст wireframe
+    """
+    available_providers = settings.get_available_providers()
+    if not available_providers:
+        raise HTTPException(
+            status_code=503,
+            detail="AI API key not configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY environment variable."
+        )
+
+    # Простая валидация объёма
+    serialized = json.dumps(project_snapshot, ensure_ascii=False)
+    if len(serialized) < 50:
+        raise HTTPException(status_code=400, detail="Project snapshot is too small to generate wireframe.")
+    if len(serialized) > 20000:
+        raise HTTPException(status_code=400, detail="Project snapshot is too large for wireframe generation.")
+
+    system_prompt = """Ты — эксперт по UX/UI и продуктовому дизайну. Твоя задача — быстро визуализировать структуру интерфейса в markdown:
+- ASCII схема (box-drawing символы)
+- Список UI элементов
+- Описание layout и навигации
+
+Важно:
+- Русский язык
+- Компактно, но информативно
+- Без HTML, только markdown и ASCII
+"""
+
+    example_ascii = """Пример ASCII схемы:
+```
+┌───────────────────────────┐
+│ Header        [Create]    │
+├───────────┬───────────────┤
+│ Sidebar   │ Main List     │
+│ [Filters] │ - Item 1      │
+│           │ - Item 2      │
+└───────────┴───────────────┘
+```
+"""
+
+    project_text = _summarize_project_snapshot(project_snapshot)
+
+    user_prompt = f"""Сгенерируй markdown wireframe для всей карты проекта.
+
+{example_ascii}
+
+Структура ответа (строго):
+1) ASCII схема в блоке ```ascii ... ```
+2) ## Layout Description — текстово опиши layout и основные зоны
+3) ## UI Elements — список вида "- [Type] Label (контекст)"
+4) ## Navigation — основные переходы/флоу
+5) ## Additional Notes — edge cases или важные нюансы
+
+Данные проекта:
+{project_text}
+"""
+
+    request_params = {
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.6,
+        "timeout": timeout,
+    }
+
+    try:
+        completion, used_provider = _make_request_with_fallback(
+            request_params,
+            providers=available_providers,
+            is_enhancement=False,
+            task_type="generation",
+        )
+        logger.info(f"✅ Wireframe markdown received from {used_provider.upper()}")
+        response_text = completion.choices[0].message.content or ""
+        response_text = response_text.strip()
+        # Убираем возможные markdown-ограждения
+        if response_text.startswith("```"):
+            response_text = response_text.lstrip("`")
+        if response_text.endswith("```"):
+            response_text = response_text[:-3].strip()
+        return response_text
+    except APITimeoutError as e:
+        logger.error(f"Wireframe request timeout: {e}")
+        raise HTTPException(status_code=504, detail="Wireframe generation timed out. Please try again.")
+    except Exception as e:
+        error_msg = str(e) if str(e) else repr(e)
+        logger.error(f"Wireframe generation failed: {error_msg}", exc_info=True)
+        raise HTTPException(status_code=502, detail=f"Wireframe generation failed: {error_msg}")
+
+
 def ai_improve_story_content(
     story_data: dict,
     user_prompt: str,
