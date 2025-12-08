@@ -30,15 +30,19 @@ from services.agent_service import generate_map_with_agent
 from dependencies import get_current_active_user
 
 # Lazy import для wireframe сервисов (чтобы не ломать импорт если Redis недоступен)
+WIREFRAME_AVAILABLE = False
+enqueue_wireframe_job = None
+QueueAdapter = None
+
 try:
     from services.wireframe_service import enqueue_wireframe_job
     from services.queue_provider import QueueAdapter
     WIREFRAME_AVAILABLE = True
+    logger.info("✅ Wireframe services loaded successfully")
+except ImportError as e:
+    logger.warning(f"Wireframe services not available (ImportError): {e}")
 except Exception as e:
-    logger.warning(f"Wireframe services not available: {e}")
-    WIREFRAME_AVAILABLE = False
-    enqueue_wireframe_job = None
-    QueueAdapter = None
+    logger.warning(f"Wireframe services not available: {type(e).__name__}: {e}", exc_info=True)
 
 router = APIRouter(prefix="", tags=["projects"])
 limiter = Limiter(key_func=get_remote_address)
@@ -569,7 +573,9 @@ def list_projects(
     db: Session = Depends(get_db)
 ):
     """Возвращает список проектов пользователя с пагинацией"""
+    logger.info(f"list_projects called for user {current_user.id}, skip={skip}, limit={limit}")
     try:
+        logger.debug("Querying projects from database...")
         projects = db.query(Project)\
             .filter(Project.user_id == current_user.id)\
             .order_by(Project.created_at.desc())\
@@ -577,24 +583,41 @@ def list_projects(
             .limit(limit)\
             .all()
         
+        logger.debug(f"Found {len(projects)} projects, querying total count...")
         total = db.query(Project).filter(Project.user_id == current_user.id).count()
         
-        return {
-            "items": [
-                {
+        logger.debug(f"Total projects: {total}, preparing response...")
+        items = []
+        for p in projects:
+            try:
+                items.append({
                     "id": p.id,
                     "name": p.name,
                     "created_at": p.created_at.isoformat() if p.created_at else None
-                }
-                for p in projects
-            ],
+                })
+            except Exception as item_error:
+                logger.error(f"Error serializing project {p.id}: {item_error}", exc_info=True)
+                # Пропускаем проблемный проект, но продолжаем обработку
+                continue
+        
+        logger.info(f"Successfully prepared {len(items)} items for user {current_user.id}")
+        return {
+            "items": items,
             "total": total,
             "skip": skip,
             "limit": limit
         }
     except Exception as e:
-        logger.error(f"Error listing projects for user {current_user.id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list projects: {str(e)}")
+        error_type = type(e).__name__
+        error_msg = str(e) if str(e) else repr(e)
+        logger.error(
+            f"Error listing projects for user {current_user.id}: {error_type}: {error_msg}",
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list projects: {error_type}: {error_msg}"
+        )
 
 
 @router.delete("/project/{project_id}")
