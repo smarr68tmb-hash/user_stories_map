@@ -886,12 +886,25 @@ def generate_markdown_wireframe(project_snapshot: dict, timeout: float = 60.0) -
             detail="AI API key not configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY environment variable."
         )
 
-    # Простая валидация объёма
-    serialized = json.dumps(project_snapshot, ensure_ascii=False)
-    if len(serialized) < 50:
+    # Валидация объёма (проверяем после создания summary, так как он более компактный)
+    # Сначала создаем summary для проверки
+    project_text = _summarize_project_snapshot(project_snapshot)
+    
+    if len(project_text) < 50:
         raise HTTPException(status_code=400, detail="Project snapshot is too small to generate wireframe.")
-    if len(serialized) > 20000:
-        raise HTTPException(status_code=400, detail="Project snapshot is too large for wireframe generation.")
+    
+    # Увеличиваем лимит до 50000 символов (для больших проектов)
+    # Проверяем размер summary, а не полного snapshot
+    if len(project_text) > 50000:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Project snapshot is too large for wireframe generation ({len(project_text)} chars). "
+                   f"Please reduce the number of activities, tasks, or stories."
+        )
+    
+    # Логируем размер для отладки
+    serialized = json.dumps(project_snapshot, ensure_ascii=False)
+    logger.info(f"Wireframe generation: snapshot={len(serialized)} chars, summary={len(project_text)} chars")
 
     system_prompt = """Ты — эксперт по UX/UI и продуктовому дизайну. Твоя задача — быстро визуализировать структуру интерфейса в markdown:
 - ASCII схема (box-drawing символы)

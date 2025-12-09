@@ -29,13 +29,24 @@ logger = logging.getLogger(__name__)
 # Snapshot helpers
 # ---------------------------------------------------------------------------
 def _story_payload(story: UserStory) -> Dict[str, Any]:
+    """Компактный payload истории - только ключевая информация для wireframe."""
+    # Ограничиваем длину описания для wireframe (не нужны все детали)
+    description = story.description or ""
+    if len(description) > 200:
+        description = description[:200] + "..."
+    
+    # Берем только первые 3 acceptance criteria (для wireframe достаточно)
+    ac = story.acceptance_criteria or []
+    if len(ac) > 3:
+        ac = ac[:3]
+    
     return {
         "id": story.id,
         "title": story.title or "",
-        "description": story.description or "",
+        "description": description,
         "priority": story.priority or "",
         "status": story.status or "todo",
-        "acceptance_criteria": story.acceptance_criteria or [],
+        "acceptance_criteria": ac,
     }
 
 
