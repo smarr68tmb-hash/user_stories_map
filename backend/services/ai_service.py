@@ -173,11 +173,11 @@ def _get_model_for_provider(provider: str, is_enhancement: bool = False, task_ty
     # Gemini - используем оптимальные модели для каждой задачи
     if provider == "gemini":
         if task_type == "enhancement" or is_enhancement:
-            return settings.GEMINI_ENHANCEMENT_MODEL
+            return settings.GEMINI_ENHANCEMENT_MODEL or settings.API_MODEL or "gemini-2.0-flash-exp"
         elif task_type == "assistant":
-            return settings.GEMINI_ASSISTANT_MODEL
+            return settings.GEMINI_ASSISTANT_MODEL or settings.API_MODEL or "gemini-2.0-flash-exp"
         else:  # generation
-            return settings.GEMINI_GENERATION_MODEL
+            return settings.GEMINI_GENERATION_MODEL or settings.API_MODEL or "gemini-2.0-flash-exp"
 
     # Groq
     if is_enhancement:

@@ -32,6 +32,14 @@ class Settings:
         # Если не указана, используется основная модель (API_MODEL)
         self.ENHANCEMENT_MODEL = os.getenv("ENHANCEMENT_MODEL", "")
         
+        # Gemini-specific models
+        # Модель для генерации (Stage 2) - если не указана, используется API_MODEL
+        self.GEMINI_GENERATION_MODEL = os.getenv("GEMINI_GENERATION_MODEL", "")
+        # Модель для улучшения требований (Stage 1) - если не указана, используется API_MODEL
+        self.GEMINI_ENHANCEMENT_MODEL = os.getenv("GEMINI_ENHANCEMENT_MODEL", "")
+        # Модель для AI Assistant - если не указана, используется API_MODEL
+        self.GEMINI_ASSISTANT_MODEL = os.getenv("GEMINI_ASSISTANT_MODEL", "")
+        
         # Database
         self.DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./usm.db")
         
