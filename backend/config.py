@@ -40,6 +40,12 @@ class Settings:
         # Модель для AI Assistant - если не указана, используется API_MODEL
         self.GEMINI_ASSISTANT_MODEL = os.getenv("GEMINI_ASSISTANT_MODEL", "")
         
+        # Лимиты для Gemini моделей (для rate limiting)
+        # Flash модели: 250 запросов/день, переключаемся при 230
+        self.GEMINI_FLASH_LIMIT = int(os.getenv("GEMINI_FLASH_LIMIT", "230"))
+        # Pro модели: 50 запросов/день, переключаемся при 45
+        self.GEMINI_PRO_LIMIT = int(os.getenv("GEMINI_PRO_LIMIT", "45"))
+        
         # Database
         self.DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./usm.db")
         
