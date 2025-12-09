@@ -1,7 +1,7 @@
 """
 Authentication endpoints
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response, Body
 from fastapi.security import OAuth2PasswordRequestForm
@@ -156,7 +156,7 @@ def refresh_token_endpoint(
     if refresh_token.revoked:
         raise HTTPException(status_code=401, detail="Token revoked")
     
-    if refresh_token.expires_at < datetime.utcnow():
+    if refresh_token.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=401, detail="Token expired")
     
     # Генерируем новый access token
