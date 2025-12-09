@@ -102,6 +102,62 @@ app.include_router(projects.router)
 app.include_router(stories.router)
 app.include_router(analysis.router)
 
+
+@app.on_event("startup")
+async def run_migrations_on_startup():
+    """
+    Автоматическое применение миграций при старте приложения.
+    Это fallback, если миграции не были применены через Build Command.
+    """
+    try:
+        import subprocess
+        import os
+        from pathlib import Path
+        
+        # Проверяем, нужно ли применять миграции
+        # Пропускаем если это SQLite (для локальной разработки)
+        if settings.DATABASE_URL.startswith("sqlite"):
+            logger.info("📦 SQLite detected, skipping automatic migrations (use migrate.sh manually)")
+            return
+        
+        # Проверяем, есть ли скрипт миграции
+        backend_dir = Path(__file__).parent
+        migrate_script = backend_dir / "migrate.sh"
+        
+        if not migrate_script.exists():
+            logger.warning("⚠️ migrate.sh not found, skipping automatic migrations")
+            return
+        
+        logger.info("🔄 Checking database migrations...")
+        
+        # Запускаем миграции в фоне (не блокируем старт приложения)
+        try:
+            result = subprocess.run(
+                ["bash", str(migrate_script)],
+                cwd=str(backend_dir),
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=os.environ.copy()
+            )
+            
+            if result.returncode == 0:
+                logger.info("✅ Database migrations applied successfully")
+            else:
+                logger.warning(f"⚠️ Migration script returned non-zero exit code: {result.returncode}")
+                logger.warning(f"Migration output: {result.stdout}")
+                logger.warning(f"Migration errors: {result.stderr}")
+        except subprocess.TimeoutExpired:
+            logger.error("❌ Migration script timed out after 30 seconds")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to run migrations automatically: {e}")
+            logger.info("💡 You can apply migrations manually: cd backend && bash migrate.sh")
+            
+    except Exception as e:
+        logger.warning(f"⚠️ Error during migration check: {e}")
+        logger.info("💡 Migrations will need to be applied manually or via Build Command")
+
+
 logger.info(f"✅ Application started successfully")
 logger.info(f"📦 Database: {settings.DATABASE_URL.split('@')[0] if '@' in settings.DATABASE_URL else settings.DATABASE_URL.split('///')[0]}")
 logger.info(f"🤖 AI Provider: {settings.API_PROVIDER}")
