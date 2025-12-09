@@ -29,6 +29,10 @@ from services.ai_service import generate_ai_map, enhance_requirements
 from services.agent_service import generate_map_with_agent
 from dependencies import get_current_active_user
 
+router = APIRouter(prefix="", tags=["projects"])
+limiter = Limiter(key_func=get_remote_address)
+logger = logging.getLogger(__name__)
+
 # Lazy import для wireframe сервисов (чтобы не ломать импорт если Redis недоступен)
 WIREFRAME_AVAILABLE = False
 enqueue_wireframe_job = None
@@ -43,10 +47,6 @@ except ImportError as e:
     logger.warning(f"Wireframe services not available (ImportError): {e}")
 except Exception as e:
     logger.warning(f"Wireframe services not available: {type(e).__name__}: {e}", exc_info=True)
-
-router = APIRouter(prefix="", tags=["projects"])
-limiter = Limiter(key_func=get_remote_address)
-logger = logging.getLogger(__name__)
 
 
 def format_project_response(project: Project) -> ProjectResponse:
