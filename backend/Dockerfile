@@ -17,14 +17,15 @@ COPY . .
 # Создание директории для БД
 RUN mkdir -p /app && chmod 777 /app
 
-# Делаем скрипт миграции исполняемым
-RUN chmod +x migrate.sh
+# Делаем скрипты исполняемыми
+RUN chmod +x migrate.sh docker-entrypoint.sh
 
 # Открытие порта
 EXPOSE 8000
 
+# Используем entrypoint для автоматического применения миграций
+ENTRYPOINT ["/app/backend/docker-entrypoint.sh"]
+
 # Запуск приложения
-# Примечание: миграции должны выполняться через Build Command на Render.com:
-# bash migrate.sh && uvicorn main:app --host 0.0.0.0 --port 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
