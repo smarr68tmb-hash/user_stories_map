@@ -1,23 +1,38 @@
 # Инструкция по деплою на Render.com
 
-## Настройка Build Command для автоматического применения миграций
+## Настройка Pre-Deploy Command для автоматического применения миграций
+
+**Важно:** Если вы используете Docker (есть Dockerfile), используйте **Pre-Deploy Command**, а не Build Command.
 
 В Render.com Dashboard для вашего Web Service:
 
 1. Перейдите в **Settings** → **Build & Deploy**
-2. В поле **Build Command** укажите:
+2. Найдите поле **Pre-Deploy Command (Optional)**
+3. В это поле укажите:
 ```bash
-pip install -r requirements.txt && cd backend && bash migrate.sh && cd .. && uvicorn backend.main:app --host 0.0.0.0 --port 8000
+cd backend && bash migrate.sh
 ```
 
-Или если структура проекта требует другого пути:
+Или если структура проекта другая:
 ```bash
-cd backend && pip install -r requirements.txt && bash migrate.sh && uvicorn main:app --host 0.0.0.0 --port 8000
+bash backend/migrate.sh
 ```
 
-3. В поле **Start Command** укажите:
+**Pre-Deploy Command выполняется:**
+- Автоматически при каждом деплое
+- Перед запуском приложения (Start Command)
+- Один раз за деплой (не при каждом рестарте)
+
+## Если Build Command доступен (для non-Docker сервисов)
+
+Если вы не используете Docker и видите поле **Build Command**, укажите там:
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000
+pip install -r requirements.txt && cd backend && bash migrate.sh
+```
+
+А в **Start Command**:
+```bash
+cd backend && uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ## Переменные окружения (Environment Variables)
@@ -40,22 +55,35 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 - `ALLOWED_ORIGINS` - разрешенные CORS origins (через запятую)
 - `LOG_LEVEL` - уровень логирования (INFO/DEBUG/WARNING/ERROR)
 
-## Ручное применение миграций (если Build Command не работает)
+## Ручное применение миграций (если Pre-Deploy Command не работает)
 
 Если миграции не применяются автоматически, выполните вручную через Shell:
 
 1. В Render.com Dashboard откройте ваш Web Service
-2. Перейдите в **Shell** или **Console**
-3. Выполните:
+2. Перейдите в **Shell** или **Console** (вкладка в верхнем меню)
+3. Выполните одну из команд:
+
+**Вариант 1: Через скрипт миграции**
 ```bash
 cd /app/backend
 bash migrate.sh
 ```
 
-Или напрямую:
+**Вариант 2: Напрямую через Alembic**
 ```bash
 cd /app/backend
 alembic upgrade head
+```
+
+**Вариант 3: Если структура проекта другая**
+```bash
+cd /app
+bash backend/migrate.sh
+```
+
+После выполнения вы увидите сообщение:
+```
+✅ Миграции выполнены успешно!
 ```
 
 ## Проверка состояния миграций
