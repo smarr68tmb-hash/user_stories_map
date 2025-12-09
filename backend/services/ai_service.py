@@ -999,7 +999,7 @@ def generate_markdown_wireframe(project_snapshot: dict, timeout: float = 60.0) -
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": 0.6,
+        "temperature": 0.7,  # Немного выше для более креативной генерации wireframe
         "timeout": timeout,
     }
 
