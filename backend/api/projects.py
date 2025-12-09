@@ -446,14 +446,40 @@ def generate_project_wireframe(
         project.wireframe_error = None
         db.commit()
         return {"status": "queued", "job_id": job_id}
-    except HTTPException:
+    except HTTPException as e:
         db.rollback()
+        # Если Redis недоступен, пробуем синхронную генерацию
+        if e.status_code == 503 and "Redis" in str(e.detail):
+            logger.warning("Redis unavailable, falling back to synchronous wireframe generation")
+            try:
+                from services.wireframe_service import process_wireframe_job
+                # Генерируем синхронно
+                project.wireframe_status = "generating"
+                project.wireframe_error = None
+                db.commit()
+                
+                markdown = process_wireframe_job(project_id, current_user.id)
+                project.wireframe_status = "success"
+                project.wireframe_error = None
+                db.commit()
+                return {"status": "completed", "message": "Wireframe generated synchronously (Redis unavailable)"}
+            except Exception as sync_error:
+                db.rollback()
+                error_msg = str(sync_error) if str(sync_error) else repr(sync_error)
+                project.wireframe_status = "error"
+                project.wireframe_error = f"Synchronous generation failed: {error_msg}"
+                db.commit()
+                logger.error(f"Synchronous wireframe generation failed: {error_msg}", exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Wireframe generation failed: {error_msg}"
+                )
         raise
     except Exception as e:
         db.rollback()
         error_msg = str(e) if str(e) else repr(e)
         logger.error(f"Failed to enqueue wireframe job: {error_msg}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to enqueue wireframe generation job")
+        raise HTTPException(status_code=500, detail=f"Failed to enqueue wireframe generation job: {error_msg}")
 
 
 @router.get("/project/{project_id}/wireframe")

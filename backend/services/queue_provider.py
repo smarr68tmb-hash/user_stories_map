@@ -38,9 +38,18 @@ class QueueAdapter:
                     status_code=503,
                     detail="Queue driver redis selected but rq/redis is not installed.",
                 )
-            self.connection = redis.from_url(settings.REDIS_URL)
-            self.queue = Queue("wireframes", connection=self.connection, default_timeout=90)
-            logger.info("✅ QueueAdapter initialized with Redis RQ")
+            try:
+                self.connection = redis.from_url(settings.REDIS_URL)
+                # Проверяем соединение
+                self.connection.ping()
+                self.queue = Queue("wireframes", connection=self.connection, default_timeout=90)
+                logger.info("✅ QueueAdapter initialized with Redis RQ")
+            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError, Exception) as e:
+                logger.error(f"❌ Failed to connect to Redis: {e}")
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Redis connection failed: {str(e)}. Please check REDIS_URL or use synchronous generation."
+                )
         else:
             raise HTTPException(status_code=503, detail=f"Queue driver '{driver}' is not supported yet.")
 

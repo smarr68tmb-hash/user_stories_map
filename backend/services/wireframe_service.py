@@ -73,9 +73,18 @@ def enqueue_wireframe_job(project_id: int, user_id: int) -> str:
     Создаёт задачу генерации wireframe.
     Возвращает job_id из выбранного адаптера очереди.
     """
-    adapter = QueueAdapter(driver="redis")
-    job = adapter.enqueue(process_wireframe_job, project_id, user_id)
-    return job.id
+    try:
+        adapter = QueueAdapter(driver="redis")
+        job = adapter.enqueue(process_wireframe_job, project_id, user_id)
+        return job.id
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to enqueue wireframe job: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to enqueue wireframe job: {str(e)}. Redis may be unavailable."
+        )
 
 
 def process_wireframe_job(project_id: int, user_id: int) -> Optional[str]:
