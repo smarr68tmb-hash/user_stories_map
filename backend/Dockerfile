@@ -24,7 +24,7 @@ RUN chmod +x migrate.sh docker-entrypoint.sh
 EXPOSE 8000
 
 # Используем entrypoint для автоматического применения миграций
-ENTRYPOINT ["/app/backend/docker-entrypoint.sh"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Запуск приложения
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
