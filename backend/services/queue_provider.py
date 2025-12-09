@@ -39,13 +39,38 @@ class QueueAdapter:
                     detail="Queue driver redis selected but rq/redis is not installed.",
                 )
             try:
-                self.connection = redis.from_url(settings.REDIS_URL)
-                # Проверяем соединение
+                # Поддержка TLS для Upstash и других провайдеров
+                redis_url = settings.REDIS_URL
+                
+                # Если URL начинается с rediss://, используем SSL
+                use_ssl = redis_url.startswith("rediss://")
+                
+                # Парсим URL для правильной настройки соединения
+                self.connection = redis.from_url(
+                    redis_url,
+                    ssl=use_ssl,
+                    ssl_cert_reqs=None,  # Для Upstash не требуется проверка сертификата
+                    decode_responses=False  # RQ требует bytes
+                )
+                
+                # Проверяем соединение с таймаутом
                 self.connection.ping()
                 self.queue = Queue("wireframes", connection=self.connection, default_timeout=90)
-                logger.info("✅ QueueAdapter initialized with Redis RQ")
-            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError, Exception) as e:
-                logger.error(f"❌ Failed to connect to Redis: {e}")
+                logger.info(f"✅ QueueAdapter initialized with Redis RQ (TLS: {use_ssl})")
+            except redis.exceptions.ConnectionError as e:
+                logger.error(f"❌ Redis connection error: {e}")
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Redis connection failed: {str(e)}. Please check REDIS_URL format (use rediss:// for TLS)."
+                )
+            except redis.exceptions.TimeoutError as e:
+                logger.error(f"❌ Redis timeout: {e}")
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Redis connection timeout: {str(e)}. Redis may be slow or unavailable."
+                )
+            except Exception as e:
+                logger.error(f"❌ Failed to connect to Redis: {type(e).__name__}: {e}", exc_info=True)
                 raise HTTPException(
                     status_code=503,
                     detail=f"Redis connection failed: {str(e)}. Please check REDIS_URL or use synchronous generation."
