@@ -576,7 +576,13 @@ def list_projects(
     logger.info(f"list_projects called for user {current_user.id}, skip={skip}, limit={limit}")
     try:
         logger.debug("Querying projects from database...")
-        projects = db.query(Project)\
+        # Загружаем только нужные поля для списка (без wireframe полей, чтобы не ломать если миграция не применена)
+        projects = db.query(
+            Project.id,
+            Project.user_id,
+            Project.name,
+            Project.created_at
+        )\
             .filter(Project.user_id == current_user.id)\
             .order_by(Project.created_at.desc())\
             .offset(skip)\
@@ -584,19 +590,21 @@ def list_projects(
             .all()
         
         logger.debug(f"Found {len(projects)} projects, querying total count...")
-        total = db.query(Project).filter(Project.user_id == current_user.id).count()
+        total = db.query(Project.id).filter(Project.user_id == current_user.id).count()
         
         logger.debug(f"Total projects: {total}, preparing response...")
         items = []
         for p in projects:
             try:
+                # p теперь кортеж (id, user_id, name, created_at) из-за query с конкретными полями
+                project_id, _, project_name, created_at = p
                 items.append({
-                    "id": p.id,
-                    "name": p.name,
-                    "created_at": p.created_at.isoformat() if p.created_at else None
+                    "id": project_id,
+                    "name": project_name,
+                    "created_at": created_at.isoformat() if created_at else None
                 })
             except Exception as item_error:
-                logger.error(f"Error serializing project {p.id}: {item_error}", exc_info=True)
+                logger.error(f"Error serializing project: {item_error}", exc_info=True)
                 # Пропускаем проблемный проект, но продолжаем обработку
                 continue
         
