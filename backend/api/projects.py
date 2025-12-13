@@ -3,6 +3,7 @@ Project endpoints - генерация и управление проектам�
 """
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -10,13 +11,13 @@ from slowapi.util import get_remote_address
 from utils.database import get_db
 from models import User, Project, Activity, UserTask, Release, UserStory
 from schemas import (
-    RequirementsInput, 
+    RequirementsInput,
     EnhancementRequest,
     EnhancementResponse,
-    ProjectResponse, 
-    ActivityResponse, 
-    TaskResponse, 
-    StoryResponse, 
+    ProjectResponse,
+    ActivityResponse,
+    TaskResponse,
+    StoryResponse,
     ReleaseResponse,
     ActivityCreate,
     ActivityUpdate,
@@ -27,6 +28,7 @@ from schemas import (
 )
 from services.ai_service import generate_ai_map, enhance_requirements
 from services.agent_service import generate_map_with_agent
+from services.streaming_service import generate_map_streaming
 from dependencies import get_current_active_user, get_current_user_optional
 
 router = APIRouter(prefix="", tags=["projects"])
@@ -464,6 +466,53 @@ def generate_map_demo(
 
     logger.info(f"Demo map generated successfully (IP: {request.client.host})")
     return demo_response
+
+
+@router.post("/generate-map/stream")
+@limiter.limit("10/hour")
+async def generate_map_stream(
+    req: RequirementsInput,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    SSE-версия генерации карты с real-time прогрессом.
+
+    Отправляет Server-Sent Events:
+    - enhancing: Stage 1 (улучшение требований)
+    - enhanced: Результат улучшения
+    - generating: Stage 2 (генерация карты)
+    - validating: Stage 3 (валидация)
+    - analysis: Результаты анализа (дубликаты, оценка)
+    - saving: Сохранение в БД
+    - complete: Завершение с project_id
+    - error: Ошибка на любом этапе
+
+    Rate limit: 10 запросов в час
+    """
+
+    # Валидация входных данных
+    if not req.text or not req.text.strip():
+        raise HTTPException(status_code=400, detail="Requirements text cannot be empty")
+
+    logger.info(f"[SSE] Starting streaming generation for user {current_user.id}")
+
+    return StreamingResponse(
+        generate_map_streaming(
+            requirements_text=req.text,
+            use_enhancement=not req.skip_enhancement,
+            use_agent=req.use_agent,
+            user_id=current_user.id,
+            db=db
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering for SSE
+        }
+    )
 
 
 @router.get("/project/{project_id}", response_model=ProjectResponse)
