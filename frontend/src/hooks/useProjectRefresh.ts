@@ -25,6 +25,12 @@ export function useProjectRefresh(
 
   const refreshProject = useCallback(
     async ({ silent = true }: { silent?: boolean } = {}) => {
+      // Пропускаем запрос для demo-проектов (отрицательные ID)
+      const projectIdNum = typeof projectId === 'string' ? parseInt(projectId, 10) : projectId;
+      if (projectIdNum < 0 || isNaN(projectIdNum)) {
+        return null;
+      }
+
       if (refreshingRef.current) {
         return null;
       }

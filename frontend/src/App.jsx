@@ -917,12 +917,20 @@ function ProjectPage({
   const { isRefreshing, refreshProject } = useProjectRefreshContext();
   const [isMapLoading, setIsMapLoading] = useState(true);
 
+  // Проверяем, является ли проект demo-проектом
+  const isDemoProject = project && (project.demo_mode || (typeof project.id === 'number' && project.id < 0));
+
   useEffect(() => {
     let mounted = true;
 
     const hydrate = async () => {
       setIsMapLoading(true);
       try {
+        // Для demo-проектов не делаем запрос к API
+        if (isDemoProject) {
+          setIsMapLoading(false);
+          return;
+        }
         await refreshProject({ silent: false });
       } catch (error) {
         console.error('Failed to refresh project', error);
@@ -938,7 +946,7 @@ function ProjectPage({
     return () => {
       mounted = false;
     };
-  }, [refreshProject]);
+  }, [refreshProject, isDemoProject]);
 
   const breadcrumbItems = [
     {
