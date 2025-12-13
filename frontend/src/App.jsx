@@ -9,25 +9,36 @@ import Breadcrumb from './components/common/Breadcrumb.jsx';
 import AutoResizeTextarea from './components/common/AutoResizeTextarea.jsx';
 import { ToastProvider, useToast } from './hooks/useToast';
 import { ProjectRefreshProvider, useProjectRefreshContext } from './context/ProjectRefreshContext';
+import { useStreamingGeneration } from './hooks/useStreamingGeneration';
 
 const MAX_CHARS = 10000;
 const MIN_CHARS = 10;
 
-// Контекстные сообщения прогресса
+// Контекстные сообщения прогресса (обновлено для Phase 1 streaming)
 const getProgressMessage = (progress, stage) => {
   if (stage === 'enhancing') {
     if (progress < 20) return '🔍 Анализирую требования...';
-    if (progress < 40) return '✨ Улучшаю структуру...';
-    return '📝 Готовлю рекомендации...';
+    return '✨ Улучшаю структуру...';
   }
 
   if (stage === 'generating') {
     if (progress < 30) return '👥 Выделяю роли пользователей...';
     if (progress < 50) return '🎯 Определяю основные активности...';
     if (progress < 70) return '📋 Генерирую пользовательские задачи...';
-    if (progress < 85) return '✍️ Создаю истории пользователей...';
-    if (progress < 95) return '✅ Добавляю критерии приемки...';
-    return '🎉 Финализирую карту...';
+    return '✍️ Создаю истории пользователей...';
+  }
+
+  if (stage === 'validating') {
+    if (progress < 80) return '🔍 Проверяю качество карты...';
+    return '📊 Анализирую дубликаты...';
+  }
+
+  if (stage === 'saving') {
+    return '💾 Сохраняю проект в базу данных...';
+  }
+
+  if (stage === 'complete') {
+    return '🎉 Готово!';
   }
 
   // Для demo или загрузки примера
@@ -59,6 +70,18 @@ function AppContent() {
   // AI Agent состояние
   const [useAgent, setUseAgent] = useState(false);
   const toast = useToast();
+
+  // SSE Streaming hook (Phase 1)
+  const {
+    progress: streamProgress,
+    stage: streamStage,
+    analysisResults,
+    stats: streamStats,
+    isStreaming,
+    error: streamError,
+    generateWithStreaming,
+    cancelStreaming
+  } = useStreamingGeneration();
   
   // Редактирование названия проекта
   const [isEditingProjectName, setIsEditingProjectName] = useState(false);
@@ -289,11 +312,89 @@ function AppContent() {
   
   const handleCloseEnhancementPreview = () => {
     setShowEnhancementPreview(false);
-    setEnhancementData(null);
-    setProgress(0);
+  };
+
+  // ============= Phase 1: SSE STREAMING GENERATION =============
+
+  // Auto-show analysis notification when results arrive
+  useEffect(() => {
+    if (analysisResults) {
+      const { duplicates, score, issues } = analysisResults;
+
+      // Show notification for duplicates
+      if (duplicates > 0) {
+        toast.warning(`Найдено ${duplicates} дубликатов! Рекомендуется проверить истории.`);
+      }
+
+      // Show notification for low score
+      if (score < 50) {
+        toast.warning(`Оценка качества: ${score}/100. Требуется улучшение.`);
+      } else if (score >= 80) {
+        toast.success(`Отличная оценка качества: ${score}/100!`);
+      }
+
+      // Show notification for issues
+      if (issues && issues.length > 0) {
+        toast.info(`Обнаружено ${analysisResults.totalIssues} проблем. Проверьте анализ.`);
+      }
+    }
+  }, [analysisResults, toast]);
+
+  // Handle streaming error
+  useEffect(() => {
+    if (streamError) {
+      setError(streamError);
+      toast.error(streamError);
+    }
+  }, [streamError, toast]);
+
+  // Stage 2: Генерация карты со streaming (новая версия для Phase 1)
+  const handleGenerateWithStreaming = async (textToUse, useEnhancement = false) => {
+    setShowEnhancementPreview(false);
+    setError(null);
+
+    try {
+      // Запускаем streaming генерацию
+      const result = await generateWithStreaming(textToUse, useEnhancement, useAgent);
+
+      // Загружаем полный проект после завершения
+      const projectRes = await api.get(`/project/${result.projectId}`);
+      setProject(projectRes.data);
+
+      // Очищаем черновик
+      localStorage.removeItem('draft_requirements');
+      setEnhancementData(null);
+
+      toast.success(`Проект "${result.projectName}" создан! ${result.stats?.stories || 0} историй сгенерировано.`);
+
+    } catch (error) {
+      console.error("Error in streaming generation:", error);
+
+      if (error.message.includes('SSE connection failed')) {
+        setError('Соединение прервано. Попробуйте еще раз.');
+      } else if (error.message.includes('Сессия истекла')) {
+        setError('Сессия истекла. Пожалуйста, войдите снова.');
+        handleLogout();
+      } else {
+        setError(error.message || 'Ошибка генерации карты');
+      }
+    }
+  };
+
+  // Обновленные обработчики для использования streaming
+  const handleUseOriginalStreaming = () => {
+    handleGenerateWithStreaming(input, false);
+  };
+
+  const handleUseEnhancedStreaming = (enhancedText) => {
+    handleGenerateWithStreaming(enhancedText, false);
+  };
+
+  const handleEditEnhancedStreaming = (editedText) => {
+    handleGenerateWithStreaming(editedText, false);
   };
   
-  // Старый метод для совместимости (прямая генерация без улучшения)
+  // Прямая генерация с использованием streaming (Phase 1)
   const handleDirectGenerate = async () => {
     if (!input.trim()) {
       setError('Пожалуйста, введите описание продукта');
@@ -309,7 +410,8 @@ function AppContent() {
       return;
     }
 
-    handleGenerateWithText(input, true);
+    // Используем новый streaming метод вместо старого
+    handleGenerateWithStreaming(input, false);
   };
 
   // Демо-генерация (без регистрации)
@@ -634,14 +736,14 @@ function AppContent() {
               </div>
             </div>
 
-            {(loading || enhancementLoading) && (
+            {(loading || enhancementLoading || isStreaming) && (
               <div className="mb-4">
                 <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
                   <div
                     className="h-2.5 rounded-full transition-all duration-300 bg-gradient-to-r from-purple-600 to-blue-600"
-                    style={{ width: `${progress}%` }}
+                    style={{ width: `${isStreaming ? streamProgress : progress}%` }}
                     role="progressbar"
-                    aria-valuenow={progress}
+                    aria-valuenow={isStreaming ? streamProgress : progress}
                     aria-valuemin="0"
                     aria-valuemax="100"
                   ></div>
@@ -649,7 +751,7 @@ function AppContent() {
                 <p className="text-xs text-gray-600 text-center">
                   <span className="flex items-center justify-center gap-2">
                     <span className="inline-block w-2 h-2 bg-purple-600 rounded-full animate-pulse"></span>
-                    {getProgressMessage(progress, 'generating')} {Math.round(progress)}%
+                    {getProgressMessage(isStreaming ? streamProgress : progress, isStreaming ? streamStage : 'generating')} {Math.round(isStreaming ? streamProgress : progress)}%
                   </span>
                 </p>
               </div>
