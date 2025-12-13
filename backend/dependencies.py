@@ -63,7 +63,7 @@ def get_current_active_user(
 ) -> User:
     """
     Dependency для получения активного пользователя
-    
+
     Raises:
         HTTPException: Если пользователь неактивен
     """
@@ -73,4 +73,29 @@ def get_current_active_user(
             detail="Inactive user"
         )
     return current_user
+
+
+def get_current_user_optional(
+    request: Request,
+    db: Session = Depends(get_db)
+) -> User | None:
+    """
+    Опциональная dependency для получения пользователя.
+    Возвращает None если токен отсутствует или невалиден.
+    Используется для demo-режима без регистрации.
+
+    Returns:
+        User | None: Пользователь или None для анонимных запросов
+    """
+    try:
+        token = _extract_token(request)
+        user_id = decode_access_token(token)
+        user = db.query(User).filter(User.id == user_id).first()
+        return user if user and user.is_active else None
+    except HTTPException:
+        # Токен не найден или невалиден - разрешаем анонимный доступ
+        return None
+    except Exception:
+        # Любая другая ошибка - разрешаем анонимный доступ
+        return None
 

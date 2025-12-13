@@ -167,6 +167,20 @@ export const enhancement = {
       use_enhanced_text: useEnhancedText,
       use_agent: useAgent,
     }),
+  generateMapDemo: (text: string) =>
+    axios.post<{
+      status: string;
+      project_name: string;
+      map: any[];
+      releases: any[];
+      demo_mode: boolean;
+      message: string;
+    }>(`${API_URL}/generate-map/demo`, {
+      text,
+      skip_enhancement: true,
+      use_enhanced_text: false,
+      use_agent: false,
+    }),
 };
 
 export const auth = {

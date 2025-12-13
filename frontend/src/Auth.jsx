@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+import { Eye } from 'lucide-react';
 import { auth } from './api';
 
-function Auth({ onLogin }) {
+function Auth({ onLogin, onTryDemo, onViewExample }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -214,6 +215,27 @@ function Auth({ onLogin }) {
             {isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
           </button>
         </div>
+
+        {onTryDemo && onViewExample && (
+          <div className="mt-6 pt-6 border-t border-gray-200 space-y-3">
+            <button
+              onClick={onViewExample}
+              className="w-full bg-gradient-to-r from-green-600 to-teal-600 text-white py-3 rounded-lg font-semibold hover:from-green-700 hover:to-teal-700 transition shadow-md flex items-center justify-center gap-2"
+            >
+              <Eye className="w-5 h-5" />
+              Посмотреть пример карты
+            </button>
+            <button
+              onClick={onTryDemo}
+              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700 transition shadow-md"
+            >
+              ✨ Попробовать без регистрации
+            </button>
+            <p className="text-xs text-gray-500 text-center">
+              Посмотрите готовый пример или сгенерируйте свою карту бесплатно
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

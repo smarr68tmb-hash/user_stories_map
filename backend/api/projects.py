@@ -27,7 +27,7 @@ from schemas import (
 )
 from services.ai_service import generate_ai_map, enhance_requirements
 from services.agent_service import generate_map_with_agent
-from dependencies import get_current_active_user
+from dependencies import get_current_active_user, get_current_user_optional
 
 router = APIRouter(prefix="", tags=["projects"])
 limiter = Limiter(key_func=get_remote_address)
@@ -384,6 +384,86 @@ def generate_map(
         response["agent_metadata"] = ai_data["metadata"]
 
     return response
+
+
+@router.post("/generate-map/demo")
+@limiter.limit("3/hour")
+def generate_map_demo(
+    req: RequirementsInput,
+    request: Request,
+    current_user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    """
+    Demo-режим: генерация карты БЕЗ регистрации (один раз).
+
+    Отличия от обычного /generate-map:
+    - Не требует аутентификации (current_user может быть None)
+    - Строгий rate limit: 3 запроса в час с IP
+    - Возвращает карту напрямую (не сохраняет в БД)
+    - Нет возможности редактировать результат
+
+    Rate limit: 3 запроса в час с IP (для защиты от злоупотреблений)
+    """
+
+    # Валидация входных данных
+    if not req.text or not req.text.strip():
+        raise HTTPException(status_code=400, detail="Requirements text cannot be empty")
+
+    # Получаем Redis клиент
+    redis_client = get_redis_client()
+
+    # Текст для генерации
+    generation_text = req.text
+
+    # Для demo пропускаем enhancement (экономим время и токены)
+    logger.info(f"Demo mode: Generating map without enhancement (IP: {request.client.host})")
+
+    # Генерация карты
+    try:
+        # Всегда используем стандартную генерацию (не агента) для demo
+        ai_data = generate_ai_map(generation_text, redis_client=redis_client)
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        error_msg = str(e) if str(e) else repr(e)
+        if not error_msg:
+            error_msg = f"{type(e).__name__}: An unexpected error occurred during map generation"
+        logger.error(f"Unexpected error in generate_map_demo: {error_msg}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate map: {error_msg}")
+
+    # Валидация структуры данных от AI
+    if not ai_data or not isinstance(ai_data, dict):
+        logger.error(f"Invalid AI response structure: {type(ai_data)}")
+        raise HTTPException(
+            status_code=502,
+            detail="Invalid response format from AI service."
+        )
+
+    if "map" not in ai_data or not isinstance(ai_data.get("map"), list):
+        logger.error(f"Invalid AI response: missing or invalid 'map' field")
+        raise HTTPException(
+            status_code=502,
+            detail="Invalid response format from AI service."
+        )
+
+    # Для demo возвращаем карту напрямую (БЕЗ сохранения в БД)
+    # Добавляем стандартные релизы в ответ
+    demo_response = {
+        "status": "demo",
+        "project_name": ai_data.get("productName", "Demo Project"),
+        "map": ai_data.get("map", []),
+        "releases": [
+            {"id": -1, "title": "MVP", "position": 0},
+            {"id": -2, "title": "Release 1", "position": 1},
+            {"id": -3, "title": "Later", "position": 2}
+        ],
+        "demo_mode": True,
+        "message": "Это демо-карта. Зарегистрируйтесь чтобы сохранить и редактировать проект."
+    }
+
+    logger.info(f"Demo map generated successfully (IP: {request.client.host})")
+    return demo_response
 
 
 @router.get("/project/{project_id}", response_model=ProjectResponse)

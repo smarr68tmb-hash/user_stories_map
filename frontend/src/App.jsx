@@ -13,10 +13,32 @@ import { ProjectRefreshProvider, useProjectRefreshContext } from './context/Proj
 const MAX_CHARS = 10000;
 const MIN_CHARS = 10;
 
+// Контекстные сообщения прогресса
+const getProgressMessage = (progress, stage) => {
+  if (stage === 'enhancing') {
+    if (progress < 20) return '🔍 Анализирую требования...';
+    if (progress < 40) return '✨ Улучшаю структуру...';
+    return '📝 Готовлю рекомендации...';
+  }
+
+  if (stage === 'generating') {
+    if (progress < 30) return '👥 Выделяю роли пользователей...';
+    if (progress < 50) return '🎯 Определяю основные активности...';
+    if (progress < 70) return '📋 Генерирую пользовательские задачи...';
+    if (progress < 85) return '✍️ Создаю истории пользователей...';
+    if (progress < 95) return '✅ Добавляю критерии приемки...';
+    return '🎉 Финализирую карту...';
+  }
+
+  // Для demo или загрузки примера
+  if (progress < 50) return '📥 Загружаю данные...';
+  return '✨ Подготавливаю визуализацию...';
+};
+
 function AppContent() {
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
-  
+
   // Загружаем сохраненный черновик из localStorage
   const [input, setInput] = useState(() => {
     return localStorage.getItem('draft_requirements') || '';
@@ -25,7 +47,8 @@ function AppContent() {
   const [progress, setProgress] = useState(0);
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
-  const [view, setView] = useState('list'); // 'list' или 'create'
+  const [view, setView] = useState('list'); // 'list' или 'create' или 'demo'
+  const [demoMode, setDemoMode] = useState(false); // флаг демо-режима
   
   // Two-Stage AI Processing состояния
   const [enhancementData, setEnhancementData] = useState(null);
@@ -126,7 +149,41 @@ function AppContent() {
     setProject(null);
     setInput('');
     setView('list');
+    setDemoMode(false);
   }, []);
+
+  const handleTryDemo = () => {
+    setDemoMode(true);
+    setView('demo');
+    setAuthChecked(true);
+  };
+
+  const handleViewExample = async () => {
+    setLoading(true);
+    setProgress(10);
+    setError(null);
+
+    try {
+      // Загружаем пример из локального JSON
+      const response = await fetch('/examples/hybe-assist-recommendations.json');
+      if (!response.ok) {
+        throw new Error('Не удалось загрузить пример');
+      }
+
+      const exampleProject = await response.json();
+      setProgress(100);
+      setProject(exampleProject);
+      setDemoMode(true);
+      setAuthChecked(true);
+      toast.success('🎉 Пример карты загружен! Зарегистрируйтесь чтобы создавать свои проекты.');
+    } catch (error) {
+      console.error('Error loading example:', error);
+      setError('Не удалось загрузить пример. Попробуйте еще раз.');
+    } finally {
+      setLoading(false);
+      setTimeout(() => setProgress(0), 500);
+    }
+  };
 
   // Stage 1: Улучшение требований
   const handleEnhanceRequirements = async () => {
@@ -242,7 +299,7 @@ function AppContent() {
       setError('Пожалуйста, введите описание продукта');
       return;
     }
-    
+
     if (!isValidInput) {
       if (input.trim().length < MIN_CHARS) {
         setError(`Текст слишком короткий. Минимум ${MIN_CHARS} символов.`);
@@ -251,10 +308,103 @@ function AppContent() {
       }
       return;
     }
-    
+
     handleGenerateWithText(input, true);
   };
-  
+
+  // Демо-генерация (без регистрации)
+  const handleDemoGenerate = async () => {
+    if (!input.trim()) {
+      setError('Пожалуйста, введите описание продукта');
+      return;
+    }
+
+    if (!isValidInput) {
+      if (input.trim().length < MIN_CHARS) {
+        setError(`Текст слишком короткий. Минимум ${MIN_CHARS} символов.`);
+      } else {
+        setError(`Текст слишком длинный. Максимум ${MAX_CHARS} символов.`);
+      }
+      return;
+    }
+
+    setLoading(true);
+    setStage('generating');
+    setProgress(10);
+    setError(null);
+
+    try {
+      const res = await enhancement.generateMapDemo(input);
+      setProgress(90);
+
+      // Преобразуем ответ демо-API в формат проекта
+      const demoProject = {
+        id: -1, // фейковый ID для демо
+        name: res.data.project_name,
+        raw_requirements: input,
+        activities: [],
+        releases: res.data.releases,
+        demo_mode: true,
+      };
+
+      // Парсим карту в формат activities/tasks/stories
+      res.data.map.forEach((activityItem, actIdx) => {
+        const activity = {
+          id: -(actIdx + 1),
+          title: activityItem.activity,
+          position: actIdx,
+          tasks: [],
+        };
+
+        activityItem.tasks?.forEach((taskItem, taskIdx) => {
+          const task = {
+            id: -(actIdx * 100 + taskIdx + 1),
+            title: taskItem.taskTitle,
+            position: taskIdx,
+            stories: [],
+          };
+
+          taskItem.stories?.forEach((storyItem, storyIdx) => {
+            const story = {
+              id: -(actIdx * 10000 + taskIdx * 100 + storyIdx + 1),
+              title: storyItem.title,
+              description: storyItem.description,
+              priority: storyItem.priority,
+              acceptance_criteria: storyItem.acceptanceCriteria || [],
+              release_id: storyItem.priority === 'MVP' ? -1 : storyItem.priority.includes('1') ? -2 : -3,
+              position: storyIdx,
+              status: 'todo',
+            };
+            task.stories.push(story);
+          });
+
+          activity.tasks.push(task);
+        });
+
+        demoProject.activities.push(activity);
+      });
+
+      setProgress(100);
+      setProject(demoProject);
+      toast.success(res.data.message || 'Демо-карта сгенерирована! Зарегистрируйтесь чтобы сохранить.');
+    } catch (error) {
+      console.error('Error generating demo map:', error);
+      setProgress(0);
+      if (error.response) {
+        const detail = error.response.data?.detail || 'Неизвестная ошибка';
+        setError(`Ошибка: ${detail}`);
+      } else if (error.request) {
+        setError('Не удалось подключиться к серверу');
+      } else {
+        setError(`Ошибка: ${error.message}`);
+      }
+    } finally {
+      setLoading(false);
+      setStage(null);
+      setTimeout(() => setProgress(0), 500);
+    }
+  };
+
   // Основной метод генерации (с Two-Stage Processing)
   const handleGenerate = handleEnhanceRequirements;
 
@@ -352,13 +502,13 @@ function AppContent() {
     );
   }
 
-  if (!user) {
+  if (!user && !demoMode) {
     return (
       <>
         <a href="#main-content" className="skip-to-content">
           Перейти к содержимому
         </a>
-        <Auth onLogin={handleLogin} />
+        <Auth onLogin={handleLogin} onTryDemo={handleTryDemo} onViewExample={handleViewExample} />
       </>
     );
   }
@@ -410,6 +560,138 @@ function AppContent() {
         onLogout={handleLogout}
         user={user}
       />
+      </>
+    );
+  }
+
+  // Если view === 'demo', показываем демо-форму
+  if (view === 'demo' && demoMode) {
+    return (
+      <>
+        <a href="#main-content" className="skip-to-content">
+          Перейти к содержимому
+        </a>
+        <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+          <div id="main-content" className="bg-white p-8 rounded-xl shadow-lg max-w-2xl w-full">
+            <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">✨</span>
+                <h2 className="font-bold text-gray-800">Демо-режим</h2>
+              </div>
+              <p className="text-sm text-gray-600">
+                Вы можете сгенерировать одну карту бесплатно без регистрации.
+                Зарегистрируйтесь чтобы сохранить и редактировать проекты!
+              </p>
+            </div>
+
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h1 className="text-3xl font-bold mb-2 text-gray-800">Попробуйте AI User Story Mapper</h1>
+                <p className="text-gray-600">Превратите ваши требования в структурированную карту пользовательских историй</p>
+              </div>
+              <button
+                onClick={() => {
+                  setDemoMode(false);
+                  setView('list');
+                }}
+                className="text-gray-500 hover:text-gray-700 text-sm font-medium"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-2">
+              <AutoResizeTextarea
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  setError(null);
+                }}
+                minHeight={160}
+                maxHeight={600}
+                className={`w-full p-4 border rounded-lg mb-2 focus:ring-2 focus:ring-purple-500 outline-none ${
+                  !isValidInput && input.length > 0
+                    ? 'border-red-300 bg-red-50'
+                    : 'border-gray-300'
+                }`}
+                placeholder="Опишите ваш продукт (например: Приложение для доставки пиццы с ролями курьера и клиента. Клиент может выбрать пиццу, оформить заказ и отслеживать доставку. Курьер получает заказы, видит маршрут и отмечает доставку...)"
+                disabled={loading}
+                maxLength={MAX_CHARS}
+                aria-label="Описание продукта"
+              />
+              <div className="flex justify-between items-center text-xs">
+                <span className={`${charCount < MIN_CHARS ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {charCount < MIN_CHARS
+                    ? `Минимум ${MIN_CHARS} символов (осталось ${MIN_CHARS - charCount})`
+                    : `${charCount} / ${MAX_CHARS} символов`
+                  }
+                </span>
+                {remainingChars < 100 && (
+                  <span className={remainingChars < 20 ? 'text-red-500 font-semibold' : 'text-orange-500'}>
+                    Осталось: {remainingChars}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {(loading || enhancementLoading) && (
+              <div className="mb-4">
+                <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                  <div
+                    className="h-2.5 rounded-full transition-all duration-300 bg-gradient-to-r from-purple-600 to-blue-600"
+                    style={{ width: `${progress}%` }}
+                    role="progressbar"
+                    aria-valuenow={progress}
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                  ></div>
+                </div>
+                <p className="text-xs text-gray-600 text-center">
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="inline-block w-2 h-2 bg-purple-600 rounded-full animate-pulse"></span>
+                    {getProgressMessage(progress, 'generating')} {Math.round(progress)}%
+                  </span>
+                </p>
+              </div>
+            )}
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm" role="alert">
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={handleDemoGenerate}
+              disabled={loading || enhancementLoading || !isValidInput || !input.trim()}
+              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-4 rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span>
+                  Генерация...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  <Sparkles className="w-5 h-5" />
+                  Сгенерировать демо-карту
+                </span>
+              )}
+            </button>
+
+            <div className="mt-4 text-center">
+              <button
+                onClick={() => {
+                  setDemoMode(false);
+                  setView('list');
+                }}
+                className="text-blue-600 hover:underline text-sm"
+              >
+                Уже есть аккаунт? Войти
+              </button>
+            </div>
+          </div>
+        </div>
       </>
     );
   }
@@ -486,19 +768,12 @@ function AppContent() {
                 ></div>
               </div>
               <p className="text-xs text-gray-600 text-center">
-                {stage === 'enhancing' && (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="inline-block w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
-                    Stage 1: AI улучшает требования... {Math.round(progress)}%
-                  </span>
-                )}
-                {stage === 'generating' && (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="inline-block w-2 h-2 bg-blue-600 rounded-full animate-pulse"></span>
-                    Stage 2: Генерация карты... {Math.round(progress)}%
-                  </span>
-                )}
-                {!stage && `Обработка... ${Math.round(progress)}%`}
+                <span className="flex items-center justify-center gap-2">
+                  <span className={`inline-block w-2 h-2 rounded-full animate-pulse ${
+                    stage === 'enhancing' ? 'bg-indigo-500' : 'bg-blue-600'
+                  }`}></span>
+                  {getProgressMessage(progress, stage)} {Math.round(progress)}%
+                </span>
               </p>
             </div>
           )}
