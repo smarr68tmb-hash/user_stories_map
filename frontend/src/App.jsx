@@ -10,6 +10,7 @@ import AutoResizeTextarea from './components/common/AutoResizeTextarea.jsx';
 import { ToastProvider, useToast } from './hooks/useToast';
 import { ProjectRefreshProvider, useProjectRefreshContext } from './context/ProjectRefreshContext';
 import { useStreamingGeneration } from './hooks/useStreamingGeneration';
+import { AIAssistantSidebar } from './components/AIAssistantSidebar';
 
 const MAX_CHARS = 10000;
 const MIN_CHARS = 10;
@@ -1165,12 +1166,27 @@ function ProjectPage({
         </div>
       </div>
 
-      <StoryMap
-        project={project}
-        onUpdate={onUpdateProject}
-        onUnauthorized={handleLogout}
-        isLoading={isMapLoading || isRefreshing}
-      />
+      {/* Main content with sidebar spacing */}
+      <div className="relative">
+        <StoryMap
+          project={project}
+          onUpdate={onUpdateProject}
+          onUnauthorized={handleLogout}
+          isLoading={isMapLoading || isRefreshing}
+        />
+
+        {/* AI Assistant Sidebar - shown when project is loaded */}
+        {project && (
+          <AIAssistantSidebar
+            project={project}
+            analysisResults={analysisResults}
+            onRunFullAnalysis={() => {
+              // TODO: Implement full analysis trigger
+              toast.info('Запуск полного анализа...');
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }
