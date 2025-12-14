@@ -71,6 +71,52 @@ function AppContent() {
   // AI Agent состояние
   const [useAgent, setUseAgent] = useState(false);
   const toast = useToast();
+  
+  // Состояние для полного анализа
+  const [isRunningFullAnalysis, setIsRunningFullAnalysis] = useState(false);
+  
+  // Обработчик запуска полного анализа
+  const handleRunFullAnalysis = useCallback(async () => {
+    if (!project || !project.id) {
+      toast.error('Проект не загружен');
+      return;
+    }
+    
+    setIsRunningFullAnalysis(true);
+    toast.info('Запуск полного анализа...');
+    
+    try {
+      const response = await api.post(`/project/${project.id}/analyze/full`, {
+        include_ai_conflicts: false,
+        similarity_threshold: 0.7,
+        duplicate_threshold: 0.9
+      });
+      
+      // Обновляем результаты анализа на основе ответа
+      const fullAnalysis = response.data;
+      const updatedAnalysisResults = {
+        duplicates: fullAnalysis.similarity?.stats?.duplicates_found || 0,
+        similar: fullAnalysis.similarity?.stats?.similar_groups_found || 0,
+        score: fullAnalysis.overall_score || 0,
+        issues: fullAnalysis.validation?.issues || [],
+        totalIssues: fullAnalysis.validation?.issues?.length || 0
+      };
+      
+      // Обновляем analysisResults через setAnalysisResults из hook
+      // Но так как analysisResults приходит из useStreamingGeneration,
+      // мы не можем напрямую его обновить. Вместо этого покажем результат в toast
+      toast.success(`Анализ завершен! Оценка: ${fullAnalysis.overall_score}/100`);
+      
+      // Можно открыть модальное окно с результатами или обновить sidebar
+      console.log('Full analysis result:', fullAnalysis);
+    } catch (error) {
+      console.error('Full analysis error:', error);
+      const errorMessage = error.response?.data?.detail || error.message || 'Ошибка при выполнении анализа';
+      toast.error(`Ошибка анализа: ${errorMessage}`);
+    } finally {
+      setIsRunningFullAnalysis(false);
+    }
+  }, [project, toast]);
 
   // SSE Streaming hook (Phase 1)
   const {
@@ -1184,10 +1230,7 @@ function ProjectPage({
           <AIAssistantSidebar
             project={project}
             analysisResults={analysisResults}
-            onRunFullAnalysis={() => {
-              // TODO: Implement full analysis trigger
-              toast.info('Запуск полного анализа...');
-            }}
+            onRunFullAnalysis={handleRunFullAnalysis}
           />
         )}
       </div>
