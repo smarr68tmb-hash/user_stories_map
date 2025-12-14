@@ -516,6 +516,14 @@ def _make_request_with_fallback(
                 if provider == "agentrouter":
                     # AgentRouter может вернуть строку вместо объекта
                     if isinstance(completion, str):
+                        # Проверяем, не вернул ли AgentRouter HTML страницу с капчей (WAF блокировка)
+                        if "<!doctypehtml>" in completion.lower() or "aliyun_waf" in completion.lower() or "captcha" in completion.lower():
+                            logger.error(f"❌ AGENTROUTER blocked by WAF (Web Application Firewall)")
+                            logger.error(f"   AgentRouter is blocking automated API requests with CAPTCHA")
+                            logger.error(f"   This makes AgentRouter unsuitable for automated API usage")
+                            logger.error(f"   Recommendation: Disable AgentRouter and use other providers (Groq/Gemini)")
+                            raise Exception("AgentRouter blocked by WAF - CAPTCHA required (not suitable for automated API)")
+                        
                         logger.error(f"❌ AGENTROUTER returned string instead of completion object")
                         logger.error(f"   Response: {completion[:200]}...")
                         logger.error(f"   This usually means AgentRouter returned an error message")
