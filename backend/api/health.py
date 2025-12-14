@@ -8,7 +8,16 @@ from sqlalchemy import text
 
 from utils.database import get_db
 from config import settings
-from services.ai_service import clients, gemini_client
+
+# Безопасный импорт AI сервиса (может быть не инициализирован при старте)
+try:
+    from services import ai_service
+    _ai_service_available = True
+except Exception as e:
+    _ai_service_available = False
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"AI service not available: {e}")
 
 router = APIRouter(tags=["health"])
 
@@ -61,6 +70,15 @@ def debug_cookies(request: Request):
 @router.get("/debug/ai-providers")
 def debug_ai_providers():
     """Debug endpoint для проверки статуса AI провайдеров"""
+    if not _ai_service_available:
+        return {
+            "error": "AI service not available",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    
+    clients = getattr(ai_service, "clients", {})
+    gemini_client = getattr(ai_service, "gemini_client", None)
+    
     providers_status = {}
     
     # Проверяем AgentRouter
