@@ -93,13 +93,28 @@ class TestRateLimitTracker:
         assert old_date not in tracker.usage.get("gemini", {})
 
     def test_only_gemini_tracked(self):
-        """Проверка, что отслеживается только Gemini"""
+        """Проверка, что отслеживается только Gemini провайдеры"""
         tracker = RateLimitTracker()
 
         # Для не-Gemini провайдеров should_skip_provider всегда False
         assert not tracker.should_skip_provider("groq")
         assert not tracker.should_skip_provider("perplexity")
         assert not tracker.should_skip_provider("openai")
+        assert not tracker.should_skip_provider("agentrouter")
+
+    def test_gemini_pro_and_flash_separate_limits(self):
+        """Проверка раздельных лимитов для gemini-pro и gemini-flash"""
+        tracker = RateLimitTracker()
+
+        # Добавляем запросы к gemini-pro
+        for _ in range(50):
+            tracker.increment("gemini-pro")
+
+        # gemini-pro должен быть пропущен (превышен лимит 45)
+        assert tracker.should_skip_provider("gemini-pro")
+
+        # gemini-flash должен быть доступен (отдельный лимит)
+        assert not tracker.should_skip_provider("gemini-flash")
 
 
 # ============================================================================
@@ -110,73 +125,74 @@ class TestModelSelection:
     """Тесты для выбора моделей под разные задачи"""
 
     @patch('services.ai_service.settings')
-    def test_gemini_enhancement_model(self, mock_settings):
-        """Проверка выбора модели для enhancement (Gemini)"""
+    def test_agentrouter_model(self, mock_settings):
+        """Проверка выбора модели для AgentRouter (Claude)"""
+        mock_settings.AGENTROUTER_MODEL = "claude-sonnet-4-5-20250514"
+        model = _get_model_for_provider("agentrouter")
+        assert model == "claude-sonnet-4-5-20250514"
+
+    @patch('services.ai_service.settings')
+    def test_gemini_pro_model(self, mock_settings):
+        """Проверка выбора модели для Gemini Pro"""
+        mock_settings.GEMINI_PRO_MODEL = "gemini-2.5-pro-preview-06-05"
+        model = _get_model_for_provider("gemini-pro")
+        assert model == "gemini-2.5-pro-preview-06-05"
+        assert "pro" in model.lower()
+
+    @patch('services.ai_service.settings')
+    def test_gemini_flash_model(self, mock_settings):
+        """Проверка выбора модели для Gemini Flash"""
+        mock_settings.GEMINI_FLASH_MODEL = "gemini-2.0-flash-exp"
+        model = _get_model_for_provider("gemini-flash")
+        assert model == "gemini-2.0-flash-exp"
+        assert "flash" in model.lower()
+
+    @patch('services.ai_service.settings')
+    def test_legacy_gemini_enhancement_model(self, mock_settings):
+        """Проверка выбора модели для enhancement (legacy Gemini провайдер)"""
         # Случай 1: модель задана явно
         mock_settings.GEMINI_ENHANCEMENT_MODEL = "gemini-2.0-flash-exp"
-        mock_settings.API_MODEL = "llama-3.3-70b-versatile"  # Не должна использоваться
-        model = _get_model_for_provider("gemini", is_enhancement=True)
-        assert "gemini" in model.lower()
-        assert model == "gemini-2.0-flash-exp"
-        
-        # Случай 2: используется fallback на API_MODEL (если он Gemini)
-        mock_settings.GEMINI_ENHANCEMENT_MODEL = ""
-        mock_settings.API_MODEL = "gemini-2.0-flash-exp"
-        model = _get_model_for_provider("gemini", is_enhancement=True)
-        assert "gemini" in model.lower()
-        
-        # Случай 3: используется дефолтный fallback
-        mock_settings.GEMINI_ENHANCEMENT_MODEL = ""
-        mock_settings.API_MODEL = ""
+        mock_settings.GEMINI_FLASH_MODEL = "gemini-2.0-flash-exp"
         model = _get_model_for_provider("gemini", is_enhancement=True)
         assert "gemini" in model.lower()
         assert model == "gemini-2.0-flash-exp"
 
+        # Случай 2: используется fallback на GEMINI_FLASH_MODEL
+        mock_settings.GEMINI_ENHANCEMENT_MODEL = ""
+        mock_settings.GEMINI_FLASH_MODEL = "gemini-2.0-flash-exp"
+        model = _get_model_for_provider("gemini", is_enhancement=True)
+        assert "flash" in model.lower()
+
     @patch('services.ai_service.settings')
-    def test_gemini_generation_model(self, mock_settings):
-        """Проверка выбора модели для generation (Gemini)"""
+    def test_legacy_gemini_generation_model(self, mock_settings):
+        """Проверка выбора модели для generation (legacy Gemini провайдер)"""
         # Случай 1: модель задана явно
-        mock_settings.GEMINI_GENERATION_MODEL = "gemini-2.0-flash-exp"
-        mock_settings.API_MODEL = "llama-3.3-70b-versatile"  # Не должна использоваться
+        mock_settings.GEMINI_GENERATION_MODEL = "gemini-2.5-pro-preview-06-05"
+        mock_settings.GEMINI_PRO_MODEL = "gemini-2.5-pro-preview-06-05"
         model = _get_model_for_provider("gemini", is_enhancement=False)
         assert "gemini" in model.lower()
-        assert model == "gemini-2.0-flash-exp"
-        
-        # Случай 2: используется fallback на API_MODEL (если он Gemini)
+
+        # Случай 2: используется fallback на GEMINI_PRO_MODEL
         mock_settings.GEMINI_GENERATION_MODEL = ""
-        mock_settings.API_MODEL = "gemini-2.0-flash-exp"
+        mock_settings.GEMINI_PRO_MODEL = "gemini-2.5-pro-preview-06-05"
         model = _get_model_for_provider("gemini", is_enhancement=False)
-        assert "gemini" in model.lower()
-        
-        # Случай 3: используется дефолтный fallback
-        mock_settings.GEMINI_GENERATION_MODEL = ""
-        mock_settings.API_MODEL = ""
-        model = _get_model_for_provider("gemini", is_enhancement=False)
-        assert "gemini" in model.lower()
-        assert model == "gemini-2.0-flash-exp"
+        assert "pro" in model.lower()
 
     @patch('services.ai_service.settings')
-    def test_gemini_assistant_model(self, mock_settings):
-        """Проверка выбора модели для assistant (Gemini)"""
+    def test_legacy_gemini_assistant_model(self, mock_settings):
+        """Проверка выбора модели для assistant (legacy Gemini провайдер)"""
         # Случай 1: модель задана явно
         mock_settings.GEMINI_ASSISTANT_MODEL = "gemini-2.0-flash-exp"
-        mock_settings.API_MODEL = "llama-3.3-70b-versatile"  # Не должна использоваться
+        mock_settings.GEMINI_FLASH_MODEL = "gemini-2.0-flash-exp"
         model = _get_model_for_provider("gemini", task_type="assistant")
         assert "gemini" in model.lower()
         assert model == "gemini-2.0-flash-exp"
-        
-        # Случай 2: используется fallback на API_MODEL (если он Gemini)
+
+        # Случай 2: используется fallback на GEMINI_FLASH_MODEL
         mock_settings.GEMINI_ASSISTANT_MODEL = ""
-        mock_settings.API_MODEL = "gemini-2.0-flash-exp"
+        mock_settings.GEMINI_FLASH_MODEL = "gemini-2.0-flash-exp"
         model = _get_model_for_provider("gemini", task_type="assistant")
-        assert "gemini" in model.lower()
-        
-        # Случай 3: используется дефолтный fallback
-        mock_settings.GEMINI_ASSISTANT_MODEL = ""
-        mock_settings.API_MODEL = ""
-        model = _get_model_for_provider("gemini", task_type="assistant")
-        assert "gemini" in model.lower()
-        assert model == "gemini-2.0-flash-exp"
+        assert "flash" in model.lower()
 
     def test_groq_model_selection(self):
         """Проверка выбора модели для Groq"""
@@ -251,9 +267,9 @@ class TestFallbackMechanism:
     @patch('services.ai_service.rate_limiter')
     @patch('services.ai_service._get_model_for_provider')
     def test_fallback_gemini_to_groq(self, mock_get_model, mock_rate_limiter, mock_gemini, mock_clients):
-        """Fallback с Gemini на Groq при rate limit"""
-        # Setup: Gemini недоступен (rate limit), Groq работает
-        mock_rate_limiter.should_skip_provider.side_effect = lambda p, m=None: p == "gemini"
+        """Fallback с Gemini-pro на Groq при rate limit"""
+        # Setup: gemini-pro недоступен (rate limit), Groq работает
+        mock_rate_limiter.should_skip_provider.side_effect = lambda p, m=None: p in ("gemini-pro", "gemini-flash")
         mock_rate_limiter.cleanup_old_entries.return_value = None
         mock_rate_limiter.increment.return_value = None
 
@@ -271,14 +287,15 @@ class TestFallbackMechanism:
         mock_clients.__getitem__.return_value = mock_groq_client
 
         with patch('services.ai_service.settings') as mock_settings:
-            mock_settings.get_available_providers.return_value = ["gemini", "groq"]
+            # Новая логика: get_providers_for_task возвращает провайдеры для типа задачи
+            mock_settings.get_providers_for_task.return_value = ["gemini-pro", "gemini-flash", "groq"]
 
             request_params = {
                 "messages": [{"role": "user", "content": "test"}],
                 "temperature": 0.7
             }
 
-            completion, provider = _make_request_with_fallback(request_params)
+            completion, provider = _make_request_with_fallback(request_params, task_type="enhancement")
 
             assert provider == "groq"
             assert completion == mock_completion
@@ -296,7 +313,8 @@ class TestFallbackMechanism:
         mock_clients.get.return_value = None
 
         with patch('services.ai_service.settings') as mock_settings:
-            mock_settings.get_available_providers.return_value = []
+            # Новая логика: get_providers_for_task возвращает пустой список
+            mock_settings.get_providers_for_task.return_value = []
 
             request_params = {
                 "messages": [{"role": "user", "content": "test"}],
@@ -304,7 +322,7 @@ class TestFallbackMechanism:
             }
 
             with pytest.raises(HTTPException) as exc_info:
-                _make_request_with_fallback(request_params)
+                _make_request_with_fallback(request_params, task_type="generation")
 
             assert exc_info.value.status_code == 503
             assert "No AI providers configured" in exc_info.value.detail

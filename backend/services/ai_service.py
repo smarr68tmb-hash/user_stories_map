@@ -56,19 +56,27 @@ class RateLimitTracker:
 
     def should_skip_provider(self, provider: str, model: str = None) -> bool:
         """Проверяет, нужно ли пропустить провайдера из-за приближения к лимиту"""
-        if provider != "gemini":
-            return False  # Пока отслеживаем только Gemini
-
-        count = self.get_count(provider, model)
-
-        # Проверяем лимиты для Gemini моделей
-        if model and "flash" in model.lower():
-            return count >= settings.GEMINI_FLASH_LIMIT
-        elif model and "pro" in model.lower():
+        # Gemini Pro — отдельный лимит (50 RPD)
+        if provider == "gemini-pro":
+            count = self.get_count(provider, model)
             return count >= settings.GEMINI_PRO_LIMIT
 
-        # По умолчанию для Gemini используем Flash лимит
-        return count >= settings.GEMINI_FLASH_LIMIT
+        # Gemini Flash — отдельный лимит (250 RPD)
+        if provider == "gemini-flash":
+            count = self.get_count(provider, model)
+            return count >= settings.GEMINI_FLASH_LIMIT
+
+        # Legacy: старый провайдер "gemini"
+        if provider == "gemini":
+            count = self.get_count(provider, model)
+            if model and "flash" in model.lower():
+                return count >= settings.GEMINI_FLASH_LIMIT
+            elif model and "pro" in model.lower():
+                return count >= settings.GEMINI_PRO_LIMIT
+            return count >= settings.GEMINI_FLASH_LIMIT
+
+        # Остальные провайдеры пока без лимитов
+        return False
 
     def cleanup_old_entries(self):
         """Очищает старые записи (старше 2 дней)"""
@@ -98,12 +106,23 @@ def _initialize_clients():
     """Инициализирует клиенты для всех доступных провайдеров"""
     global clients, gemini_client
 
-    # Gemini
+    # AgentRouter (Claude Sonnet 4.5) — OpenAI-совместимый API
+    if settings.AGENTROUTER_API_KEY:
+        try:
+            clients["agentrouter"] = OpenAI(
+                api_key=settings.AGENTROUTER_API_KEY,
+                base_url=settings.AGENTROUTER_BASE_URL
+            )
+            logger.info("✅ Initialized AgentRouter API client (Claude Sonnet 4.5)")
+        except Exception as e:
+            logger.warning(f"Failed to initialize AgentRouter client: {e}")
+
+    # Gemini (используется для gemini-pro и gemini-flash)
     if settings.GEMINI_API_KEY:
         try:
             genai.configure(api_key=settings.GEMINI_API_KEY)
             gemini_client = genai
-            logger.info("✅ Initialized Gemini API client")
+            logger.info("✅ Initialized Gemini API client (Pro + Flash)")
         except Exception as e:
             logger.warning(f"Failed to initialize Gemini client: {e}")
 
@@ -163,38 +182,51 @@ def _get_model_for_provider(provider: str, is_enhancement: bool = False, task_ty
     Возвращает модель для конкретного провайдера с учетом типа задачи
 
     Args:
-        provider: Имя провайдера (gemini, groq, perplexity, openai)
+        provider: Имя провайдера (agentrouter, gemini-pro, gemini-flash, gemini, groq, perplexity, openai)
         is_enhancement: True для Stage 1 (Enhancement)
         task_type: Тип задачи ('enhancement', 'generation', 'assistant')
 
     Returns:
         Название модели для использования
     """
-    # Gemini - используем оптимальные модели для каждой задачи
+    # AgentRouter (Claude Sonnet 4.5)
+    if provider == "agentrouter":
+        return settings.AGENTROUTER_MODEL
+
+    # Gemini Pro — сильная модель (50 RPD)
+    if provider == "gemini-pro":
+        return settings.GEMINI_PRO_MODEL
+
+    # Gemini Flash — быстрая модель с большим лимитом (250 RPD)
+    if provider == "gemini-flash":
+        return settings.GEMINI_FLASH_MODEL
+
+    # Legacy: старый провайдер "gemini" для обратной совместимости
     if provider == "gemini":
         if task_type == "enhancement" or is_enhancement:
-            return settings.GEMINI_ENHANCEMENT_MODEL or settings.API_MODEL or "gemini-2.0-flash-exp"
+            return settings.GEMINI_ENHANCEMENT_MODEL or settings.GEMINI_FLASH_MODEL
         elif task_type == "assistant":
-            return settings.GEMINI_ASSISTANT_MODEL or settings.API_MODEL or "gemini-2.0-flash-exp"
+            return settings.GEMINI_ASSISTANT_MODEL or settings.GEMINI_FLASH_MODEL
         else:  # generation
-            return settings.GEMINI_GENERATION_MODEL or settings.API_MODEL or "gemini-2.0-flash-exp"
+            return settings.GEMINI_GENERATION_MODEL or settings.GEMINI_PRO_MODEL
 
     # Groq
-    if is_enhancement:
-        if provider == "groq":
+    if provider == "groq":
+        if is_enhancement or task_type == "enhancement":
             return os.getenv("GROQ_ENHANCEMENT_MODEL", "llama-3.1-8b-instant")
-        elif provider == "perplexity":
+        return os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+    # Perplexity
+    if provider == "perplexity":
+        if is_enhancement or task_type == "enhancement":
             return os.getenv("PERPLEXITY_ENHANCEMENT_MODEL", "llama-3.1-sonar-small-32k-online")
-        elif provider == "openai":
+        return os.getenv("PERPLEXITY_MODEL", "llama-3.1-sonar-large-128k-online")
+
+    # OpenAI
+    if provider == "openai":
+        if is_enhancement or task_type == "enhancement":
             return os.getenv("OPENAI_ENHANCEMENT_MODEL", "gpt-4o-mini")
-    else:
-        # Для основной генерации
-        if provider == "groq":
-            return os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-        elif provider == "perplexity":
-            return os.getenv("PERPLEXITY_MODEL", "llama-3.1-sonar-large-128k-online")
-        elif provider == "openai":
-            return os.getenv("OPENAI_MODEL", "gpt-4o")
+        return os.getenv("OPENAI_MODEL", "gpt-4o")
 
     # Fallback на настройки из settings
     if is_enhancement:
@@ -315,7 +347,7 @@ def _make_request_with_fallback(
 
     Args:
         request_params: Параметры запроса (model будет заменен для каждого провайдера)
-        providers: Список провайдеров для попыток (по умолчанию из настроек)
+        providers: Список провайдеров для попыток (по умолчанию определяется по task_type)
         is_enhancement: Используется ли для enhancement (влияет на выбор модели)
         task_type: Тип задачи ('enhancement', 'generation', 'assistant')
 
@@ -325,13 +357,15 @@ def _make_request_with_fallback(
     Raises:
         HTTPException: Если все провайдеры недоступны
     """
+    # Используем новую стратегию: провайдеры зависят от типа задачи
     if providers is None:
-        providers = settings.get_available_providers()
+        effective_task_type = task_type or ("enhancement" if is_enhancement else "generation")
+        providers = settings.get_providers_for_task(effective_task_type)
 
     if not providers:
         raise HTTPException(
             status_code=503,
-            detail="No AI providers configured. Set GEMINI_API_KEY, GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY."
+            detail="No AI providers configured. Set AGENTROUTER_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY."
         )
 
     # Очищаем старые записи rate limiter
@@ -347,13 +381,14 @@ def _make_request_with_fallback(
             logger.info(f"⏩ Skipping {provider.upper()} - approaching rate limit")
             continue
 
-        # Проверяем инициализацию клиента (кроме Gemini)
-        if provider != "gemini" and provider not in clients:
+        # Проверяем инициализацию клиента
+        is_gemini_provider = provider in ("gemini", "gemini-pro", "gemini-flash")
+        if not is_gemini_provider and provider not in clients:
             logger.debug(f"Skipping {provider} - client not initialized")
             continue
 
-        if provider == "gemini" and not gemini_client:
-            logger.debug(f"Skipping gemini - client not initialized")
+        if is_gemini_provider and not gemini_client:
+            logger.debug(f"Skipping {provider} - gemini client not initialized")
             continue
 
         try:
@@ -362,8 +397,8 @@ def _make_request_with_fallback(
 
             logger.info(f"Trying {provider.upper()} with model {model}")
 
-            # Gemini использует свой API
-            if provider == "gemini":
+            # Gemini (Pro, Flash, legacy) использует свой SDK
+            if is_gemini_provider:
                 # Создаем копию параметров
                 messages = copy.deepcopy(request_params.get("messages", []))
                 temperature = request_params.get("temperature", 0.7)
@@ -394,14 +429,14 @@ def _make_request_with_fallback(
                 logger.info(f"✅ Successfully got response from {provider.upper()}")
                 return completion, provider
 
-            # OpenAI-совместимые провайдеры (Groq, Perplexity, OpenAI)
+            # OpenAI-совместимые провайдеры (AgentRouter, Groq, Perplexity, OpenAI)
             else:
                 # Создаем deep copy параметров запроса
                 provider_params = copy.deepcopy(request_params)
                 provider_params["model"] = model
 
-                # JSON mode только для OpenAI
-                if provider == "openai":
+                # JSON mode для OpenAI и AgentRouter (Claude поддерживает json mode)
+                if provider in ("openai", "agentrouter"):
                     if "response_format" not in provider_params:
                         provider_params["response_format"] = {"type": "json_object"}
                 else:

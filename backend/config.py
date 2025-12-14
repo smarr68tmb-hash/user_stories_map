@@ -22,6 +22,11 @@ class Settings:
         self.API_MODEL = os.getenv("API_MODEL", "")
         self.API_TEMPERATURE = float(os.getenv("API_TEMPERATURE", "0.7"))
 
+        # AgentRouter (Claude Sonnet 4.5)
+        self.AGENTROUTER_API_KEY = os.getenv("AGENTROUTER_API_KEY", "")
+        self.AGENTROUTER_BASE_URL = os.getenv("AGENTROUTER_BASE_URL", "https://agentrouter.ai/api/v1")
+        self.AGENTROUTER_MODEL = os.getenv("AGENTROUTER_MODEL", "claude-sonnet-4-5-20250514")
+
         # Приоритет провайдеров для fallback (через запятую: "gemini,groq,perplexity")
         self.AI_PROVIDER_PRIORITY = [
             p.strip() for p in os.getenv("AI_PROVIDER_PRIORITY", "gemini,groq,perplexity").split(",")
@@ -33,11 +38,14 @@ class Settings:
         self.ENHANCEMENT_MODEL = os.getenv("ENHANCEMENT_MODEL", "")
         
         # Gemini-specific models
-        # Модель для генерации (Stage 2) - если не указана, используется API_MODEL
+        # Gemini Pro - сильная модель (50 RPD лимит)
+        self.GEMINI_PRO_MODEL = os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro-preview-06-05")
+        # Gemini Flash - быстрая модель (250 RPD лимит)
+        self.GEMINI_FLASH_MODEL = os.getenv("GEMINI_FLASH_MODEL", "gemini-2.0-flash-exp")
+
+        # Legacy: для обратной совместимости (используют Pro/Flash модели)
         self.GEMINI_GENERATION_MODEL = os.getenv("GEMINI_GENERATION_MODEL", "")
-        # Модель для улучшения требований (Stage 1) - если не указана, используется API_MODEL
         self.GEMINI_ENHANCEMENT_MODEL = os.getenv("GEMINI_ENHANCEMENT_MODEL", "")
-        # Модель для AI Assistant - если не указана, используется API_MODEL
         self.GEMINI_ASSISTANT_MODEL = os.getenv("GEMINI_ASSISTANT_MODEL", "")
         
         # Лимиты для Gemini моделей (для rate limiting)
@@ -169,7 +177,9 @@ class Settings:
     
     def get_api_key_for_provider(self, provider: str) -> Optional[str]:
         """Возвращает API ключ для конкретного провайдера"""
-        if provider == "gemini":
+        if provider == "agentrouter":
+            return self.AGENTROUTER_API_KEY
+        elif provider in ("gemini", "gemini-pro", "gemini-flash"):
             return self.GEMINI_API_KEY
         elif provider == "groq":
             return self.GROQ_API_KEY
@@ -180,12 +190,53 @@ class Settings:
         return None
     
     def get_available_providers(self) -> List[str]:
-        """Возвращает список доступных провайдеров в порядке приоритета"""
+        """Возвращает список доступных провайдеров в порядке приоритета (базовый список)"""
         available = []
         for provider in self.AI_PROVIDER_PRIORITY:
             if self.get_api_key_for_provider(provider):
                 available.append(provider)
         return available
+
+    def get_providers_for_task(self, task_type: str) -> List[str]:
+        """
+        Возвращает список провайдеров для конкретного типа задачи.
+
+        Стратегия:
+        - generation/assistant: agentrouter → gemini-pro → gemini-flash → groq
+        - enhancement: gemini-pro → gemini-flash → groq (без agentrouter для экономии)
+
+        Args:
+            task_type: Тип задачи ('enhancement', 'generation', 'assistant')
+
+        Returns:
+            List[str]: Список провайдеров в порядке приоритета
+        """
+        providers = []
+
+        # Для generation и assistant — Claude первый приоритет
+        if task_type in ("generation", "assistant"):
+            if self.AGENTROUTER_API_KEY:
+                providers.append("agentrouter")
+
+        # Gemini Pro — сильная модель (50 RPD), используем для всех задач
+        if self.GEMINI_API_KEY:
+            providers.append("gemini-pro")
+
+        # Gemini Flash — fallback с большим лимитом (250 RPD)
+        if self.GEMINI_API_KEY:
+            providers.append("gemini-flash")
+
+        # Groq — бесплатный fallback
+        if self.GROQ_API_KEY:
+            providers.append("groq")
+
+        # Perplexity и OpenAI — дополнительные fallback
+        if self.PERPLEXITY_API_KEY:
+            providers.append("perplexity")
+        if self.OPENAI_API_KEY:
+            providers.append("openai")
+
+        return providers
     
     def get_enhancement_model(self) -> str:
         """Возвращает модель для Stage 1 (улучшение требований)"""
