@@ -39,7 +39,8 @@ class Settings:
         
         # Gemini-specific models
         # Gemini Pro - сильная модель (50 RPD лимит)
-        self.GEMINI_PRO_MODEL = os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro-preview-06-05")
+        # Используем актуальную модель gemini-2.5-pro (старая preview версия больше не доступна)
+        self.GEMINI_PRO_MODEL = os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro")
         # Gemini Flash - быстрая модель (250 RPD лимит)
         self.GEMINI_FLASH_MODEL = os.getenv("GEMINI_FLASH_MODEL", "gemini-2.0-flash-exp")
 
