@@ -604,12 +604,12 @@ class SimpleAgent:
         }
 
         try:
-                completion, provider = _make_request_with_fallback(
-                    request_params,
-                    providers=None,  # None означает использовать get_providers_for_task()
-                    is_enhancement=False,
-                    task_type="generation"
-                )
+            completion, provider = _make_request_with_fallback(
+                request_params,
+                providers=None,  # None означает использовать get_providers_for_task()
+                is_enhancement=False,
+                task_type="generation"
+            )
 
             response_text = completion.choices[0].message.content
             fixed = self._parse_json_response(response_text)
