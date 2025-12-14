@@ -91,17 +91,20 @@ def calculate_similarity_tfidf(texts: List[str]) -> List[List[float]]:
     if len(texts) < 2:
         return [[1.0]]
     
+    # Предобрабатываем тексты
+    preprocessed_texts = [preprocess_text(text) for text in texts]
+    
     # Создаем TF-IDF векторизатор
     vectorizer = TfidfVectorizer(
         stop_words=RUSSIAN_STOP_WORDS,
         ngram_range=(1, 2),  # Униграммы и биграммы
         min_df=1,
-        max_df=0.95
+        max_df=1.0  # Не фильтруем частые слова (для малых наборов документов)
     )
     
     try:
         # Векторизуем тексты
-        tfidf_matrix = vectorizer.fit_transform(texts)
+        tfidf_matrix = vectorizer.fit_transform(preprocessed_texts)
         
         # Рассчитываем косинусное сходство
         similarity_matrix = cosine_similarity(tfidf_matrix)

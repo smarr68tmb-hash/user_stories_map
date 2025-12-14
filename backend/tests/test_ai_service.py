@@ -109,20 +109,74 @@ class TestRateLimitTracker:
 class TestModelSelection:
     """Тесты для выбора моделей под разные задачи"""
 
-    def test_gemini_enhancement_model(self):
+    @patch('services.ai_service.settings')
+    def test_gemini_enhancement_model(self, mock_settings):
         """Проверка выбора модели для enhancement (Gemini)"""
+        # Случай 1: модель задана явно
+        mock_settings.GEMINI_ENHANCEMENT_MODEL = "gemini-2.0-flash-exp"
+        mock_settings.API_MODEL = "llama-3.3-70b-versatile"  # Не должна использоваться
         model = _get_model_for_provider("gemini", is_enhancement=True)
         assert "gemini" in model.lower()
+        assert model == "gemini-2.0-flash-exp"
+        
+        # Случай 2: используется fallback на API_MODEL (если он Gemini)
+        mock_settings.GEMINI_ENHANCEMENT_MODEL = ""
+        mock_settings.API_MODEL = "gemini-2.0-flash-exp"
+        model = _get_model_for_provider("gemini", is_enhancement=True)
+        assert "gemini" in model.lower()
+        
+        # Случай 3: используется дефолтный fallback
+        mock_settings.GEMINI_ENHANCEMENT_MODEL = ""
+        mock_settings.API_MODEL = ""
+        model = _get_model_for_provider("gemini", is_enhancement=True)
+        assert "gemini" in model.lower()
+        assert model == "gemini-2.0-flash-exp"
 
-    def test_gemini_generation_model(self):
+    @patch('services.ai_service.settings')
+    def test_gemini_generation_model(self, mock_settings):
         """Проверка выбора модели для generation (Gemini)"""
+        # Случай 1: модель задана явно
+        mock_settings.GEMINI_GENERATION_MODEL = "gemini-2.0-flash-exp"
+        mock_settings.API_MODEL = "llama-3.3-70b-versatile"  # Не должна использоваться
         model = _get_model_for_provider("gemini", is_enhancement=False)
         assert "gemini" in model.lower()
+        assert model == "gemini-2.0-flash-exp"
+        
+        # Случай 2: используется fallback на API_MODEL (если он Gemini)
+        mock_settings.GEMINI_GENERATION_MODEL = ""
+        mock_settings.API_MODEL = "gemini-2.0-flash-exp"
+        model = _get_model_for_provider("gemini", is_enhancement=False)
+        assert "gemini" in model.lower()
+        
+        # Случай 3: используется дефолтный fallback
+        mock_settings.GEMINI_GENERATION_MODEL = ""
+        mock_settings.API_MODEL = ""
+        model = _get_model_for_provider("gemini", is_enhancement=False)
+        assert "gemini" in model.lower()
+        assert model == "gemini-2.0-flash-exp"
 
-    def test_gemini_assistant_model(self):
+    @patch('services.ai_service.settings')
+    def test_gemini_assistant_model(self, mock_settings):
         """Проверка выбора модели для assistant (Gemini)"""
+        # Случай 1: модель задана явно
+        mock_settings.GEMINI_ASSISTANT_MODEL = "gemini-2.0-flash-exp"
+        mock_settings.API_MODEL = "llama-3.3-70b-versatile"  # Не должна использоваться
         model = _get_model_for_provider("gemini", task_type="assistant")
         assert "gemini" in model.lower()
+        assert model == "gemini-2.0-flash-exp"
+        
+        # Случай 2: используется fallback на API_MODEL (если он Gemini)
+        mock_settings.GEMINI_ASSISTANT_MODEL = ""
+        mock_settings.API_MODEL = "gemini-2.0-flash-exp"
+        model = _get_model_for_provider("gemini", task_type="assistant")
+        assert "gemini" in model.lower()
+        
+        # Случай 3: используется дефолтный fallback
+        mock_settings.GEMINI_ASSISTANT_MODEL = ""
+        mock_settings.API_MODEL = ""
+        model = _get_model_for_provider("gemini", task_type="assistant")
+        assert "gemini" in model.lower()
+        assert model == "gemini-2.0-flash-exp"
 
     def test_groq_model_selection(self):
         """Проверка выбора модели для Groq"""
