@@ -237,6 +237,84 @@ curl http://127.0.0.1:8000/ready
 }
 ```
 
+### 6.3 Debug эндпоинты
+
+#### 6.3.1 Проверка настроек cookies и CORS
+
+```bash
+curl http://127.0.0.1:8000/debug/cookies
+```
+
+Ожидаемый ответ:
+```json
+{
+  "cookie_settings": {
+    "samesite": "lax",
+    "secure": false,
+    "domain": "(not set)"
+  },
+  "cors_origins": ["http://localhost:5173"],
+  "environment": "development",
+  "received_cookies": [],
+  "request_origin": "(not set)"
+}
+```
+
+#### 6.3.2 Проверка статуса AI провайдеров
+
+```bash
+curl http://127.0.0.1:8000/debug/ai-providers
+```
+
+Ожидаемый ответ:
+```json
+{
+  "providers": {
+    "agentrouter": {
+      "status": "initialized",
+      "model": "claude-sonnet-4-5-20250514",
+      "base_url": "https://agentrouter.ai/api/v1",
+      "has_api_key": true
+    },
+    "gemini": {
+      "status": "initialized",
+      "has_api_key": true,
+      "models": {
+        "pro": "gemini-2.0-flash-exp",
+        "flash": "gemini-2.0-flash-exp"
+      }
+    },
+    "groq": {
+      "status": "not_initialized",
+      "has_api_key": false,
+      "reason": "API key not set"
+    }
+  },
+  "available_providers": {
+    "all": ["agentrouter", "gemini-pro", "gemini-flash", "groq"],
+    "generation": ["agentrouter", "gemini-pro", "gemini-flash", "groq"],
+    "enhancement": ["gemini-pro", "gemini-flash", "groq"]
+  },
+  "priority_order": {
+    "generation": "agentrouter → gemini-pro → gemini-flash → groq",
+    "enhancement": "gemini-pro → gemini-flash → groq (agentrouter не используется для экономии)"
+  },
+  "timestamp": "2025-01-XX..."
+}
+```
+
+**Полезные поля для диагностики:**
+- `providers.{provider}.status` — `"initialized"` или `"not_initialized"`
+- `providers.{provider}.has_api_key` — установлен ли API ключ
+- `providers.{provider}.reason` — причина если провайдер не инициализирован
+- `available_providers.generation` — список провайдеров в порядке приоритета для генерации
+- `available_providers.enhancement` — список провайдеров для улучшения требований
+
+**Как проверить работает ли AgentRouter:**
+1. Откройте `/debug/ai-providers` в браузере или через curl
+2. Проверьте `providers.agentrouter.status` — должно быть `"initialized"`
+3. Проверьте `available_providers.generation` — `agentrouter` должен быть первым в списке
+
 ## 7. Тестирование кеширования Redis
 
 ### 7.1 Проверка кеша

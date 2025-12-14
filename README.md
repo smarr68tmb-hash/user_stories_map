@@ -413,6 +413,10 @@ usm-service/
 - `GET /ready` — Readiness check
 - `GET /docs` — Swagger документация
 
+### Debug эндпоинты (для диагностики)
+- `GET /debug/cookies` — Проверка настроек cookies и CORS
+- `GET /debug/ai-providers` — Статус AI провайдеров (инициализация, доступность, приоритеты)
+
 ## 🎯 Пример использования
 
 1. Откройте frontend в браузере
