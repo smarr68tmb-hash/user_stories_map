@@ -111,7 +111,9 @@ def _initialize_clients():
         try:
             clients["agentrouter"] = OpenAI(
                 api_key=settings.AGENTROUTER_API_KEY,
-                base_url=settings.AGENTROUTER_BASE_URL
+                base_url=settings.AGENTROUTER_BASE_URL,
+                timeout=180.0,  # 3 минуты timeout для AgentRouter (Claude может быть медленным)
+                max_retries=2   # Максимум 2 retry попытки
             )
             logger.info("✅ Initialized AgentRouter API client (Claude Sonnet 4.5)")
         except Exception as e:
@@ -492,6 +494,20 @@ def _make_request_with_fallback(
                     logger.info(f"✅ Successfully got response from {provider.upper()}")
                 return completion, provider
             
+        except APITimeoutError as e:
+            last_error = e
+            last_provider = provider
+            if provider == "agentrouter":
+                logger.error(f"❌ AGENTROUTER TIMEOUT after waiting for response")
+                logger.error(f"   Error: {str(e)}")
+                logger.error(f"   This may indicate:")
+                logger.error(f"   - AgentRouter service is overloaded")
+                logger.error(f"   - Invalid API key (check AGENTROUTER_API_KEY)")
+                logger.error(f"   - Network connectivity issues")
+                logger.error(f"   Trying next provider...")
+            else:
+                logger.warning(f"❌ {provider.upper()} timeout: {e}. Trying next provider...")
+            continue
         except (RateLimitError, APIConnectionError) as e:
             last_error = e
             last_provider = provider
