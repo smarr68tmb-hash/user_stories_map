@@ -361,6 +361,7 @@ def _make_request_with_fallback(
     if providers is None:
         effective_task_type = task_type or ("enhancement" if is_enhancement else "generation")
         providers = settings.get_providers_for_task(effective_task_type)
+        logger.info(f"📋 Selected providers for task '{effective_task_type}': {providers}")
 
     if not providers:
         raise HTTPException(

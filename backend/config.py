@@ -217,6 +217,9 @@ class Settings:
         if task_type in ("generation", "assistant"):
             if self.AGENTROUTER_API_KEY:
                 providers.append("agentrouter")
+                logger.info(f"✅ AgentRouter added to providers list for task '{task_type}'")
+            else:
+                logger.warning(f"⚠️ AgentRouter API key not set - skipping AgentRouter for task '{task_type}'")
 
         # Gemini Pro — сильная модель (50 RPD), используем для всех задач
         if self.GEMINI_API_KEY:
