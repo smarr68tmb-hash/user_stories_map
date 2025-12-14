@@ -109,13 +109,39 @@ def _initialize_clients():
     # AgentRouter (Claude Sonnet 4.5) — OpenAI-совместимый API
     if settings.AGENTROUTER_API_KEY:
         try:
+            # Проверяем формат токена (убираем префикс Bearer если есть)
+            api_key = settings.AGENTROUTER_API_KEY.strip()
+            if api_key.startswith("Bearer "):
+                api_key = api_key[7:].strip()
+                logger.warning("⚠️ AgentRouter API key had 'Bearer ' prefix - removed")
+            
+            # Проверяем правильность base URL (по документации: https://agentrouter.org/v1)
+            base_url = settings.AGENTROUTER_BASE_URL
+            if "agentrouter.ai" in base_url:
+                logger.warning(f"⚠️ AgentRouter base URL uses old domain 'agentrouter.ai'")
+                logger.warning(f"   Current URL: {base_url}")
+                logger.warning(f"   Expected: https://agentrouter.org/v1 (OpenAI-compatible API)")
+            if not base_url.endswith("/v1"):
+                logger.warning(f"⚠️ AgentRouter base URL should end with '/v1' for OpenAI-compatible API")
+                logger.warning(f"   Current URL: {base_url}")
+                logger.warning(f"   Expected: https://agentrouter.org/v1")
+            
             clients["agentrouter"] = OpenAI(
-                api_key=settings.AGENTROUTER_API_KEY,
-                base_url=settings.AGENTROUTER_BASE_URL,
+                api_key=api_key,
+                base_url=base_url,
                 timeout=180.0,  # 3 минуты timeout для AgentRouter (Claude может быть медленным)
                 max_retries=2   # Максимум 2 retry попытки
             )
             logger.info("✅ Initialized AgentRouter API client (Claude Sonnet 4.5)")
+            logger.info(f"   Base URL: {settings.AGENTROUTER_BASE_URL}")
+            logger.info(f"   API Key format: {'sk-...' if api_key.startswith('sk-') else 'Token format'}")
+            logger.info(f"   API Key length: {len(api_key)} chars")
+            
+            # Предупреждение если токен не в формате sk-
+            if not api_key.startswith('sk-'):
+                logger.warning("⚠️ AgentRouter API key doesn't start with 'sk-'")
+                logger.warning("   Make sure you're using API Token (from 'API Token' section), not System Access Token")
+                logger.warning("   API Token should start with 'sk-' and is used for API requests")
         except Exception as e:
             logger.warning(f"Failed to initialize AgentRouter client: {e}")
 
@@ -479,6 +505,22 @@ def _make_request_with_fallback(
                     logger.info(f"   Timeout: {provider_params.get('timeout', 'N/A')}s")
 
                 completion = clients[provider].chat.completions.create(**provider_params)
+
+                # Проверяем формат ответа от AgentRouter
+                if provider == "agentrouter":
+                    # AgentRouter может вернуть строку вместо объекта
+                    if isinstance(completion, str):
+                        logger.error(f"❌ AGENTROUTER returned string instead of completion object")
+                        logger.error(f"   Response: {completion[:200]}...")
+                        logger.error(f"   This usually means AgentRouter returned an error message")
+                        raise Exception(f"AgentRouter returned error: {completion}")
+                    
+                    # Проверяем наличие choices
+                    if not hasattr(completion, 'choices') or not completion.choices:
+                        logger.error(f"❌ AGENTROUTER response missing 'choices' attribute")
+                        logger.error(f"   Response type: {type(completion)}")
+                        logger.error(f"   Response: {str(completion)[:200]}...")
+                        raise Exception("AgentRouter response missing 'choices' attribute")
 
                 # Увеличиваем счетчик rate limiter
                 rate_limiter.increment(provider, model)
