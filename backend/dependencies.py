@@ -1,6 +1,7 @@
 """
 FastAPI dependencies - переиспользуемые зависимости для эндпоинтов
 """
+from typing import Optional
 from fastapi import Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
@@ -78,7 +79,7 @@ def get_current_active_user(
 def get_current_user_optional(
     request: Request,
     db: Session = Depends(get_db)
-) -> User | None:
+) -> Optional[User]:
     """
     Опциональная dependency для получения пользователя.
     Возвращает None если токен отсутствует или невалиден.

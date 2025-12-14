@@ -16,10 +16,10 @@ import asyncio
 from typing import AsyncGenerator, Optional, Dict, Any
 from sqlalchemy.orm import Session
 
-from services.ai_service import enhance_requirements, generate_ai_map, generate_map_with_agent
+from services.ai_service import enhance_requirements, generate_ai_map
 from services.validation_service import validate_project_map
 from services.similarity_service import analyze_similarity
-from models import Project, Release, Activity, Task, Story
+from models import Project, Release, Activity, UserTask, UserStory
 from config import get_redis_client
 
 logger = logging.getLogger(__name__)
@@ -118,10 +118,11 @@ async def generate_map_streaming(
         loop = asyncio.get_event_loop()
 
         if use_agent:
-            logger.info("[SSE] Using AI Agent for generation")
+            logger.info("[SSE] Using AI Agent for generation (fallback to standard)")
+            # TODO: Implement generate_map_with_agent when ready
             ai_result = await loop.run_in_executor(
                 None,
-                lambda: generate_map_with_agent(generation_text, redis_client=redis_client)
+                lambda: generate_ai_map(generation_text, redis_client=redis_client)
             )
         else:
             logger.info("[SSE] Using standard generation")
@@ -300,7 +301,7 @@ def _save_project_to_db(
         db.flush()
 
         for task_idx, task_data in enumerate(act_data.get("tasks", [])):
-            task = Task(
+            task = UserTask(
                 activity_id=activity.id,
                 title=task_data.get("title", f"Task {task_idx + 1}"),
                 position=task_idx
@@ -318,7 +319,7 @@ def _save_project_to_db(
                 else:
                     release_id = release_map[2]
 
-                story = Story(
+                story = UserStory(
                     task_id=task.id,
                     title=story_data.get("title", f"Story {story_idx + 1}"),
                     description=story_data.get("description", ""),
