@@ -378,13 +378,19 @@ def _make_request_with_fallback(
         # Проверяем, нужно ли пропустить провайдера из-за лимитов
         model = _get_model_for_provider(provider, is_enhancement, task_type)
         if rate_limiter.should_skip_provider(provider, model):
-            logger.info(f"⏩ Skipping {provider.upper()} - approaching rate limit")
+            if provider == "agentrouter":
+                logger.warning(f"⏩ Skipping AGENTROUTER - approaching rate limit (count: {rate_limiter.get_count(provider, model)})")
+            else:
+                logger.info(f"⏩ Skipping {provider.upper()} - approaching rate limit")
             continue
 
         # Проверяем инициализацию клиента
         is_gemini_provider = provider in ("gemini", "gemini-pro", "gemini-flash")
         if not is_gemini_provider and provider not in clients:
-            logger.debug(f"Skipping {provider} - client not initialized")
+            if provider == "agentrouter":
+                logger.error(f"❌ AGENTROUTER client not initialized! Check API key and base_url.")
+            else:
+                logger.debug(f"Skipping {provider} - client not initialized")
             continue
 
         if is_gemini_provider and not gemini_client:
@@ -395,7 +401,11 @@ def _make_request_with_fallback(
             # Получаем модель для этого провайдера
             model = _get_model_for_provider(provider, is_enhancement, task_type)
 
-            logger.info(f"Trying {provider.upper()} with model {model}")
+            if provider == "agentrouter":
+                logger.info(f"🔄 Attempting to use AGENTROUTER (priority {providers.index(provider) + 1}/{len(providers)})")
+                logger.info(f"   Model: {model}")
+            else:
+                logger.info(f"Trying {provider.upper()} with model {model}")
 
             # Gemini (Pro, Flash, legacy) использует свой SDK
             if is_gemini_provider:
@@ -449,24 +459,59 @@ def _make_request_with_fallback(
                             if "IMPORTANT: Return ONLY valid JSON" not in last_msg["content"]:
                                 provider_params["messages"][-1]["content"] += "\n\nIMPORTANT: Return ONLY valid JSON, no additional text or markdown formatting."
 
+                # Детальное логирование для agentrouter
+                if provider == "agentrouter":
+                    base_url = settings.AGENTROUTER_BASE_URL
+                    messages_count = len(provider_params.get("messages", []))
+                    prompt_preview = ""
+                    if messages_count > 0:
+                        last_msg_content = provider_params["messages"][-1].get("content", "")
+                        prompt_preview = last_msg_content[:100] + "..." if len(last_msg_content) > 100 else last_msg_content
+                    logger.info(f"🚀 Sending request to AGENTROUTER:")
+                    logger.info(f"   Model: {model}")
+                    logger.info(f"   Base URL: {base_url}")
+                    logger.info(f"   Messages: {messages_count}")
+                    logger.info(f"   Prompt preview: {prompt_preview}")
+                    logger.info(f"   Temperature: {provider_params.get('temperature', 'N/A')}")
+                    logger.info(f"   Timeout: {provider_params.get('timeout', 'N/A')}s")
+
                 completion = clients[provider].chat.completions.create(**provider_params)
 
                 # Увеличиваем счетчик rate limiter
                 rate_limiter.increment(provider, model)
 
-                logger.info(f"✅ Successfully got response from {provider.upper()}")
+                # Детальное логирование успешного ответа от agentrouter
+                if provider == "agentrouter":
+                    response_length = len(completion.choices[0].message.content) if completion.choices else 0
+                    logger.info(f"✅ AGENTROUTER response received:")
+                    logger.info(f"   Response length: {response_length} chars")
+                    logger.info(f"   Model used: {model}")
+                    logger.info(f"   Provider: {provider}")
+                else:
+                    logger.info(f"✅ Successfully got response from {provider.upper()}")
                 return completion, provider
             
         except (RateLimitError, APIConnectionError) as e:
             last_error = e
             last_provider = provider
-            logger.warning(f"❌ {provider.upper()} failed ({type(e).__name__}): {e}. Trying next provider...")
+            if provider == "agentrouter":
+                logger.error(f"❌ AGENTROUTER failed ({type(e).__name__}): {e}")
+                logger.error(f"   Error details: {str(e)}")
+                logger.error(f"   Trying next provider...")
+            else:
+                logger.warning(f"❌ {provider.upper()} failed ({type(e).__name__}): {e}. Trying next provider...")
             continue
         except APIError as e:
             if _should_retry_error(e, provider):
                 last_error = e
                 last_provider = provider
-                logger.warning(f"❌ {provider.upper()} failed (APIError): {e}. Trying next provider...")
+                if provider == "agentrouter":
+                    logger.error(f"❌ AGENTROUTER APIError: {e}")
+                    logger.error(f"   Error type: {type(e).__name__}")
+                    logger.error(f"   Error message: {str(e)}")
+                    logger.error(f"   Trying next provider...")
+                else:
+                    logger.warning(f"❌ {provider.upper()} failed (APIError): {e}. Trying next provider...")
                 continue
             else:
                 # Не переключаемся на другие провайдеры для этой ошибки
