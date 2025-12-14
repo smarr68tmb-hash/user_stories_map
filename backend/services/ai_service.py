@@ -479,25 +479,25 @@ def enhance_requirements(raw_text: str, redis_client=None, use_cache: bool = Tru
         dict: Результат улучшения
     """
     
+    # Валидация размера входных данных (сначала валидируем входные данные)
+    if len(raw_text.strip()) < 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Requirements text is too short. Please provide at least 10 characters."
+        )
+
+    if len(raw_text) > 10000:
+        raise HTTPException(
+            status_code=400,
+            detail="Requirements text is too long. Maximum 10000 characters allowed."
+        )
+
     # Проверяем наличие доступных провайдеров
     available_providers = settings.get_available_providers()
     if not available_providers:
         raise HTTPException(
             status_code=503,
             detail="AI API key not configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY environment variable."
-        )
-    
-    # Валидация размера входных данных
-    if len(raw_text.strip()) < 10:
-        raise HTTPException(
-            status_code=400,
-            detail="Requirements text is too short. Please provide at least 10 characters."
-        )
-    
-    if len(raw_text) > 10000:
-        raise HTTPException(
-            status_code=400,
-            detail="Requirements text is too long. Maximum 10000 characters allowed."
         )
     
     # Проверяем кеш перед запросом к AI
@@ -651,26 +651,26 @@ confidence должен быть от 0.5 до 1.0:
 
 def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool = True) -> dict:
     """Отправляет запрос в AI API и получает структурированную User Story Map"""
-    
+
+    # Валидация размера входных данных (сначала валидируем входные данные)
+    if len(requirements_text.strip()) < 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Requirements text is too short. Please provide at least 10 characters."
+        )
+
+    if len(requirements_text) > 10000:
+        raise HTTPException(
+            status_code=400,
+            detail="Requirements text is too long. Maximum 10000 characters allowed."
+        )
+
     # Проверяем наличие доступных провайдеров
     available_providers = settings.get_available_providers()
     if not available_providers:
         raise HTTPException(
             status_code=503,
             detail="AI API key not configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY environment variable."
-        )
-    
-    # Валидация размера входных данных
-    if len(requirements_text.strip()) < 10:
-        raise HTTPException(
-            status_code=400,
-            detail="Requirements text is too short. Please provide at least 10 characters."
-        )
-    
-    if len(requirements_text) > 10000:
-        raise HTTPException(
-            status_code=400,
-            detail="Requirements text is too long. Maximum 10000 characters allowed."
         )
     
     # Проверяем кеш перед запросом к AI
@@ -1049,25 +1049,25 @@ def ai_improve_story_content(
         dict: Улучшенные данные истории
     """
     
+    # Валидация промпта (сначала валидируем входные данные)
+    if len(user_prompt.strip()) < 3:
+        raise HTTPException(
+            status_code=400,
+            detail="Prompt is too short. Please provide at least 3 characters."
+        )
+
+    if len(user_prompt) > 1000:
+        raise HTTPException(
+            status_code=400,
+            detail="Prompt is too long. Maximum 1000 characters allowed."
+        )
+
     # Проверяем наличие доступных провайдеров
     available_providers = settings.get_available_providers()
     if not available_providers:
         raise HTTPException(
             status_code=503,
             detail="AI API key not configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY environment variable."
-        )
-    
-    # Валидация промпта
-    if len(user_prompt.strip()) < 3:
-        raise HTTPException(
-            status_code=400,
-            detail="Prompt is too short. Please provide at least 3 characters."
-        )
-    
-    if len(user_prompt) > 1000:
-        raise HTTPException(
-            status_code=400,
-            detail="Prompt is too long. Maximum 1000 characters allowed."
         )
     
     # Проверяем кеш

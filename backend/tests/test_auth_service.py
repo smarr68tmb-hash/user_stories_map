@@ -390,13 +390,15 @@ class TestSecurityBestPractices:
 
         # Попытка "reverse" должна провалиться
         # (bcrypt необратим - это good practice)
-        with pytest.raises(Exception):
-            # Нет способа получить оригинальный пароль из hash
-            # Это должно вызвать ошибку
-            pwd_context = __import__('passlib.context', fromlist=['CryptContext']).CryptContext
-            ctx = pwd_context(schemes=["bcrypt"])
-            # У bcrypt нет метода decrypt/decode - это one-way hash
-            assert not hasattr(ctx, 'decrypt')
+        # Проверяем, что у bcrypt нет метода decrypt/decode - это one-way hash
+        pwd_context = __import__('passlib.context', fromlist=['CryptContext']).CryptContext
+        ctx = pwd_context(schemes=["bcrypt"])
+        assert not hasattr(ctx, 'decrypt')
+        assert not hasattr(ctx, 'decode')
+
+        # Попытка использовать несуществующий метод должна вызвать ошибку
+        with pytest.raises(AttributeError):
+            ctx.decrypt(hashed)
 
     def test_jwt_secret_used(self):
         """JWT токены должны использовать SECRET_KEY из настроек"""
@@ -488,12 +490,12 @@ class TestEdgeCases:
     def test_very_long_email(self):
         """Очень длинный email"""
         mock_db = Mock()
+        mock_db.query.return_value.filter.return_value.first.return_value = None
         long_email = "a" * 200 + "@example.com"
 
-        # Должно работать без ошибок
-        with patch('services.auth_service.get_user_by_email', return_value=None):
-            user = get_user_by_email(mock_db, long_email)
-            assert user is None
+        # Должно работать без ошибок (функция не должна падать)
+        user = get_user_by_email(mock_db, long_email)
+        assert user is None
 
     def test_unicode_in_password(self):
         """Unicode символы в пароле"""

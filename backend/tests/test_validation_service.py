@@ -43,7 +43,7 @@ def empty_project(mock_db):
     project = Project(
         id=1,
         name="Empty Project",
-        requirements="Empty",
+        raw_requirements="Empty",
         user_id=1
     )
     project.activities = []
@@ -57,11 +57,11 @@ def minimal_project(mock_db):
     project = Project(
         id=2,
         name="Minimal Project",
-        requirements="Test",
+        raw_requirements="Test",
         user_id=1
     )
 
-    release = Release(id=1, title="MVP", order=1, project_id=2)
+    release = Release(id=1, title="MVP", position=1, project_id=2)
     project.releases = [release]
 
     activity = Activity(id=1, title="Activity 1", project_id=2)
@@ -88,14 +88,14 @@ def complex_project(mock_db):
     project = Project(
         id=3,
         name="Complex Project",
-        requirements="Complex requirements",
+        raw_requirements="Complex requirements",
         user_id=1
     )
 
     # Релизы
-    mvp = Release(id=1, title="MVP", order=1, project_id=3)
-    release1 = Release(id=2, title="Release 1", order=2, project_id=3)
-    later = Release(id=3, title="Later", order=3, project_id=3)
+    mvp = Release(id=1, title="MVP", position=1, project_id=3)
+    release1 = Release(id=2, title="Release 1", position=2, project_id=3)
+    later = Release(id=3, title="Later", position=3, project_id=3)
     project.releases = [mvp, release1, later]
 
     # Activity 1
@@ -173,7 +173,7 @@ class TestEmptyValidation:
 
     def test_empty_activity_warning(self, mock_db):
         """Activity без Tasks должна давать WARNING"""
-        project = Project(id=4, name="Test", requirements="Test", user_id=1)
+        project = Project(id=4, name="Test", raw_requirements="Test", user_id=1)
         project.releases = []
 
         activity = Activity(id=1, title="Empty Activity", project_id=4)
@@ -189,7 +189,7 @@ class TestEmptyValidation:
 
     def test_empty_task_warning(self, mock_db):
         """Task без Stories должен давать WARNING"""
-        project = Project(id=5, name="Test", requirements="Test", user_id=1)
+        project = Project(id=5, name="Test", raw_requirements="Test", user_id=1)
         project.releases = []
 
         activity = Activity(id=1, title="Activity", project_id=5)
@@ -328,8 +328,8 @@ class TestQualityChecks:
 
     def test_missing_description_info(self, mock_db):
         """История без описания должна давать INFO"""
-        project = Project(id=6, name="Test", requirements="Test", user_id=1)
-        release = Release(id=1, title="MVP", order=1, project_id=6)
+        project = Project(id=6, name="Test", raw_requirements="Test", user_id=1)
+        release = Release(id=1, title="MVP", position=1, project_id=6)
         project.releases = [release]
 
         activity = Activity(id=1, title="Activity", project_id=6)
@@ -355,8 +355,8 @@ class TestQualityChecks:
 
     def test_missing_criteria_warning(self, mock_db):
         """История без acceptance criteria должна давать WARNING"""
-        project = Project(id=7, name="Test", requirements="Test", user_id=1)
-        release = Release(id=1, title="MVP", order=1, project_id=7)
+        project = Project(id=7, name="Test", raw_requirements="Test", user_id=1)
+        release = Release(id=1, title="MVP", position=1, project_id=7)
         project.releases = [release]
 
         activity = Activity(id=1, title="Activity", project_id=7)
@@ -383,8 +383,8 @@ class TestQualityChecks:
 
     def test_short_title_info(self, mock_db):
         """Слишком короткое название (<5 символов) должно давать INFO"""
-        project = Project(id=8, name="Test", requirements="Test", user_id=1)
-        release = Release(id=1, title="MVP", order=1, project_id=8)
+        project = Project(id=8, name="Test", raw_requirements="Test", user_id=1)
+        release = Release(id=1, title="MVP", position=1, project_id=8)
         project.releases = [release]
 
         activity = Activity(id=1, title="Activity", project_id=8)
@@ -418,8 +418,8 @@ class TestDuplicateDetection:
 
     def test_duplicate_titles_warning(self, mock_db):
         """Истории с одинаковыми названиями должны давать WARNING"""
-        project = Project(id=9, name="Test", requirements="Test", user_id=1)
-        release = Release(id=1, title="MVP", order=1, project_id=9)
+        project = Project(id=9, name="Test", raw_requirements="Test", user_id=1)
+        release = Release(id=1, title="MVP", position=1, project_id=9)
         project.releases = [release]
 
         activity = Activity(id=1, title="Activity", project_id=9)
@@ -455,8 +455,8 @@ class TestDuplicateDetection:
 
     def test_case_insensitive_duplicates(self, mock_db):
         """Дубликаты должны обнаруживаться case-insensitive"""
-        project = Project(id=10, name="Test", requirements="Test", user_id=1)
-        release = Release(id=1, title="MVP", order=1, project_id=10)
+        project = Project(id=10, name="Test", raw_requirements="Test", user_id=1)
+        release = Release(id=1, title="MVP", position=1, project_id=10)
         project.releases = [release]
 
         activity = Activity(id=1, title="Activity", project_id=10)
@@ -491,9 +491,9 @@ class TestReleaseBalance:
 
     def test_unbalanced_releases_info(self, mock_db):
         """Неравномерное распределение историй по релизам должно давать INFO"""
-        project = Project(id=11, name="Test", requirements="Test", user_id=1)
-        mvp = Release(id=1, title="MVP", order=1, project_id=11)
-        later = Release(id=2, title="Later", order=2, project_id=11)
+        project = Project(id=11, name="Test", raw_requirements="Test", user_id=1)
+        mvp = Release(id=1, title="MVP", position=1, project_id=11)
+        later = Release(id=2, title="Later", position=2, project_id=11)
         project.releases = [mvp, later]
 
         activity = Activity(id=1, title="Activity", project_id=11)
@@ -589,8 +589,8 @@ class TestRecommendations:
 
     def test_recommendations_for_missing_descriptions(self, mock_db):
         """Рекомендации при недостаточном количестве описаний"""
-        project = Project(id=12, name="Test", requirements="Test", user_id=1)
-        release = Release(id=1, title="MVP", order=1, project_id=12)
+        project = Project(id=12, name="Test", raw_requirements="Test", user_id=1)
+        release = Release(id=1, title="MVP", position=1, project_id=12)
         project.releases = [release]
 
         activity = Activity(id=1, title="Activity", project_id=12)
@@ -620,8 +620,8 @@ class TestRecommendations:
 
     def test_recommendations_for_missing_criteria(self, mock_db):
         """Рекомендации при недостаточном количестве AC"""
-        project = Project(id=13, name="Test", requirements="Test", user_id=1)
-        release = Release(id=1, title="MVP", order=1, project_id=13)
+        project = Project(id=13, name="Test", raw_requirements="Test", user_id=1)
+        release = Release(id=1, title="MVP", position=1, project_id=13)
         project.releases = [release]
 
         activity = Activity(id=1, title="Activity", project_id=13)
@@ -652,8 +652,8 @@ class TestRecommendations:
 
     def test_recommendations_for_large_mvp(self, mock_db):
         """Рекомендации при слишком большом MVP"""
-        project = Project(id=14, name="Test", requirements="Test", user_id=1)
-        release = Release(id=1, title="MVP", order=1, project_id=14)
+        project = Project(id=14, name="Test", raw_requirements="Test", user_id=1)
+        release = Release(id=1, title="MVP", position=1, project_id=14)
         project.releases = [release]
 
         activity = Activity(id=1, title="Activity", project_id=14)

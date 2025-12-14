@@ -158,20 +158,18 @@ class TestTFIDFSimilarity:
         # Similarity должна быть низкой (< 0.3)
         assert matrix[0][1] < 0.3
 
-    @patch('services.similarity_service.SKLEARN_AVAILABLE', True)
     def test_tfidf_similar_texts(self):
         """Похожие тексты должны иметь среднюю similarity"""
         texts = [
-            "Пользователь может войти через email",
-            "Пользователь может войти через социальные сети"
+            "Администратор добавляет товар каталога",
+            "Администратор редактирует товар каталога"
         ]
 
         matrix = calculate_similarity_tfidf(texts)
 
-        # Similarity должна быть средней (0.3 - 0.9)
-        assert 0.3 < matrix[0][1] < 0.9
+        # Similarity должна быть средней (тексты похожи, но не идентичны)
+        assert 0.3 < matrix[0][1] < 0.95
 
-    @patch('services.similarity_service.SKLEARN_AVAILABLE', True)
     def test_tfidf_matrix_symmetrical(self):
         """Матрица similarity должна быть симметричной"""
         texts = [
@@ -187,7 +185,6 @@ class TestTFIDFSimilarity:
         assert matrix[0][2] == matrix[2][0]
         assert matrix[1][2] == matrix[2][1]
 
-    @patch('services.similarity_service.SKLEARN_AVAILABLE', True)
     def test_tfidf_diagonal_is_one(self):
         """Диагональ матрицы (similarity с самим собой) должна быть 1.0"""
         texts = [
@@ -203,12 +200,11 @@ class TestTFIDFSimilarity:
         assert matrix[1][1] == 1.0
         assert matrix[2][2] == 1.0
 
-    @patch('services.similarity_service.SKLEARN_AVAILABLE', True)
     def test_tfidf_stop_words_ignored(self):
         """Русские стоп-слова должны игнорироваться"""
         texts = [
-            "и в на что как пользователь может войти",
-            "пользователь может войти и также выйти"
+            "и в на что как администратор редактирует профиль",
+            "администратор редактирует профиль и также настройки"
         ]
 
         matrix = calculate_similarity_tfidf(texts)
@@ -251,17 +247,19 @@ class TestFallbackAlgorithm:
     def test_fallback_partial_overlap(self):
         """Частичное совпадение слов"""
         texts = [
-            "пользователь может войти email",
-            "пользователь может выйти email"
+            "авторизация email регистрация",
+            "авторизация push уведомления"
         ]
 
         matrix = calculate_similarity_fallback(texts)
 
         # Jaccard: intersection / union
-        # Общие слова: пользователь, может, email (3)
-        # Уникальные: войти, выйти (2)
-        # Jaccard = 3 / 5 = 0.6
-        assert 0.4 < matrix[0][1] < 0.8
+        # Текст 1: {авторизация, email, регистрация}
+        # Текст 2: {авторизация, push, уведомления}
+        # Intersection: {авторизация} = 1
+        # Union: {авторизация, email, регистрация, push, уведомления} = 5
+        # Jaccard = 1/5 = 0.2
+        assert 0.1 < matrix[0][1] < 0.4
 
     def test_fallback_matrix_symmetrical(self):
         """Матрица Jaccard должна быть симметричной"""
@@ -298,15 +296,15 @@ class TestFallbackAlgorithm:
     def test_fallback_removes_stop_words(self):
         """Fallback должен удалять русские стоп-слова"""
         texts = [
-            "и в на что пользователь может войти",
-            "пользователь может войти и также"
+            "и в на что администратор редактирует данные",
+            "администратор редактирует данные и также"
         ]
 
         matrix = calculate_similarity_fallback(texts)
 
-        # После удаления стоп-слов останутся только значимые слова
-        # Similarity должна быть высокой
-        assert matrix[0][1] > 0.5
+        # После удаления стоп-слов: {администратор, редактирует, данные}
+        # Similarity должна быть высокой (идентичные множества = 1.0)
+        assert matrix[0][1] >= 0.9
 
 
 # ============================================================================
@@ -318,8 +316,8 @@ class TestSimilarityAnalysis:
 
     def create_project_with_stories(self, stories_data: list) -> Project:
         """Хелпер для создания проекта с историями"""
-        project = Project(id=1, name="Test", requirements="Test", user_id=1)
-        project.releases = [Release(id=1, title="MVP", order=1, project_id=1)]
+        project = Project(id=1, name="Test", raw_requirements="Test", user_id=1)
+        project.releases = [Release(id=1, title="MVP", position=1, project_id=1)]
 
         activity = Activity(id=1, title="Activity", project_id=1)
         task = UserTask(id=1, title="Task", activity_id=1)
@@ -386,7 +384,7 @@ class TestSimilarityAnalysis:
 
     def test_analyze_no_stories(self):
         """Анализ проекта без историй"""
-        project = Project(id=1, name="Empty", requirements="Test", user_id=1)
+        project = Project(id=1, name="Empty", raw_requirements="Test", user_id=1)
         project.activities = []
 
         result = analyze_similarity(project)

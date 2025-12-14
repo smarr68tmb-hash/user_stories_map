@@ -149,22 +149,30 @@ class TestErrorHandling:
 
     def test_should_retry_rate_limit_error(self):
         """RateLimitError должен вызывать retry с другим провайдером"""
-        error = RateLimitError("Rate limit exceeded")
+        # RateLimitError требует response и body параметры
+        mock_response = Mock()
+        mock_response.status_code = 429
+        error = RateLimitError("Rate limit exceeded", response=mock_response, body=None)
         assert _should_retry_error(error, "gemini") is True
 
     def test_should_retry_connection_error(self):
         """APIConnectionError должен вызывать retry"""
-        error = APIConnectionError("Connection failed")
+        # APIConnectionError требует request параметр
+        error = APIConnectionError(request=Mock(), message="Connection failed")
         assert _should_retry_error(error, "openai") is True
 
     def test_should_retry_503_error(self):
         """503 Service Unavailable должен вызывать retry"""
-        error = APIError("503 Service Unavailable")
+        # APIError требует message, request, body параметры
+        mock_response = Mock()
+        mock_response.status_code = 503
+        error = APIError("503 Service Unavailable", request=Mock(), body=None)
         assert _should_retry_error(error, "groq") is True
 
     def test_should_retry_429_in_message(self):
         """429 в сообщении об ошибке должен вызывать retry"""
-        error = APIError("429 Too Many Requests")
+        # APIError с 429 в сообщении
+        error = APIError("429 Too Many Requests", request=Mock(), body=None)
         assert _should_retry_error(error, "perplexity") is True
 
     def test_should_not_retry_unknown_error(self):
@@ -187,18 +195,26 @@ class TestFallbackMechanism:
     @patch('services.ai_service.clients')
     @patch('services.ai_service.gemini_client')
     @patch('services.ai_service.rate_limiter')
-    def test_fallback_gemini_to_groq(self, mock_rate_limiter, mock_gemini, mock_clients):
+    @patch('services.ai_service._get_model_for_provider')
+    def test_fallback_gemini_to_groq(self, mock_get_model, mock_rate_limiter, mock_gemini, mock_clients):
         """Fallback с Gemini на Groq при rate limit"""
         # Setup: Gemini недоступен (rate limit), Groq работает
         mock_rate_limiter.should_skip_provider.side_effect = lambda p, m=None: p == "gemini"
         mock_rate_limiter.cleanup_old_entries.return_value = None
+        mock_rate_limiter.increment.return_value = None
+
+        # Mock model selection
+        mock_get_model.return_value = "llama-3.1-8b-instant"
 
         # Groq клиент работает
         mock_groq_client = Mock()
         mock_completion = Mock()
         mock_completion.choices = [Mock(message=Mock(content='{"test": "result"}'))]
         mock_groq_client.chat.completions.create.return_value = mock_completion
-        mock_clients.get.return_value = mock_groq_client
+
+        # clients это словарь, нужно мокировать __contains__ и __getitem__
+        mock_clients.__contains__.return_value = True
+        mock_clients.__getitem__.return_value = mock_groq_client
 
         with patch('services.ai_service.settings') as mock_settings:
             mock_settings.get_available_providers.return_value = ["gemini", "groq"]
@@ -408,12 +424,12 @@ class TestRedisCaching:
 
                 mock_redis = Mock()
 
-                ai_response = {"productName": "Test", "personas": [], "map": []}
+                ai_response = {"productName": "Test Product", "personas": [], "map": []}
                 mock_completion = Mock()
                 mock_completion.choices = [Mock(message=Mock(content=json.dumps(ai_response)))]
                 mock_fallback.return_value = (mock_completion, "gemini")
 
-                generate_ai_map("Test", redis_client=mock_redis, use_cache=False)
+                generate_ai_map("Test requirements text", redis_client=mock_redis, use_cache=False)
 
                 # Redis get не должен быть вызван
                 mock_redis.get.assert_not_called()

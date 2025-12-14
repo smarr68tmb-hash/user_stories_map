@@ -203,3 +203,28 @@ class Settings:
 # Singleton instance
 settings = Settings()
 
+
+def get_redis_client():
+    """Получает Redis клиент или возвращает None если недоступен"""
+    try:
+        import redis
+        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        redis_client.ping()
+        return redis_client
+    except Exception as e:
+        # В production это критичная проблема - логируем как error
+        if settings.ENVIRONMENT == "production":
+            logger.error(f"❌ Redis unavailable in production: {e}. Caching disabled!")
+            # В production можно отправить alert в Sentry
+            try:
+                import sentry_sdk
+                sentry_sdk.capture_message(
+                    f"Redis connection failed: {e}",
+                    level="error"
+                )
+            except ImportError:
+                pass
+        else:
+            logger.warning(f"⚠️ Redis not available in development: {e}. Caching disabled.")
+        return None
+
