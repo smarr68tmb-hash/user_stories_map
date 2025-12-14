@@ -644,6 +644,8 @@ function AppContent() {
           handleBackToList={handleBackToList}
           handleLogout={handleLogout}
           onUpdateProject={setProject}
+          analysisResults={analysisResults}
+          toast={toast}
         />
       </ProjectRefreshProvider>
       </>
@@ -1016,6 +1018,8 @@ function ProjectPage({
   handleBackToList,
   handleLogout,
   onUpdateProject,
+  analysisResults,
+  toast,
 }) {
   const { isRefreshing, refreshProject } = useProjectRefreshContext();
   const [isMapLoading, setIsMapLoading] = useState(true);
