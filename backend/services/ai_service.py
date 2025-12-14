@@ -404,6 +404,10 @@ def _make_request_with_fallback(
     last_provider = None
 
     for provider in providers:
+        # Логируем попытку использовать провайдера
+        provider_index = providers.index(provider) + 1
+        logger.info(f"🔄 [{provider_index}/{len(providers)}] Attempting provider: {provider.upper()}")
+        
         # Проверяем, нужно ли пропустить провайдера из-за лимитов
         model = _get_model_for_provider(provider, is_enhancement, task_type)
         if rate_limiter.should_skip_provider(provider, model):
@@ -418,12 +422,14 @@ def _make_request_with_fallback(
         if not is_gemini_provider and provider not in clients:
             if provider == "agentrouter":
                 logger.error(f"❌ AGENTROUTER client not initialized! Check API key and base_url.")
+                logger.error(f"   API Key set: {bool(settings.AGENTROUTER_API_KEY)}")
+                logger.error(f"   Base URL: {settings.AGENTROUTER_BASE_URL}")
             else:
-                logger.debug(f"Skipping {provider} - client not initialized")
+                logger.info(f"⏩ Skipping {provider.upper()} - client not initialized")
             continue
 
         if is_gemini_provider and not gemini_client:
-            logger.debug(f"Skipping {provider} - gemini client not initialized")
+            logger.info(f"⏩ Skipping {provider.upper()} - gemini client not initialized")
             continue
 
         try:
