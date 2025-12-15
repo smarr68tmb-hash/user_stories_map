@@ -100,7 +100,7 @@ class TestRateLimitTracker:
         assert not tracker.should_skip_provider("groq")
         assert not tracker.should_skip_provider("perplexity")
         assert not tracker.should_skip_provider("openai")
-        assert not tracker.should_skip_provider("agentrouter")
+        # AgentRouter удален - блокируется WAF
 
     def test_gemini_pro_and_flash_separate_limits(self):
         """Проверка раздельных лимитов для gemini-pro и gemini-flash"""
@@ -124,12 +124,7 @@ class TestRateLimitTracker:
 class TestModelSelection:
     """Тесты для выбора моделей под разные задачи"""
 
-    @patch('services.ai_service.settings')
-    def test_agentrouter_model(self, mock_settings):
-        """Проверка выбора модели для AgentRouter (Claude)"""
-        mock_settings.AGENTROUTER_MODEL = "claude-sonnet-4-5-20250514"
-        model = _get_model_for_provider("agentrouter")
-        assert model == "claude-sonnet-4-5-20250514"
+    # AgentRouter тест удален - AgentRouter блокируется WAF и возвращает CAPTCHA вместо JSON
 
     @patch('services.ai_service.settings')
     def test_gemini_pro_model(self, mock_settings):

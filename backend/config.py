@@ -22,12 +22,8 @@ class Settings:
         self.API_MODEL = os.getenv("API_MODEL", "")
         self.API_TEMPERATURE = float(os.getenv("API_TEMPERATURE", "0.7"))
 
-        # AgentRouter (Claude Sonnet 4.5)
-        self.AGENTROUTER_API_KEY = os.getenv("AGENTROUTER_API_KEY", "")
-        # Base URL для OpenAI-совместимого API (по документации: https://agentrouter.org/v1)
-        self.AGENTROUTER_BASE_URL = os.getenv("AGENTROUTER_BASE_URL", "https://agentrouter.org/v1")
-        # Модель Claude Sonnet 4.5 (актуальная версия по документации)
-        self.AGENTROUTER_MODEL = os.getenv("AGENTROUTER_MODEL", "claude-sonnet-4-5-20250929")
+        # AgentRouter удален - блокируется WAF (Web Application Firewall) и возвращает CAPTCHA вместо JSON
+        # Используйте Groq/Gemini/Perplexity/OpenAI вместо AgentRouter
 
         # Приоритет провайдеров для fallback (через запятую: "gemini,groq,perplexity")
         self.AI_PROVIDER_PRIORITY = [
@@ -180,9 +176,7 @@ class Settings:
     
     def get_api_key_for_provider(self, provider: str) -> Optional[str]:
         """Возвращает API ключ для конкретного провайдера"""
-        if provider == "agentrouter":
-            return self.AGENTROUTER_API_KEY
-        elif provider in ("gemini", "gemini-pro", "gemini-flash"):
+        if provider in ("gemini", "gemini-pro", "gemini-flash"):
             return self.GEMINI_API_KEY
         elif provider == "groq":
             return self.GROQ_API_KEY
@@ -205,8 +199,8 @@ class Settings:
         Возвращает список провайдеров для конкретного типа задачи.
 
         Стратегия:
-        - generation/assistant: agentrouter → gemini-pro → gemini-flash → groq
-        - enhancement: gemini-pro → gemini-flash → groq (без agentrouter для экономии)
+        - generation/assistant: gemini-pro → gemini-flash → groq → perplexity → openai
+        - enhancement: gemini-pro → gemini-flash → groq → perplexity → openai
 
         Args:
             task_type: Тип задачи ('enhancement', 'generation', 'assistant')
@@ -216,20 +210,8 @@ class Settings:
         """
         providers = []
 
-        # Для generation и assistant — можно использовать AgentRouter (Claude) или Groq как основной
-        # Если AgentRouter не работает, можно закомментировать этот блок и использовать Groq/Gemini
-        if task_type in ("generation", "assistant"):
-            # Опция 1: Использовать AgentRouter (если настроен и работает)
-            if self.AGENTROUTER_API_KEY:
-                providers.append("agentrouter")
-                logger.info(f"✅ AgentRouter added to providers list for task '{task_type}'")
-            # Опция 2: Если AgentRouter не работает, можно сделать Groq основным
-            # Раскомментируйте следующие строки и закомментируйте блок выше:
-            # elif self.GROQ_API_KEY:
-            #     providers.append("groq")
-            #     logger.info(f"✅ Groq set as primary provider for task '{task_type}' (AgentRouter disabled)")
-            else:
-                logger.info(f"ℹ️ AgentRouter not configured - will use Gemini/Groq as primary for task '{task_type}'")
+        # AgentRouter удален - блокируется WAF и возвращает CAPTCHA вместо JSON
+        # Используем Gemini/Groq/Perplexity/OpenAI
 
         # Gemini Pro — сильная модель (50 RPD), используем для всех задач
         if self.GEMINI_API_KEY:

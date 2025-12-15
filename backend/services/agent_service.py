@@ -298,7 +298,7 @@ class SimpleAgent:
                 {"role": "user", "content": user_prompt}
             ],
             "temperature": settings.API_TEMPERATURE,
-            "timeout": 120.0  # Увеличен для AgentRouter/Claude, так как генерация карты может быть сложной
+            "timeout": 90.0  # Увеличен для AgentRouter/Claude (обычно 60s), так как генерация карты может быть сложной
         }
 
         completion, provider = _make_request_with_fallback(

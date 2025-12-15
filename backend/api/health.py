@@ -81,20 +81,7 @@ def debug_ai_providers():
     
     providers_status = {}
     
-    # Проверяем AgentRouter
-    if "agentrouter" in clients:
-        providers_status["agentrouter"] = {
-            "status": "initialized",
-            "model": settings.AGENTROUTER_MODEL,
-            "base_url": settings.AGENTROUTER_BASE_URL,
-            "has_api_key": bool(settings.AGENTROUTER_API_KEY),
-        }
-    else:
-        providers_status["agentrouter"] = {
-            "status": "not_initialized",
-            "has_api_key": bool(settings.AGENTROUTER_API_KEY),
-            "reason": "Client not initialized (check API key and base_url)" if settings.AGENTROUTER_API_KEY else "API key not set",
-        }
+    # AgentRouter удален - блокируется WAF и возвращает CAPTCHA вместо JSON
     
     # Проверяем Gemini
     if gemini_client:
@@ -141,177 +128,13 @@ def debug_ai_providers():
             "enhancement": available_for_enhancement,
         },
         "priority_order": {
-            "generation": "agentrouter → gemini-pro → gemini-flash → groq",
-            "enhancement": "gemini-pro → gemini-flash → groq (agentrouter не используется для экономии)",
+            "generation": "gemini-pro → gemini-flash → groq → perplexity → openai",
+            "enhancement": "gemini-pro → gemini-flash → groq → perplexity → openai",
         },
         "timestamp": datetime.utcnow().isoformat(),
     }
 
 
-@router.get("/debug/agentrouter-requests")
-def debug_agentrouter_requests():
-    """Debug endpoint для мониторинга запросов к AgentRouter"""
-    if not _ai_service_available:
-        return {
-            "error": "AI service not available",
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-    
-    clients = getattr(ai_service, "clients", {})
-    rate_limiter = getattr(ai_service, "rate_limiter", None)
-    
-    # Проверяем статус AgentRouter
-    agentrouter_status = {
-        "client_initialized": "agentrouter" in clients,
-        "has_api_key": bool(settings.AGENTROUTER_API_KEY),
-        "base_url": settings.AGENTROUTER_BASE_URL,
-        "model": settings.AGENTROUTER_MODEL,
-    }
-    
-    # Получаем статистику использования
-    usage_stats = {}
-    if rate_limiter:
-        today_count = rate_limiter.get_count("agentrouter", settings.AGENTROUTER_MODEL)
-        usage_stats = {
-            "requests_today": today_count,
-            "model": settings.AGENTROUTER_MODEL,
-        }
-    
-    # Проверяем, используется ли agentrouter для generation
-    available_for_generation = settings.get_providers_for_task("generation")
-    is_in_generation_list = "agentrouter" in available_for_generation
-    generation_priority = available_for_generation.index("agentrouter") + 1 if is_in_generation_list else None
-    
-    return {
-        "agentrouter": agentrouter_status,
-        "usage": usage_stats,
-        "generation": {
-            "is_used_for_generation": is_in_generation_list,
-            "priority_position": generation_priority,
-            "total_providers": len(available_for_generation),
-        },
-        "note": "Проверьте логи приложения для детальной информации о запросах. Ищите строки с 'AGENTROUTER' или 'agentrouter'.",
-        "how_to_check": {
-            "logs": "Проверьте логи бэкенда на наличие строк '🚀 Sending request to AGENTROUTER' и '✅ AGENTROUTER response received'",
-            "endpoint": "/debug/ai-providers - показывает статус всех провайдеров",
-            "test_request": "Создайте новый проект или сгенерируйте карту - запрос должен пойти к agentrouter первым (если он в списке generation)",
-        },
-        "timestamp": datetime.utcnow().isoformat(),
-    }
-
-
-@router.post("/debug/test-agentrouter")
-def test_agentrouter():
-    """Тестовый endpoint для проверки запросов к AgentRouter"""
-    if not _ai_service_available:
-        return {
-            "error": "AI service not available",
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-    
-    clients = getattr(ai_service, "clients", {})
-    
-    # Проверяем, инициализирован ли agentrouter
-    if "agentrouter" not in clients:
-        return {
-            "error": "AgentRouter client not initialized",
-            "has_api_key": bool(settings.AGENTROUTER_API_KEY),
-            "base_url": settings.AGENTROUTER_BASE_URL,
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-    
-    # Отправляем тестовый запрос
-    try:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info("🧪 Testing AgentRouter connection...")
-        
-        test_request = {
-            "model": settings.AGENTROUTER_MODEL,
-            "messages": [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Say 'Hello' in Russian. Return only the word."}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 10,
-        }
-        
-        client = clients["agentrouter"]
-        response = client.chat.completions.create(**test_request)
-        
-        result_text = response.choices[0].message.content if response.choices else "No response"
-        
-        logger.info(f"✅ AgentRouter test successful: {result_text}")
-        
-        return {
-            "status": "success",
-            "response": result_text,
-            "model": settings.AGENTROUTER_MODEL,
-            "base_url": settings.AGENTROUTER_BASE_URL,
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-    except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"❌ AgentRouter test failed: {e}", exc_info=True)
-        return {
-            "status": "error",
-            "error": str(e),
-            "error_type": type(e).__name__,
-            "model": settings.AGENTROUTER_MODEL,
-            "base_url": settings.AGENTROUTER_BASE_URL,
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-
-
-@router.get("/debug/agentrouter-requests")
-def debug_agentrouter_requests():
-    """Debug endpoint для мониторинга запросов к AgentRouter"""
-    if not _ai_service_available:
-        return {
-            "error": "AI service not available",
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-    
-    clients = getattr(ai_service, "clients", {})
-    rate_limiter = getattr(ai_service, "rate_limiter", None)
-    
-    # Проверяем статус AgentRouter
-    agentrouter_status = {
-        "client_initialized": "agentrouter" in clients,
-        "has_api_key": bool(settings.AGENTROUTER_API_KEY),
-        "base_url": settings.AGENTROUTER_BASE_URL,
-        "model": settings.AGENTROUTER_MODEL,
-    }
-    
-    # Получаем статистику использования
-    usage_stats = {}
-    if rate_limiter:
-        today_count = rate_limiter.get_count("agentrouter", settings.AGENTROUTER_MODEL)
-        usage_stats = {
-            "requests_today": today_count,
-            "model": settings.AGENTROUTER_MODEL,
-        }
-    
-    # Проверяем, используется ли agentrouter для generation
-    available_for_generation = settings.get_providers_for_task("generation")
-    is_in_generation_list = "agentrouter" in available_for_generation
-    generation_priority = available_for_generation.index("agentrouter") + 1 if is_in_generation_list else None
-    
-    return {
-        "agentrouter": agentrouter_status,
-        "usage": usage_stats,
-        "generation": {
-            "is_used_for_generation": is_in_generation_list,
-            "priority_position": generation_priority,
-            "total_providers": len(available_for_generation),
-        },
-        "note": "Проверьте логи приложения для детальной информации о запросах. Ищите строки с 'AGENTROUTER' или 'agentrouter'.",
-        "how_to_check": {
-            "logs": "Проверьте логи бэкенда на наличие строк '🚀 Sending request to AGENTROUTER' и '✅ AGENTROUTER response received'",
-            "endpoint": "/debug/ai-providers - показывает статус всех провайдеров",
-            "test_request": "Создайте новый проект или сгенерируйте карту - запрос должен пойти к agentrouter первым (если он в списке generation)",
-        },
-        "timestamp": datetime.utcnow().isoformat(),
-    }
+# AgentRouter endpoints удалены - AgentRouter блокируется WAF и возвращает CAPTCHA вместо JSON
+# Используйте Groq/Gemini/Perplexity/OpenAI вместо AgentRouter
 

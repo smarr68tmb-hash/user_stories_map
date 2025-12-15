@@ -106,44 +106,8 @@ def _initialize_clients():
     """Инициализирует клиенты для всех доступных провайдеров"""
     global clients, gemini_client
 
-    # AgentRouter (Claude Sonnet 4.5) — OpenAI-совместимый API
-    if settings.AGENTROUTER_API_KEY:
-        try:
-            # Проверяем формат токена (убираем префикс Bearer если есть)
-            api_key = settings.AGENTROUTER_API_KEY.strip()
-            if api_key.startswith("Bearer "):
-                api_key = api_key[7:].strip()
-                logger.warning("⚠️ AgentRouter API key had 'Bearer ' prefix - removed")
-            
-            # Проверяем правильность base URL (по документации: https://agentrouter.org/v1)
-            base_url = settings.AGENTROUTER_BASE_URL
-            if "agentrouter.ai" in base_url:
-                logger.warning(f"⚠️ AgentRouter base URL uses old domain 'agentrouter.ai'")
-                logger.warning(f"   Current URL: {base_url}")
-                logger.warning(f"   Expected: https://agentrouter.org/v1 (OpenAI-compatible API)")
-            if not base_url.endswith("/v1"):
-                logger.warning(f"⚠️ AgentRouter base URL should end with '/v1' for OpenAI-compatible API")
-                logger.warning(f"   Current URL: {base_url}")
-                logger.warning(f"   Expected: https://agentrouter.org/v1")
-            
-            clients["agentrouter"] = OpenAI(
-                api_key=api_key,
-                base_url=base_url,
-                timeout=180.0,  # 3 минуты timeout для AgentRouter (Claude может быть медленным)
-                max_retries=2   # Максимум 2 retry попытки
-            )
-            logger.info("✅ Initialized AgentRouter API client (Claude Sonnet 4.5)")
-            logger.info(f"   Base URL: {settings.AGENTROUTER_BASE_URL}")
-            logger.info(f"   API Key format: {'sk-...' if api_key.startswith('sk-') else 'Token format'}")
-            logger.info(f"   API Key length: {len(api_key)} chars")
-            
-            # Предупреждение если токен не в формате sk-
-            if not api_key.startswith('sk-'):
-                logger.warning("⚠️ AgentRouter API key doesn't start with 'sk-'")
-                logger.warning("   Make sure you're using API Token (from 'API Token' section), not System Access Token")
-                logger.warning("   API Token should start with 'sk-' and is used for API requests")
-        except Exception as e:
-            logger.warning(f"Failed to initialize AgentRouter client: {e}")
+    # AgentRouter удален - блокируется WAF (Web Application Firewall) и возвращает CAPTCHA вместо JSON
+    # Используйте Groq/Gemini/Perplexity/OpenAI вместо AgentRouter
 
     # Gemini (используется для gemini-pro и gemini-flash)
     if settings.GEMINI_API_KEY:
@@ -210,17 +174,13 @@ def _get_model_for_provider(provider: str, is_enhancement: bool = False, task_ty
     Возвращает модель для конкретного провайдера с учетом типа задачи
 
     Args:
-        provider: Имя провайдера (agentrouter, gemini-pro, gemini-flash, gemini, groq, perplexity, openai)
+        provider: Имя провайдера (gemini-pro, gemini-flash, gemini, groq, perplexity, openai)
         is_enhancement: True для Stage 1 (Enhancement)
         task_type: Тип задачи ('enhancement', 'generation', 'assistant')
 
     Returns:
         Название модели для использования
     """
-    # AgentRouter (Claude Sonnet 4.5)
-    if provider == "agentrouter":
-        return settings.AGENTROUTER_MODEL
-
     # Gemini Pro — сильная модель (50 RPD)
     if provider == "gemini-pro":
         return settings.GEMINI_PRO_MODEL
@@ -394,7 +354,7 @@ def _make_request_with_fallback(
     if not providers:
         raise HTTPException(
             status_code=503,
-            detail="No AI providers configured. Set AGENTROUTER_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY."
+            detail="No AI providers configured. Set GEMINI_API_KEY, GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY."
         )
 
     # Очищаем старые записи rate limiter
@@ -411,21 +371,13 @@ def _make_request_with_fallback(
         # Проверяем, нужно ли пропустить провайдера из-за лимитов
         model = _get_model_for_provider(provider, is_enhancement, task_type)
         if rate_limiter.should_skip_provider(provider, model):
-            if provider == "agentrouter":
-                logger.warning(f"⏩ Skipping AGENTROUTER - approaching rate limit (count: {rate_limiter.get_count(provider, model)})")
-            else:
-                logger.info(f"⏩ Skipping {provider.upper()} - approaching rate limit")
+            logger.info(f"⏩ Skipping {provider.upper()} - approaching rate limit")
             continue
 
         # Проверяем инициализацию клиента
         is_gemini_provider = provider in ("gemini", "gemini-pro", "gemini-flash")
         if not is_gemini_provider and provider not in clients:
-            if provider == "agentrouter":
-                logger.error(f"❌ AGENTROUTER client not initialized! Check API key and base_url.")
-                logger.error(f"   API Key set: {bool(settings.AGENTROUTER_API_KEY)}")
-                logger.error(f"   Base URL: {settings.AGENTROUTER_BASE_URL}")
-            else:
-                logger.info(f"⏩ Skipping {provider.upper()} - client not initialized")
+            logger.info(f"⏩ Skipping {provider.upper()} - client not initialized")
             continue
 
         if is_gemini_provider and not gemini_client:
@@ -435,12 +387,7 @@ def _make_request_with_fallback(
         try:
             # Получаем модель для этого провайдера
             model = _get_model_for_provider(provider, is_enhancement, task_type)
-
-            if provider == "agentrouter":
-                logger.info(f"🔄 Attempting to use AGENTROUTER (priority {providers.index(provider) + 1}/{len(providers)})")
-                logger.info(f"   Model: {model}")
-            else:
-                logger.info(f"Trying {provider.upper()} with model {model}")
+            logger.info(f"Trying {provider.upper()} with model {model}")
 
             # Gemini (Pro, Flash, legacy) использует свой SDK
             if is_gemini_provider:
@@ -474,14 +421,14 @@ def _make_request_with_fallback(
                 logger.info(f"✅ Successfully got response from {provider.upper()}")
                 return completion, provider
 
-            # OpenAI-совместимые провайдеры (AgentRouter, Groq, Perplexity, OpenAI)
+            # OpenAI-совместимые провайдеры (Groq, Perplexity, OpenAI)
             else:
                 # Создаем deep copy параметров запроса
                 provider_params = copy.deepcopy(request_params)
                 provider_params["model"] = model
 
-                # JSON mode для OpenAI и AgentRouter (Claude поддерживает json mode)
-                if provider in ("openai", "agentrouter"):
+                # JSON mode для OpenAI
+                if provider == "openai":
                     if "response_format" not in provider_params:
                         provider_params["response_format"] = {"type": "json_object"}
                 else:
@@ -494,97 +441,29 @@ def _make_request_with_fallback(
                             if "IMPORTANT: Return ONLY valid JSON" not in last_msg["content"]:
                                 provider_params["messages"][-1]["content"] += "\n\nIMPORTANT: Return ONLY valid JSON, no additional text or markdown formatting."
 
-                # Детальное логирование для agentrouter
-                if provider == "agentrouter":
-                    base_url = settings.AGENTROUTER_BASE_URL
-                    messages_count = len(provider_params.get("messages", []))
-                    prompt_preview = ""
-                    if messages_count > 0:
-                        last_msg_content = provider_params["messages"][-1].get("content", "")
-                        prompt_preview = last_msg_content[:100] + "..." if len(last_msg_content) > 100 else last_msg_content
-                    logger.info(f"🚀 Sending request to AGENTROUTER:")
-                    logger.info(f"   Model: {model}")
-                    logger.info(f"   Base URL: {base_url}")
-                    logger.info(f"   Messages: {messages_count}")
-                    logger.info(f"   Prompt preview: {prompt_preview}")
-                    logger.info(f"   Temperature: {provider_params.get('temperature', 'N/A')}")
-                    logger.info(f"   Timeout: {provider_params.get('timeout', 'N/A')}s")
-
                 completion = clients[provider].chat.completions.create(**provider_params)
-
-                # Проверяем формат ответа от AgentRouter
-                if provider == "agentrouter":
-                    # AgentRouter может вернуть строку вместо объекта
-                    if isinstance(completion, str):
-                        # Проверяем, не вернул ли AgentRouter HTML страницу с капчей (WAF блокировка)
-                        if "<!doctypehtml>" in completion.lower() or "aliyun_waf" in completion.lower() or "captcha" in completion.lower():
-                            logger.error(f"❌ AGENTROUTER blocked by WAF (Web Application Firewall)")
-                            logger.error(f"   AgentRouter is blocking automated API requests with CAPTCHA")
-                            logger.error(f"   This makes AgentRouter unsuitable for automated API usage")
-                            logger.error(f"   Recommendation: Disable AgentRouter and use other providers (Groq/Gemini)")
-                            raise Exception("AgentRouter blocked by WAF - CAPTCHA required (not suitable for automated API)")
-                        
-                        logger.error(f"❌ AGENTROUTER returned string instead of completion object")
-                        logger.error(f"   Response: {completion[:200]}...")
-                        logger.error(f"   This usually means AgentRouter returned an error message")
-                        raise Exception(f"AgentRouter returned error: {completion}")
-                    
-                    # Проверяем наличие choices
-                    if not hasattr(completion, 'choices') or not completion.choices:
-                        logger.error(f"❌ AGENTROUTER response missing 'choices' attribute")
-                        logger.error(f"   Response type: {type(completion)}")
-                        logger.error(f"   Response: {str(completion)[:200]}...")
-                        raise Exception("AgentRouter response missing 'choices' attribute")
 
                 # Увеличиваем счетчик rate limiter
                 rate_limiter.increment(provider, model)
 
-                # Детальное логирование успешного ответа от agentrouter
-                if provider == "agentrouter":
-                    response_length = len(completion.choices[0].message.content) if completion.choices else 0
-                    logger.info(f"✅ AGENTROUTER response received:")
-                    logger.info(f"   Response length: {response_length} chars")
-                    logger.info(f"   Model used: {model}")
-                    logger.info(f"   Provider: {provider}")
-                else:
-                    logger.info(f"✅ Successfully got response from {provider.upper()}")
+                logger.info(f"✅ Successfully got response from {provider.upper()}")
                 return completion, provider
             
         except APITimeoutError as e:
             last_error = e
             last_provider = provider
-            if provider == "agentrouter":
-                logger.error(f"❌ AGENTROUTER TIMEOUT after waiting for response")
-                logger.error(f"   Error: {str(e)}")
-                logger.error(f"   This may indicate:")
-                logger.error(f"   - AgentRouter service is overloaded")
-                logger.error(f"   - Invalid API key (check AGENTROUTER_API_KEY)")
-                logger.error(f"   - Network connectivity issues")
-                logger.error(f"   Trying next provider...")
-            else:
-                logger.warning(f"❌ {provider.upper()} timeout: {e}. Trying next provider...")
+            logger.warning(f"❌ {provider.upper()} timeout: {e}. Trying next provider...")
             continue
         except (RateLimitError, APIConnectionError) as e:
             last_error = e
             last_provider = provider
-            if provider == "agentrouter":
-                logger.error(f"❌ AGENTROUTER failed ({type(e).__name__}): {e}")
-                logger.error(f"   Error details: {str(e)}")
-                logger.error(f"   Trying next provider...")
-            else:
-                logger.warning(f"❌ {provider.upper()} failed ({type(e).__name__}): {e}. Trying next provider...")
+            logger.warning(f"❌ {provider.upper()} failed ({type(e).__name__}): {e}. Trying next provider...")
             continue
         except APIError as e:
             if _should_retry_error(e, provider):
                 last_error = e
                 last_provider = provider
-                if provider == "agentrouter":
-                    logger.error(f"❌ AGENTROUTER APIError: {e}")
-                    logger.error(f"   Error type: {type(e).__name__}")
-                    logger.error(f"   Error message: {str(e)}")
-                    logger.error(f"   Trying next provider...")
-                else:
-                    logger.warning(f"❌ {provider.upper()} failed (APIError): {e}. Trying next provider...")
+                logger.warning(f"❌ {provider.upper()} failed (APIError): {e}. Trying next provider...")
                 continue
             else:
                 # Не переключаемся на другие провайдеры для этой ошибки
