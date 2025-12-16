@@ -309,7 +309,14 @@ class OpenAICompatibleProvider(AIProvider):
 
 
 class GroqProvider(OpenAICompatibleProvider):
-    """Провайдер для Groq"""
+    """Провайдер для Groq
+    
+    Поддерживаемые модели:
+    - llama-3.3-70b-versatile (по умолчанию для generation)
+    - llama-3.1-8b-instant (по умолчанию для enhancement)
+    - groq/compound (новая Compound система - быстрая, 450 T/SEC, 131K context)
+    - groq/compound-mini (облегченная версия Compound)
+    """
     
     def __init__(self, api_key: Optional[str] = None):
         super().__init__(
@@ -319,6 +326,18 @@ class GroqProvider(OpenAICompatibleProvider):
         )
     
     def get_model(self, is_enhancement: bool = False, task_type: str = None) -> str:
+        """
+        Возвращает модель Groq для использования
+        
+        Приоритет:
+        1. Переменная окружения GROQ_MODEL / GROQ_ENHANCEMENT_MODEL
+        2. Для enhancement: llama-3.1-8b-instant (быстрая)
+        3. Для generation: llama-3.3-70b-versatile (качественная)
+        
+        Новые модели Compound можно использовать через переменные окружения:
+        - export GROQ_MODEL="groq/compound" (для generation)
+        - export GROQ_ENHANCEMENT_MODEL="groq/compound-mini" (для enhancement)
+        """
         if is_enhancement or task_type == "enhancement":
             return os.getenv("GROQ_ENHANCEMENT_MODEL", "llama-3.1-8b-instant")
         return os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")

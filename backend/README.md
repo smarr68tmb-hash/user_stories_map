@@ -29,6 +29,10 @@ export OPENAI_API_KEY=sk-your-key-here           # fallback 3
 
 # Явная настройка приоритета (опционально)
 # export AI_PROVIDER_PRIORITY="gemini,groq,perplexity,openai"
+
+# Использование новых Groq Compound моделей (опционально)
+# export GROQ_MODEL="groq/compound"              # для generation (450 T/SEC, 131K context)
+# export GROQ_ENHANCEMENT_MODEL="groq/compound-mini"  # для enhancement
 ```
 
 **Поддерживаются четыре провайдера с автоматическим fallback:**
@@ -70,6 +74,8 @@ pytest test_main.py -v
 ### Модели (опционально, есть умолчания)
 - `GEMINI_MODEL` / `GEMINI_ENHANCEMENT_MODEL`
 - `GROQ_MODEL` / `GROQ_ENHANCEMENT_MODEL`
+  - По умолчанию: `llama-3.3-70b-versatile` (generation), `llama-3.1-8b-instant` (enhancement)
+  - Новые модели Compound: `groq/compound` или `groq/compound-mini` (450 T/SEC, 131K context)
 - `PERPLEXITY_MODEL` / `PERPLEXITY_ENHANCEMENT_MODEL`
 - `OPENAI_MODEL` / `OPENAI_ENHANCEMENT_MODEL`
 - `ENHANCEMENT_MODEL` - общая модель для Stage 1
