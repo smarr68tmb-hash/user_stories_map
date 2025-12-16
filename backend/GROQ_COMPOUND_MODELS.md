@@ -81,6 +81,37 @@ export GROQ_ENHANCEMENT_MODEL="groq/compound-mini"
 
 ## Тестирование
 
+### Быстрое тестирование с помощью скрипта
+
+Используйте встроенный тестовый скрипт для проверки моделей:
+
+```bash
+cd backend
+
+# Тест с текущими моделями (по умолчанию)
+python test_groq_compound.py
+
+# Тест с Compound моделями
+GROQ_MODEL="groq/compound" GROQ_ENHANCEMENT_MODEL="groq/compound-mini" python test_groq_compound.py
+
+# Сравнение всех моделей (текущие vs Compound)
+python test_groq_compound.py --compare
+
+# Тестировать только enhancement
+python test_groq_compound.py --enhancement-only
+
+# Тестировать только generation
+python test_groq_compound.py --generation-only
+```
+
+Скрипт проверит:
+- ✅ Успешность выполнения запросов
+- ⏱️ Скорость генерации (время ответа)
+- 📊 Качество ответов (confidence для enhancement, количество элементов для generation)
+- 🔄 Сравнение моделей (если используется `--compare`)
+
+### Использование в production
+
 После настройки переменных окружения, перезапустите backend:
 
 ```bash

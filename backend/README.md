@@ -54,10 +54,23 @@ API документация: http://127.0.0.1:8000/docs
 
 ## Тестирование
 
+### Unit тесты
 Запустите тесты:
 ```bash
 pytest test_main.py -v
 ```
+
+### Тестирование Groq моделей
+Для быстрого тестирования Groq моделей (включая новые Compound модели):
+```bash
+# Тест с текущими моделями
+python test_groq_compound.py
+
+# Сравнение всех моделей
+python test_groq_compound.py --compare
+```
+
+Подробнее см. [GROQ_COMPOUND_MODELS.md](GROQ_COMPOUND_MODELS.md)
 
 ## Переменные окружения
 
