@@ -134,3 +134,4 @@ tail -f backend.log | grep -i agentrouter
 - `❌ AGENTROUTER failed` - ошибка
 - `⏩ Skipping AGENTROUTER` - пропущен (лимит или не инициализирован)
 - `🔄 Attempting to use AGENTROUTER` - попытка использования
+

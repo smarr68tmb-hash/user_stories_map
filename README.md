@@ -14,6 +14,7 @@
 - Frontend: React + Vite
 - Deployment: Render.com
 - AI: Gemini (приоритет по умолчанию) → Groq → Perplexity → OpenAI с автоматическим fallback
+- Архитектура AI: Strategy Pattern с единым интерфейсом для всех провайдеров
 
 ## 🚀 Быстрый старт
 
@@ -293,6 +294,13 @@ backend/
 - ✅ **Service Layer** - переиспользуемая бизнес-логика
 - ✅ **Dependency Injection** - FastAPI dependencies
 - ✅ **SOLID принципы** - Single Responsibility для каждого модуля
+- ✅ **Strategy Pattern** - единый интерфейс для AI провайдеров (легко добавлять новые)
+
+**AI провайдеры:**
+- Архитектура на основе Strategy Pattern с базовым классом `AIProvider`
+- Автоматический fallback между провайдерами при ошибках
+- Единая обработка ошибок и rate limiting
+- Поддержка: Gemini (Pro/Flash), Groq, Perplexity, OpenAI
 
 ### Frontend
 - **React** — UI библиотека

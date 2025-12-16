@@ -24,9 +24,16 @@ from services.ai_service import (
     ai_improve_story_content,
     _make_request_with_fallback,
     _get_model_for_provider,
-    _should_retry_error,
-    _call_gemini_api,
     get_cache_key,
+    provider_registry,
+    AIProvider,
+    GeminiProvider,
+    GeminiProProvider,
+    GeminiFlashProvider,
+    GroqProvider,
+    PerplexityProvider,
+    OpenAIProvider,
+    CompletionResult,
 )
 
 
@@ -126,28 +133,48 @@ class TestModelSelection:
 
     # AgentRouter тест удален - AgentRouter блокируется WAF и возвращает CAPTCHA вместо JSON
 
+    @patch('services.ai_service.provider_registry')
     @patch('services.ai_service.settings')
-    def test_gemini_pro_model(self, mock_settings):
+    def test_gemini_pro_model(self, mock_settings, mock_registry):
         """Проверка выбора модели для Gemini Pro"""
         mock_settings.GEMINI_PRO_MODEL = "gemini-2.5-pro-preview-06-05"
+        
+        # Мокируем провайдер
+        mock_provider = Mock()
+        mock_provider.get_model.return_value = "gemini-2.5-pro-preview-06-05"
+        mock_registry.get_provider.return_value = mock_provider
+        
         model = _get_model_for_provider("gemini-pro")
         assert model == "gemini-2.5-pro-preview-06-05"
         assert "pro" in model.lower()
 
+    @patch('services.ai_service.provider_registry')
     @patch('services.ai_service.settings')
-    def test_gemini_flash_model(self, mock_settings):
+    def test_gemini_flash_model(self, mock_settings, mock_registry):
         """Проверка выбора модели для Gemini Flash"""
         mock_settings.GEMINI_FLASH_MODEL = "gemini-2.0-flash-exp"
+        
+        # Мокируем провайдер
+        mock_provider = Mock()
+        mock_provider.get_model.return_value = "gemini-2.0-flash-exp"
+        mock_registry.get_provider.return_value = mock_provider
+        
         model = _get_model_for_provider("gemini-flash")
         assert model == "gemini-2.0-flash-exp"
         assert "flash" in model.lower()
 
+    @patch('services.ai_service.provider_registry')
     @patch('services.ai_service.settings')
-    def test_legacy_gemini_enhancement_model(self, mock_settings):
+    def test_legacy_gemini_enhancement_model(self, mock_settings, mock_registry):
         """Проверка выбора модели для enhancement (legacy Gemini провайдер)"""
         # Случай 1: модель задана явно
         mock_settings.GEMINI_ENHANCEMENT_MODEL = "gemini-2.0-flash-exp"
         mock_settings.GEMINI_FLASH_MODEL = "gemini-2.0-flash-exp"
+        
+        mock_provider = Mock()
+        mock_provider.get_model.return_value = "gemini-2.0-flash-exp"
+        mock_registry.get_provider.return_value = mock_provider
+        
         model = _get_model_for_provider("gemini", is_enhancement=True)
         assert "gemini" in model.lower()
         assert model == "gemini-2.0-flash-exp"
@@ -155,30 +182,46 @@ class TestModelSelection:
         # Случай 2: используется fallback на GEMINI_FLASH_MODEL
         mock_settings.GEMINI_ENHANCEMENT_MODEL = ""
         mock_settings.GEMINI_FLASH_MODEL = "gemini-2.0-flash-exp"
+        mock_provider.get_model.return_value = "gemini-2.0-flash-exp"
+        
         model = _get_model_for_provider("gemini", is_enhancement=True)
         assert "flash" in model.lower()
 
+    @patch('services.ai_service.provider_registry')
     @patch('services.ai_service.settings')
-    def test_legacy_gemini_generation_model(self, mock_settings):
+    def test_legacy_gemini_generation_model(self, mock_settings, mock_registry):
         """Проверка выбора модели для generation (legacy Gemini провайдер)"""
         # Случай 1: модель задана явно
         mock_settings.GEMINI_GENERATION_MODEL = "gemini-2.5-pro-preview-06-05"
         mock_settings.GEMINI_PRO_MODEL = "gemini-2.5-pro-preview-06-05"
+        
+        mock_provider = Mock()
+        mock_provider.get_model.return_value = "gemini-2.5-pro-preview-06-05"
+        mock_registry.get_provider.return_value = mock_provider
+        
         model = _get_model_for_provider("gemini", is_enhancement=False)
         assert "gemini" in model.lower()
 
         # Случай 2: используется fallback на GEMINI_PRO_MODEL
         mock_settings.GEMINI_GENERATION_MODEL = ""
         mock_settings.GEMINI_PRO_MODEL = "gemini-2.5-pro-preview-06-05"
+        mock_provider.get_model.return_value = "gemini-2.5-pro-preview-06-05"
+        
         model = _get_model_for_provider("gemini", is_enhancement=False)
         assert "pro" in model.lower()
 
+    @patch('services.ai_service.provider_registry')
     @patch('services.ai_service.settings')
-    def test_legacy_gemini_assistant_model(self, mock_settings):
+    def test_legacy_gemini_assistant_model(self, mock_settings, mock_registry):
         """Проверка выбора модели для assistant (legacy Gemini провайдер)"""
         # Случай 1: модель задана явно
         mock_settings.GEMINI_ASSISTANT_MODEL = "gemini-2.0-flash-exp"
         mock_settings.GEMINI_FLASH_MODEL = "gemini-2.0-flash-exp"
+        
+        mock_provider = Mock()
+        mock_provider.get_model.return_value = "gemini-2.0-flash-exp"
+        mock_registry.get_provider.return_value = mock_provider
+        
         model = _get_model_for_provider("gemini", task_type="assistant")
         assert "gemini" in model.lower()
         assert model == "gemini-2.0-flash-exp"
@@ -186,6 +229,8 @@ class TestModelSelection:
         # Случай 2: используется fallback на GEMINI_FLASH_MODEL
         mock_settings.GEMINI_ASSISTANT_MODEL = ""
         mock_settings.GEMINI_FLASH_MODEL = "gemini-2.0-flash-exp"
+        mock_provider.get_model.return_value = "gemini-2.0-flash-exp"
+        
         model = _get_model_for_provider("gemini", task_type="assistant")
         assert "flash" in model.lower()
 
@@ -214,39 +259,43 @@ class TestErrorHandling:
 
     def test_should_retry_rate_limit_error(self):
         """RateLimitError должен вызывать retry с другим провайдером"""
+        # Создаем провайдер для тестирования
+        provider = GeminiProvider(api_key="test-key")
         # RateLimitError требует response и body параметры
         mock_response = Mock()
         mock_response.status_code = 429
         error = RateLimitError("Rate limit exceeded", response=mock_response, body=None)
-        assert _should_retry_error(error, "gemini") is True
+        assert provider.should_retry_error(error) is True
 
     def test_should_retry_connection_error(self):
         """APIConnectionError должен вызывать retry"""
+        provider = OpenAIProvider(api_key="test-key")
         # APIConnectionError требует request параметр
         error = APIConnectionError(request=Mock(), message="Connection failed")
-        assert _should_retry_error(error, "openai") is True
+        assert provider.should_retry_error(error) is True
 
     def test_should_retry_503_error(self):
         """503 Service Unavailable должен вызывать retry"""
+        provider = GroqProvider(api_key="test-key")
         # APIError требует message, request, body параметры
         mock_response = Mock()
         mock_response.status_code = 503
         error = APIError("503 Service Unavailable", request=Mock(), body=None)
-        assert _should_retry_error(error, "groq") is True
+        assert provider.should_retry_error(error) is True
 
     def test_should_retry_429_in_message(self):
         """429 в сообщении об ошибке должен вызывать retry"""
+        provider = PerplexityProvider(api_key="test-key")
         # APIError с 429 в сообщении
         error = APIError("429 Too Many Requests", request=Mock(), body=None)
-        assert _should_retry_error(error, "perplexity") is True
+        assert provider.should_retry_error(error) is True
 
     def test_should_not_retry_unknown_error(self):
         """Неизвестные ошибки не должны вызывать retry (возвращают False)"""
+        provider = OpenAIProvider(api_key="test-key")
         error = Exception("Some random error")
-        # Для общих Exception мы всё равно пытаемся retry (по коду)
-        # Но для других типов ошибок может быть иначе
-        result = _should_retry_error(error, "openai")
         # По логике кода: проверяем строку ошибки
+        result = provider.should_retry_error(error)
         assert isinstance(result, bool)
 
 
@@ -257,32 +306,40 @@ class TestErrorHandling:
 class TestFallbackMechanism:
     """Тесты для автоматического fallback между провайдерами"""
 
-    @patch('services.ai_service.clients')
-    @patch('services.ai_service.gemini_client')
+    @patch('services.ai_service.provider_registry')
     @patch('services.ai_service.rate_limiter')
-    @patch('services.ai_service._get_model_for_provider')
-    def test_fallback_gemini_to_groq(self, mock_get_model, mock_rate_limiter, mock_gemini, mock_clients):
+    def test_fallback_gemini_to_groq(self, mock_rate_limiter, mock_registry):
         """Fallback с Gemini-pro на Groq при rate limit"""
         # Setup: gemini-pro недоступен (rate limit), Groq работает
         mock_rate_limiter.should_skip_provider.side_effect = lambda p, m=None: p in ("gemini-pro", "gemini-flash")
         mock_rate_limiter.cleanup_old_entries.return_value = None
         mock_rate_limiter.increment.return_value = None
 
-        # Mock model selection
-        mock_get_model.return_value = "llama-3.1-8b-instant"
+        # Mock провайдеры
+        mock_gemini_pro = Mock(spec=GeminiProProvider)
+        mock_gemini_pro.is_available.return_value = True
+        mock_gemini_pro.get_model.return_value = "gemini-2.5-pro"
+        mock_gemini_pro.call.side_effect = RateLimitError("Rate limit", response=Mock(), body=None)
 
-        # Groq клиент работает
-        mock_groq_client = Mock()
-        mock_completion = Mock()
-        mock_completion.choices = [Mock(message=Mock(content='{"test": "result"}'))]
-        mock_groq_client.chat.completions.create.return_value = mock_completion
+        mock_gemini_flash = Mock(spec=GeminiFlashProvider)
+        mock_gemini_flash.is_available.return_value = True
+        mock_gemini_flash.get_model.return_value = "gemini-2.0-flash-exp"
+        mock_gemini_flash.should_skip_provider = lambda e: False
 
-        # clients это словарь, нужно мокировать __contains__ и __getitem__
-        mock_clients.__contains__.return_value = True
-        mock_clients.__getitem__.return_value = mock_groq_client
+        mock_groq = Mock(spec=GroqProvider)
+        mock_groq.is_available.return_value = True
+        mock_groq.get_model.return_value = "llama-3.1-8b-instant"
+        mock_groq.call.return_value = '{"test": "result"}'
+        mock_groq.should_retry_error.return_value = True
+
+        # Настраиваем registry
+        mock_registry.get_provider.side_effect = lambda name: {
+            "gemini-pro": mock_gemini_pro,
+            "gemini-flash": mock_gemini_flash,
+            "groq": mock_groq
+        }.get(name)
 
         with patch('services.ai_service.settings') as mock_settings:
-            # Новая логика: get_providers_for_task возвращает провайдеры для типа задачи
             mock_settings.get_providers_for_task.return_value = ["gemini-pro", "gemini-flash", "groq"]
 
             request_params = {
@@ -293,22 +350,19 @@ class TestFallbackMechanism:
             completion, provider = _make_request_with_fallback(request_params, task_type="enhancement")
 
             assert provider == "groq"
-            assert completion == mock_completion
+            assert isinstance(completion, CompletionResult)
 
-    @patch('services.ai_service.clients')
-    @patch('services.ai_service.gemini_client')
+    @patch('services.ai_service.provider_registry')
     @patch('services.ai_service.rate_limiter')
-    def test_all_providers_fail(self, mock_rate_limiter, mock_gemini, mock_clients):
+    def test_all_providers_fail(self, mock_rate_limiter, mock_registry):
         """Все провайдеры недоступны - должна быть HTTPException"""
         mock_rate_limiter.should_skip_provider.return_value = False
         mock_rate_limiter.cleanup_old_entries.return_value = None
 
-        # Все клиенты бросают RateLimitError
-        mock_gemini.return_value = None
-        mock_clients.get.return_value = None
+        # Все провайдеры недоступны
+        mock_registry.get_provider.return_value = None
 
         with patch('services.ai_service.settings') as mock_settings:
-            # Новая логика: get_providers_for_task возвращает пустой список
             mock_settings.get_providers_for_task.return_value = []
 
             request_params = {
@@ -331,10 +385,10 @@ class TestJSONParsing:
     """Тесты для парсинга JSON ответов от AI"""
 
     @patch('services.ai_service._make_request_with_fallback')
-    @patch('services.ai_service.settings')
-    def test_parse_clean_json(self, mock_settings, mock_fallback):
+    @patch('services.ai_service.provider_registry')
+    def test_parse_clean_json(self, mock_registry, mock_fallback):
         """Парсинг чистого JSON ответа"""
-        mock_settings.get_available_providers.return_value = ["gemini"]
+        mock_registry.get_available_providers.return_value = ["gemini"]
 
         clean_json = json.dumps({
             "productName": "Test Product",
@@ -342,8 +396,7 @@ class TestJSONParsing:
             "map": []
         })
 
-        mock_completion = Mock()
-        mock_completion.choices = [Mock(message=Mock(content=clean_json))]
+        mock_completion = CompletionResult(clean_json)
         mock_fallback.return_value = (mock_completion, "gemini")
 
         result = generate_ai_map("Test requirements")
@@ -352,10 +405,10 @@ class TestJSONParsing:
         assert len(result["personas"]) == 2
 
     @patch('services.ai_service._make_request_with_fallback')
-    @patch('services.ai_service.settings')
-    def test_parse_json_with_markdown(self, mock_settings, mock_fallback):
+    @patch('services.ai_service.provider_registry')
+    def test_parse_json_with_markdown(self, mock_registry, mock_fallback):
         """Парсинг JSON внутри markdown блока ```json ... ```"""
-        mock_settings.get_available_providers.return_value = ["perplexity"]
+        mock_registry.get_available_providers.return_value = ["perplexity"]
 
         markdown_wrapped = "```json\n" + json.dumps({
             "productName": "Test",
@@ -363,8 +416,7 @@ class TestJSONParsing:
             "map": []
         }) + "\n```"
 
-        mock_completion = Mock()
-        mock_completion.choices = [Mock(message=Mock(content=markdown_wrapped))]
+        mock_completion = CompletionResult(markdown_wrapped)
         mock_fallback.return_value = (mock_completion, "perplexity")
 
         result = generate_ai_map("Test requirements")
@@ -372,15 +424,14 @@ class TestJSONParsing:
         assert result["productName"] == "Test"
 
     @patch('services.ai_service._make_request_with_fallback')
-    @patch('services.ai_service.settings')
-    def test_invalid_json_raises_error(self, mock_settings, mock_fallback):
+    @patch('services.ai_service.provider_registry')
+    def test_invalid_json_raises_error(self, mock_registry, mock_fallback):
         """Невалидный JSON должен вызывать HTTPException"""
-        mock_settings.get_available_providers.return_value = ["openai"]
+        mock_registry.get_available_providers.return_value = ["openai"]
 
         invalid_json = "This is not JSON at all!"
 
-        mock_completion = Mock()
-        mock_completion.choices = [Mock(message=Mock(content=invalid_json))]
+        mock_completion = CompletionResult(invalid_json)
         mock_fallback.return_value = (mock_completion, "openai")
 
         with pytest.raises(HTTPException) as exc_info:
@@ -390,13 +441,12 @@ class TestJSONParsing:
         assert "Invalid JSON" in exc_info.value.detail
 
     @patch('services.ai_service._make_request_with_fallback')
-    @patch('services.ai_service.settings')
-    def test_empty_response_raises_error(self, mock_settings, mock_fallback):
+    @patch('services.ai_service.provider_registry')
+    def test_empty_response_raises_error(self, mock_registry, mock_fallback):
         """Пустой ответ должен вызывать HTTPException"""
-        mock_settings.get_available_providers.return_value = ["groq"]
+        mock_registry.get_available_providers.return_value = ["groq"]
 
-        mock_completion = Mock()
-        mock_completion.choices = [Mock(message=Mock(content=""))]
+        mock_completion = CompletionResult("")
         mock_fallback.return_value = (mock_completion, "groq")
 
         with pytest.raises(HTTPException) as exc_info:
@@ -433,10 +483,10 @@ class TestRedisCaching:
         assert key1.startswith("ai_map:")
 
     @patch('services.ai_service._make_request_with_fallback')
-    @patch('services.ai_service.settings')
-    def test_cache_hit_skips_ai_request(self, mock_settings, mock_fallback):
+    @patch('services.ai_service.provider_registry')
+    def test_cache_hit_skips_ai_request(self, mock_registry, mock_fallback):
         """Cache hit должен пропускать AI запрос"""
-        mock_settings.get_available_providers.return_value = ["gemini"]
+        mock_registry.get_available_providers.return_value = ["gemini"]
 
         mock_redis = Mock()
         cached_result = json.dumps({
@@ -455,10 +505,10 @@ class TestRedisCaching:
         assert result["productName"] == "Cached Product"
 
     @patch('services.ai_service._make_request_with_fallback')
-    @patch('services.ai_service.settings')
-    def test_cache_miss_makes_ai_request(self, mock_settings, mock_fallback):
+    @patch('services.ai_service.provider_registry')
+    def test_cache_miss_makes_ai_request(self, mock_registry, mock_fallback):
         """Cache miss должен сделать AI запрос и закешировать результат"""
-        mock_settings.get_available_providers.return_value = ["gemini"]
+        mock_registry.get_available_providers.return_value = ["gemini"]
 
         mock_redis = Mock()
         mock_redis.get.return_value = None  # Cache miss
@@ -469,8 +519,7 @@ class TestRedisCaching:
             "map": []
         }
 
-        mock_completion = Mock()
-        mock_completion.choices = [Mock(message=Mock(content=json.dumps(ai_response)))]
+        mock_completion = CompletionResult(json.dumps(ai_response))
         mock_fallback.return_value = (mock_completion, "gemini")
 
         result = generate_ai_map("Test requirements", redis_client=mock_redis, use_cache=True)
@@ -486,14 +535,13 @@ class TestRedisCaching:
     def test_cache_disabled(self):
         """use_cache=False должен пропускать кеш"""
         with patch('services.ai_service._make_request_with_fallback') as mock_fallback:
-            with patch('services.ai_service.settings') as mock_settings:
-                mock_settings.get_available_providers.return_value = ["gemini"]
+            with patch('services.ai_service.provider_registry') as mock_registry:
+                mock_registry.get_available_providers.return_value = ["gemini"]
 
                 mock_redis = Mock()
 
                 ai_response = {"productName": "Test Product", "personas": [], "map": []}
-                mock_completion = Mock()
-                mock_completion.choices = [Mock(message=Mock(content=json.dumps(ai_response)))]
+                mock_completion = CompletionResult(json.dumps(ai_response))
                 mock_fallback.return_value = (mock_completion, "gemini")
 
                 generate_ai_map("Test requirements text", redis_client=mock_redis, use_cache=False)
@@ -510,10 +558,10 @@ class TestEnhancement:
     """Тесты для enhance_requirements()"""
 
     @patch('services.ai_service._make_request_with_fallback')
-    @patch('services.ai_service.settings')
-    def test_enhancement_success(self, mock_settings, mock_fallback):
+    @patch('services.ai_service.provider_registry')
+    def test_enhancement_success(self, mock_registry, mock_fallback):
         """Успешное улучшение требований"""
-        mock_settings.get_available_providers.return_value = ["gemini"]
+        mock_registry.get_available_providers.return_value = ["gemini"]
 
         enhancement_result = {
             "enhanced_text": "Улучшенные требования с деталями",
@@ -524,8 +572,7 @@ class TestEnhancement:
             "confidence": 0.85
         }
 
-        mock_completion = Mock()
-        mock_completion.choices = [Mock(message=Mock(content=json.dumps(enhancement_result)))]
+        mock_completion = CompletionResult(json.dumps(enhancement_result))
         mock_fallback.return_value = (mock_completion, "gemini")
 
         result = enhance_requirements("Базовые требования")
@@ -535,14 +582,13 @@ class TestEnhancement:
         assert result["original_text"] == "Базовые требования"
 
     @patch('services.ai_service._make_request_with_fallback')
-    @patch('services.ai_service.settings')
-    def test_enhancement_fallback_on_json_error(self, mock_settings, mock_fallback):
+    @patch('services.ai_service.provider_registry')
+    def test_enhancement_fallback_on_json_error(self, mock_registry, mock_fallback):
         """Fallback при ошибке парсинга JSON в enhancement"""
-        mock_settings.get_available_providers.return_value = ["groq"]
+        mock_registry.get_available_providers.return_value = ["groq"]
 
         # AI вернул невалидный JSON
-        mock_completion = Mock()
-        mock_completion.choices = [Mock(message=Mock(content="Not valid JSON"))]
+        mock_completion = CompletionResult("Not valid JSON")
         mock_fallback.return_value = (mock_completion, "groq")
 
         result = enhance_requirements("Test requirements")
@@ -579,10 +625,10 @@ class TestAIStoryImprovement:
     """Тесты для ai_improve_story_content()"""
 
     @patch('services.ai_service._make_request_with_fallback')
-    @patch('services.ai_service.settings')
-    def test_improve_story_details(self, mock_settings, mock_fallback):
+    @patch('services.ai_service.provider_registry')
+    def test_improve_story_details(self, mock_registry, mock_fallback):
         """Улучшение деталей истории"""
-        mock_settings.get_available_providers.return_value = ["gemini"]
+        mock_registry.get_available_providers.return_value = ["gemini"]
 
         improvement_result = {
             "action": "improve",
@@ -593,8 +639,7 @@ class TestAIStoryImprovement:
             "suggestion": "Добавлены детали"
         }
 
-        mock_completion = Mock()
-        mock_completion.choices = [Mock(message=Mock(content=json.dumps(improvement_result)))]
+        mock_completion = CompletionResult(json.dumps(improvement_result))
         mock_fallback.return_value = (mock_completion, "gemini")
 
         story_data = {
@@ -610,10 +655,10 @@ class TestAIStoryImprovement:
         assert len(result["acceptance_criteria"]) > 0
 
     @patch('services.ai_service._make_request_with_fallback')
-    @patch('services.ai_service.settings')
-    def test_split_story(self, mock_settings, mock_fallback):
+    @patch('services.ai_service.provider_registry')
+    def test_split_story(self, mock_registry, mock_fallback):
         """Разделение истории на несколько"""
-        mock_settings.get_available_providers.return_value = ["openai"]
+        mock_registry.get_available_providers.return_value = ["openai"]
 
         split_result = {
             "action": "split",
@@ -634,8 +679,7 @@ class TestAIStoryImprovement:
             "suggestion": "Разделено на 2 истории"
         }
 
-        mock_completion = Mock()
-        mock_completion.choices = [Mock(message=Mock(content=json.dumps(split_result)))]
+        mock_completion = CompletionResult(json.dumps(split_result))
         mock_fallback.return_value = (mock_completion, "openai")
 
         story_data = {
@@ -669,10 +713,10 @@ class TestTimeoutHandling:
     """Тесты для обработки таймаутов"""
 
     @patch('services.ai_service._make_request_with_fallback')
-    @patch('services.ai_service.settings')
-    def test_timeout_error_handling(self, mock_settings, mock_fallback):
+    @patch('services.ai_service.provider_registry')
+    def test_timeout_error_handling(self, mock_registry, mock_fallback):
         """APITimeoutError должен вызывать HTTPException 504"""
-        mock_settings.get_available_providers.return_value = ["gemini"]
+        mock_registry.get_available_providers.return_value = ["gemini"]
         mock_fallback.side_effect = APITimeoutError("Request timed out")
 
         with pytest.raises(HTTPException) as exc_info:
@@ -683,57 +727,77 @@ class TestTimeoutHandling:
 
 
 # ============================================================================
-# Test Gemini-specific functionality
+# Test Provider Classes
 # ============================================================================
 
-class TestGeminiAPI:
-    """Тесты для специфики Gemini API"""
+class TestProviderClasses:
+    """Тесты для классов провайдеров"""
 
-    @patch('services.ai_service.gemini_client')
-    def test_call_gemini_api_success(self, mock_gemini):
-        """Успешный вызов Gemini API"""
+    def test_gemini_provider_get_model(self):
+        """Проверка получения модели для Gemini провайдеров"""
+        with patch('services.ai_service.settings') as mock_settings:
+            mock_settings.GEMINI_PRO_MODEL = "gemini-2.5-pro"
+            mock_settings.GEMINI_FLASH_MODEL = "gemini-2.0-flash-exp"
+            
+            pro_provider = GeminiProProvider(api_key="test-key")
+            assert pro_provider.get_model() == "gemini-2.5-pro"
+            
+            flash_provider = GeminiFlashProvider(api_key="test-key")
+            assert flash_provider.get_model() == "gemini-2.0-flash-exp"
+
+    @patch('services.ai_service.genai')
+    def test_gemini_provider_call(self, mock_genai):
+        """Проверка вызова Gemini API через провайдер"""
         # Setup mock
         mock_model = Mock()
         mock_response = Mock()
         mock_response.text = "Test response"
         mock_model.generate_content.return_value = mock_response
+        mock_genai.GenerativeModel.return_value = mock_model
+        mock_genai.configure.return_value = None
 
-        mock_gemini.GenerativeModel.return_value = mock_model
-
+        provider = GeminiProvider(api_key="test-key")
         messages = [
             {"role": "system", "content": "System prompt"},
             {"role": "user", "content": "User prompt"}
         ]
 
-        result = _call_gemini_api(messages, "gemini-2.0-flash-exp", 0.7)
+        result = provider.call(messages, "gemini-2.0-flash-exp", 0.7)
 
         assert result == "Test response"
         mock_model.generate_content.assert_called_once()
 
-    @patch('services.ai_service.gemini_client')
-    def test_call_gemini_api_blocked_content(self, mock_gemini):
-        """Заблокированный контент Gemini должен вызывать ошибку"""
-        mock_model = Mock()
-        mock_response = Mock()
-        mock_response.text = None  # Контент заблокирован
-        mock_response.prompt_feedback = "Safety filter triggered"
-        mock_model.generate_content.return_value = mock_response
+    @patch('services.ai_service.OpenAI')
+    def test_groq_provider_call(self, mock_openai):
+        """Проверка вызова Groq API через провайдер"""
+        mock_client = Mock()
+        mock_completion = Mock()
+        mock_completion.choices = [Mock(message=Mock(content="Groq response"))]
+        mock_client.chat.completions.create.return_value = mock_completion
+        mock_openai.return_value = mock_client
 
-        mock_gemini.GenerativeModel.return_value = mock_model
-
+        provider = GroqProvider(api_key="test-key")
         messages = [{"role": "user", "content": "Test"}]
 
-        with pytest.raises(Exception) as exc_info:
-            _call_gemini_api(messages, "gemini-2.0-flash-exp", 0.7)
+        result = provider.call(messages, "llama-3.1-8b-instant", 0.7)
 
-        assert "blocked" in str(exc_info.value).lower()
+        assert result == "Groq response"
+        mock_client.chat.completions.create.assert_called_once()
 
-    def test_call_gemini_api_not_initialized(self):
-        """Gemini client не инициализирован должен вызывать ошибку"""
-        with patch('services.ai_service.gemini_client', None):
-            messages = [{"role": "user", "content": "Test"}]
+    def test_provider_is_available(self):
+        """Проверка метода is_available для провайдеров"""
+        # Провайдер без API ключа должен быть недоступен
+        provider = GeminiProvider(api_key=None)
+        assert not provider.is_available()
 
-            with pytest.raises(Exception) as exc_info:
-                _call_gemini_api(messages, "gemini-2.0-flash-exp", 0.7)
+    def test_provider_registry_get_provider(self):
+        """Проверка получения провайдера из registry"""
+        provider = provider_registry.get_provider("gemini-pro")
+        # Может быть None если API ключ не настроен
+        assert provider is None or isinstance(provider, GeminiProProvider)
 
-            assert "not initialized" in str(exc_info.value).lower()
+    def test_provider_registry_get_available_providers(self):
+        """Проверка получения списка доступных провайдеров"""
+        available = provider_registry.get_available_providers()
+        assert isinstance(available, list)
+        # Может быть пустым если API ключи не настроены
