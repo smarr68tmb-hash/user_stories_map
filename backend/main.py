@@ -94,13 +94,14 @@ app.add_middleware(
 )
 
 # Подключение роутеров
-from api import health, auth, projects, stories, analysis
+from api import health, auth, projects, stories, analysis, epics
 
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(stories.router)
 app.include_router(analysis.router)
+app.include_router(epics.router)
 
 
 @app.on_event("startup")

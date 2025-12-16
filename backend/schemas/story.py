@@ -86,6 +86,7 @@ class StoryResponse(BaseModel):
     priority: Optional[str]
     acceptance_criteria: Optional[List[str]]
     release_id: Optional[int]
+    epic_id: Optional[int] = None
     position: int
     status: Optional[str] = "todo"
     

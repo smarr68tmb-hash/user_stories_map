@@ -35,6 +35,12 @@ class Project(Base):
         cascade="all, delete-orphan",
         order_by="Release.position"
     )
+    epics = relationship(
+        "Epic",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="Epic.position"
+    )
 
 
 class Activity(Base):

@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
 # Import только models - без main.py (избегаем циклических зависимостей)
-from models import Base, User, RefreshToken, Project, Activity, UserTask, Release, UserStory
+from models import Base, User, RefreshToken, Project, Activity, UserTask, Release, UserStory, Epic
 from services.auth_service import get_password_hash
 
 

@@ -41,6 +41,14 @@ from .analysis import (
     FullAnalysisResult,
     AnalysisRequest
 )
+from .epic import (
+    EpicCreate,
+    EpicUpdate,
+    EpicResponse,
+    EpicWithStoriesResponse,
+    EpicGenerateRequest,
+    EpicGenerateResponse
+)
 
 __all__ = [
     # User schemas
@@ -85,5 +93,12 @@ __all__ = [
     "SimilarityResult",
     "FullAnalysisResult",
     "AnalysisRequest",
+    # Epic schemas
+    "EpicCreate",
+    "EpicUpdate",
+    "EpicResponse",
+    "EpicWithStoriesResponse",
+    "EpicGenerateRequest",
+    "EpicGenerateResponse",
 ]
 

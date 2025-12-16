@@ -5,6 +5,7 @@ from utils.database import Base
 from .user import User, RefreshToken
 from .project import Project, Activity, UserTask, Release
 from .story import UserStory
+from .epic import Epic
 
 __all__ = [
     "Base",
@@ -15,5 +16,6 @@ __all__ = [
     "UserTask",
     "Release",
     "UserStory",
+    "Epic",
 ]
 

@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Импортируем Base и модели
 from utils.database import Base
-from models import User, Project, Activity, UserTask, Release, UserStory, RefreshToken
+from models import User, Project, Activity, UserTask, Release, UserStory, RefreshToken, Epic
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
