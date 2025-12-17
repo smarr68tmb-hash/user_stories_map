@@ -10,6 +10,7 @@
  */
 
 import { renderHook, act, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useStreamingGeneration } from './useStreamingGeneration';
 
 // Mock EventSource
@@ -358,7 +359,7 @@ describe('useStreamingGeneration', () => {
 
       // Подавляем console.error для этого теста
       const originalError = console.error;
-      console.error = jest.fn();
+      console.error = vi.fn();
 
       act(() => {
         result.current.generateWithStreaming('Test', false, false);
@@ -419,7 +420,8 @@ describe('useStreamingGeneration', () => {
 
       const url = MockEventSource.instance.url;
       expect(url).toContain('/api/generate-map/stream');
-      expect(url).toContain('text=My%20requirements');
+      // URLSearchParams uses '+' for spaces, which is valid
+      expect(url).toMatch(/text=My[\s+%20]requirements/);
       expect(url).toContain('skip_enhancement=false');
       expect(url).toContain('use_agent=false');
     });
@@ -496,7 +498,7 @@ describe('useStreamingGeneration', () => {
 
       // Подавляем console.warn
       const originalWarn = console.warn;
-      console.warn = jest.fn();
+      console.warn = vi.fn();
 
       act(() => {
         result.current.generateWithStreaming('Test', false, false);

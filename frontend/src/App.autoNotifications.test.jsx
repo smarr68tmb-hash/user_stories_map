@@ -10,26 +10,27 @@
 
 import { render, screen, waitFor } from '@testing-library/react';
 import { act } from 'react-dom/test-utils';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from './App';
 
 // Mock react-toastify
-const mockToastWarning = jest.fn();
-const mockToastSuccess = jest.fn();
-const mockToastInfo = jest.fn();
+const mockToastWarning = vi.fn();
+const mockToastSuccess = vi.fn();
+const mockToastInfo = vi.fn();
 
-jest.mock('react-toastify', () => ({
+vi.mock('react-toastify', () => ({
   ToastContainer: () => <div data-testid="toast-container" />,
   toast: {
     warning: (...args) => mockToastWarning(...args),
     success: (...args) => mockToastSuccess(...args),
     info: (...args) => mockToastInfo(...args),
-    error: jest.fn()
+    error: vi.fn()
   }
 }));
 
 // Mock useStreamingGeneration hook
-const mockGenerateWithStreaming = jest.fn();
-const mockCancelStreaming = jest.fn();
+const mockGenerateWithStreaming = vi.fn();
+const mockCancelStreaming = vi.fn();
 
 let mockHookState = {
   progress: 0,
@@ -42,12 +43,12 @@ let mockHookState = {
   cancelStreaming: mockCancelStreaming
 };
 
-jest.mock('./hooks/useStreamingGeneration', () => ({
+vi.mock('./hooks/useStreamingGeneration', () => ({
   useStreamingGeneration: () => mockHookState
 }));
 
 // Mock fetch для API calls
-global.fetch = jest.fn(() =>
+global.fetch = vi.fn(() =>
   Promise.resolve({
     ok: true,
     json: () => Promise.resolve({ projects: [] })
