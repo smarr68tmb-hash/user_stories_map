@@ -10,6 +10,7 @@
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 import { AIAssistantSidebar } from './AIAssistantSidebar';
 
 describe('AIAssistantSidebar', () => {
@@ -426,7 +427,7 @@ describe('AIAssistantSidebar', () => {
 
   describe('Quick Actions', () => {
     it('should render "Полный анализ" button when onRunFullAnalysis is provided', () => {
-      const mockOnRunFullAnalysis = jest.fn();
+      const mockOnRunFullAnalysis = vi.fn();
       const mockAnalysis = {
         score: 80,
         duplicates: 0,
@@ -449,7 +450,7 @@ describe('AIAssistantSidebar', () => {
     });
 
     it('should call onRunFullAnalysis when button is clicked', () => {
-      const mockOnRunFullAnalysis = jest.fn();
+      const mockOnRunFullAnalysis = vi.fn();
       const mockAnalysis = {
         score: 80,
         duplicates: 0,

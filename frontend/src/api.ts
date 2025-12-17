@@ -12,6 +12,11 @@ import type {
   TaskPayload,
   TokenResponse,
   User,
+  Epic,
+  EpicWithStories,
+  EpicGenerateRequest,
+  EpicGenerateResponse,
+  EpicUpdate,
 } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
@@ -298,6 +303,29 @@ export const stories = {
     api.patch<Story>(`/story/${storyId}/move`, target),
   changeStatus: (storyId: number, status: StoryPayload['status']) =>
     api.patch<Story>(`/story/${storyId}/status`, { status }),
+};
+
+export const epics = {
+  generate: (projectId: number | string, request: EpicGenerateRequest = { min_epics: 3, max_epics: 7 }) =>
+    api.post<EpicGenerateResponse>(`/project/${projectId}/epics/generate`, request),
+  
+  getByProject: (projectId: number | string) =>
+    api.get<EpicWithStories[]>(`/project/${projectId}/epics`),
+  
+  update: (epicId: number, updates: EpicUpdate) =>
+    api.put<Epic>(`/epic/${epicId}`, updates),
+  
+  addStory: (epicId: number, storyId: number) =>
+    api.post(`/epic/${epicId}/stories/${storyId}`, {}),
+  
+  removeStory: (epicId: number, storyId: number) =>
+    api.delete(`/epic/${epicId}/stories/${storyId}`),
+  
+  accept: (epicId: number) =>
+    api.post(`/epic/${epicId}/accept`, {}),
+  
+  reject: (epicId: number) =>
+    api.post(`/epic/${epicId}/reject`, {}),
 };
 
 export default api;
