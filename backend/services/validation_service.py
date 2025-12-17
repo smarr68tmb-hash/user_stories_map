@@ -10,7 +10,9 @@ from schemas.analysis import (
     ValidationResult,
     ValidationIssue,
     IssueSeverity,
-    IssueType
+    IssueType,
+    ActionableRecommendation,
+    ActionType
 )
 
 logger = logging.getLogger(__name__)
@@ -237,12 +239,16 @@ def validate_project_map(project: Project, db: Session) -> ValidationResult:
         f"Validation completed for project {project.id}: "
         f"score={score}, issues={len(issues)}, valid={not has_errors}"
     )
-    
+
+    # === Генерация actionable рекомендаций ===
+    actionable_recommendations = generate_actionable_recommendations(issues, stats, project)
+
     return ValidationResult(
         is_valid=not has_errors,
         score=score,
         issues=issues,
         recommendations=recommendations,
+        actionable_recommendations=actionable_recommendations,
         stats=stats
     )
 
@@ -305,6 +311,130 @@ def get_validation_summary(result: ValidationResult) -> str:
         summary += f"Предупреждений: {warning_count}. "
     
     summary += f"Всего историй: {result.stats.get('total_stories', 0)}."
-    
+
     return summary
+
+
+def generate_actionable_recommendations(
+    issues: List[ValidationIssue],
+    stats: dict,
+    project: Project
+) -> List[ActionableRecommendation]:
+    """
+    Генерирует интерактивные рекомендации с кнопками действий
+
+    Анализирует проблемы и создает actionable рекомендации:
+    - Для историй без описания/критериев → улучшить через AI
+    - Для пустых tasks/activities → удалить или добавить истории
+    - Для несбалансированных релизов → переместить истории
+    """
+    actionable_recs: List[ActionableRecommendation] = []
+    rec_id_counter = 1
+
+    # === 1. Улучшение историй без описания ===
+    stories_without_desc = [
+        issue for issue in issues
+        if issue.type == IssueType.MISSING_DESCRIPTION
+    ]
+
+    if len(stories_without_desc) >= 3:
+        # Группируем в batch рекомендацию
+        story_ids = []
+        for issue in stories_without_desc:
+            if issue.location and "story_id" in issue.location:
+                story_ids.append(issue.location["story_id"])
+
+        if story_ids:
+            actionable_recs.append(ActionableRecommendation(
+                id=f"rec_{rec_id_counter}",
+                title=f"Добавить описания к {len(story_ids)} историям",
+                description=f"У {len(story_ids)} историй отсутствует описание. AI может автоматически сгенерировать описания на основе названий.",
+                action_type=ActionType.ADD_DESCRIPTION,
+                severity=IssueSeverity.INFO,
+                story_ids=story_ids[:10],  # Лимит 10 за раз
+                action_params={
+                    "use_ai": True,
+                    "batch": True
+                },
+                auto_applicable=False,
+                impact=f"Улучшит понимание требований для {len(story_ids)} историй"
+            ))
+            rec_id_counter += 1
+
+    # === 2. Улучшение историй без AC ===
+    stories_without_ac = [
+        issue for issue in issues
+        if issue.type == IssueType.MISSING_CRITERIA
+    ]
+
+    if len(stories_without_ac) >= 3:
+        story_ids = []
+        for issue in stories_without_ac:
+            if issue.location and "story_id" in issue.location:
+                story_ids.append(issue.location["story_id"])
+
+        if story_ids:
+            actionable_recs.append(ActionableRecommendation(
+                id=f"rec_{rec_id_counter}",
+                title=f"Добавить acceptance criteria к {len(story_ids)} историям",
+                description=f"У {len(story_ids)} историй отсутствуют критерии приемки. AI может сгенерировать качественные AC.",
+                action_type=ActionType.ADD_CRITERIA,
+                severity=IssueSeverity.WARNING,
+                story_ids=story_ids[:10],
+                action_params={
+                    "use_ai": True,
+                    "batch": True
+                },
+                auto_applicable=False,
+                impact=f"Добавит четкие критерии приемки для {len(story_ids)} историй"
+            ))
+            rec_id_counter += 1
+
+    # === 3. Балансировка MVP ===
+    mvp_count = stats.get("stories_per_release", {}).get("MVP", 0)
+    total_stories = stats.get("total_stories", 0)
+
+    if mvp_count > 15 and total_stories > mvp_count:
+        actionable_recs.append(ActionableRecommendation(
+            id=f"rec_{rec_id_counter}",
+            title=f"Оптимизировать MVP ({mvp_count} историй → ~10-12)",
+            description=f"В MVP слишком много историй ({mvp_count}). Рекомендуется оставить 10-12 самых важных, остальные перенести в Release 1.",
+            action_type=ActionType.MOVE_STORY,
+            severity=IssueSeverity.WARNING,
+            story_ids=[],
+            action_params={
+                "from_release": "MVP",
+                "to_release": "Release 1",
+                "suggested_count": mvp_count - 12,
+                "use_ai_prioritization": True
+            },
+            auto_applicable=False,
+            impact="Сделает MVP более фокусированным и реалистичным"
+        ))
+        rec_id_counter += 1
+
+    # === 4. AI улучшение всех низкокачественных историй ===
+    desc_percent = (stats.get("stories_with_description", 0) / max(total_stories, 1)) * 100
+    criteria_percent = (stats.get("stories_with_criteria", 0) / max(total_stories, 1)) * 100
+
+    if total_stories > 5 and (desc_percent < 50 or criteria_percent < 70):
+        actionable_recs.append(ActionableRecommendation(
+            id=f"rec_{rec_id_counter}",
+            title="Улучшить качество всех историй через AI",
+            description=f"Только {desc_percent:.0f}% историй имеют описание и {criteria_percent:.0f}% имеют AC. AI может улучшить все истории за один раз.",
+            action_type=ActionType.IMPROVE_STORY,
+            severity=IssueSeverity.INFO,
+            story_ids=[],
+            action_params={
+                "improve_all": True,
+                "add_missing_descriptions": desc_percent < 50,
+                "add_missing_criteria": criteria_percent < 70,
+                "enhance_existing": True
+            },
+            auto_applicable=False,
+            impact=f"Комплексное улучшение качества всех {total_stories} историй"
+        ))
+        rec_id_counter += 1
+
+    return actionable_recs
 

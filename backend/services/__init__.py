@@ -14,6 +14,7 @@ from .ai_service import generate_ai_map, get_cache_key, ai_improve_story_content
 from .validation_service import validate_project_map, get_validation_summary
 from .similarity_service import analyze_similarity, get_similarity_summary
 from .epic_service import group_stories_into_epics, create_epics_from_grouping
+from .recommendation_service import apply_recommendation
 
 __all__ = [
     # Auth service
@@ -36,5 +37,7 @@ __all__ = [
     # Epic service
     "group_stories_into_epics",
     "create_epics_from_grouping",
+    # Recommendation service
+    "apply_recommendation",
 ]
 

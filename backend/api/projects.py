@@ -2,6 +2,7 @@
 Project endpoints - генерация и управление проектами
 """
 import logging
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
@@ -393,7 +394,7 @@ def generate_map(
 def generate_map_demo(
     req: RequirementsInput,
     request: Request,
-    current_user: User | None = Depends(get_current_user_optional),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
     """
@@ -637,7 +638,7 @@ def get_project_wireframe(
 @router.get("/project/{project_id}/wireframe/status")
 def get_project_wireframe_status(
     project_id: int,
-    job_id: str | None = None,
+    job_id: Optional[str] = None,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):

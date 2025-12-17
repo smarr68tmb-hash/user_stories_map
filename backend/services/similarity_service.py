@@ -12,7 +12,10 @@ from schemas.analysis import (
     SimilarityGroup,
     SimilarStory,
     StoryConflict,
-    ConflictType
+    ConflictType,
+    ActionableRecommendation,
+    ActionType,
+    IssueSeverity
 )
 
 logger = logging.getLogger(__name__)
@@ -188,6 +191,7 @@ def analyze_similarity(
         return SimilarityResult(
             similar_groups=[],
             potential_conflicts=[],
+            actionable_recommendations=[],
             stats={
                 "total_stories": len(stories_data),
                 "duplicates_found": 0,
@@ -224,10 +228,14 @@ def analyze_similarity(
         f"Similarity analysis for project {project.id}: "
         f"{len(similar_groups)} groups found, {duplicates_count} potential duplicates"
     )
-    
+
+    # === Генерация actionable рекомендаций для похожих историй ===
+    actionable_recommendations = generate_similarity_recommendations(similar_groups, stats)
+
     return SimilarityResult(
         similar_groups=similar_groups,
         potential_conflicts=[],  # Конфликты определяются через AI отдельно
+        actionable_recommendations=actionable_recommendations,
         stats=stats
     )
 
@@ -363,4 +371,91 @@ def get_similarity_summary(result: SimilarityResult) -> str:
         parts.append(f"{similar_count} групп похожих историй")
     
     return " ".join(parts) + "."
+
+
+def generate_similarity_recommendations(
+    similar_groups: List[SimilarityGroup],
+    stats: dict
+) -> List[ActionableRecommendation]:
+    """
+    Генерирует actionable рекомендации для похожих/дублирующихся историй
+
+    Создает рекомендации для:
+    - Объединения дубликатов
+    - Удаления явно избыточных историй
+    - Проверки похожих историй пользователем
+    """
+    actionable_recs: List[ActionableRecommendation] = []
+    rec_id_counter = 1
+
+    for group in similar_groups:
+        is_duplicate = group.group_type == "duplicate"
+
+        # Для каждой группы создаем рекомендацию
+        story_ids = [story.id for story in group.stories]
+
+        if is_duplicate and len(story_ids) >= 2:
+            # Рекомендация объединить дубликаты
+            primary_story = group.stories[0]  # Самая первая - оставляем
+            duplicates_to_merge = group.stories[1:]  # Остальные - объединяем в нее
+
+            actionable_recs.append(ActionableRecommendation(
+                id=f"rec_dup_{rec_id_counter}",
+                title=f"Объединить {len(duplicates_to_merge)} дубликатов в '{primary_story.title}'",
+                description=f"Найдено {len(story_ids)} очень похожих историй (схожесть > 90%). Рекомендуется объединить их в одну.",
+                action_type=ActionType.MERGE_STORIES,
+                severity=IssueSeverity.WARNING,
+                story_ids=story_ids,
+                action_params={
+                    "primary_story_id": primary_story.id,
+                    "merge_story_ids": [s.id for s in duplicates_to_merge],
+                    "merge_descriptions": True,
+                    "merge_criteria": True
+                },
+                auto_applicable=False,
+                impact=f"Удалит дубликаты, объединив контент в одну историю"
+            ))
+            rec_id_counter += 1
+
+        elif not is_duplicate and len(story_ids) >= 2:
+            # Рекомендация проверить похожие истории
+            avg_similarity = sum(s.similarity for s in group.stories) / len(group.stories)
+
+            actionable_recs.append(ActionableRecommendation(
+                id=f"rec_sim_{rec_id_counter}",
+                title=f"Проверить {len(story_ids)} похожих историй ({int(avg_similarity * 100)}% схожесть)",
+                description=f"Истории очень похожи, но не являются дубликатами. Возможно, они описывают одну функциональность с разных сторон.",
+                action_type=ActionType.IMPROVE_STORY,
+                severity=IssueSeverity.INFO,
+                story_ids=story_ids,
+                action_params={
+                    "action": "review",
+                    "suggest_merge_or_clarify": True,
+                    "avg_similarity": avg_similarity
+                },
+                auto_applicable=False,
+                impact="Поможет выявить избыточность или прояснить различия"
+            ))
+            rec_id_counter += 1
+
+    # Общая рекомендация если много дубликатов
+    duplicates_count = stats.get("duplicates_found", 0)
+    if duplicates_count >= 5:
+        actionable_recs.append(ActionableRecommendation(
+            id=f"rec_batch_cleanup",
+            title=f"Массовая очистка дубликатов ({duplicates_count} найдено)",
+            description=f"В проекте найдено {duplicates_count} потенциальных дубликатов. AI может автоматически объединить их, сохранив лучший контент.",
+            action_type=ActionType.MERGE_STORIES,
+            severity=IssueSeverity.WARNING,
+            story_ids=[],
+            action_params={
+                "batch_merge": True,
+                "use_ai_merge": True,
+                "duplicates_count": duplicates_count
+            },
+            auto_applicable=False,
+            impact=f"Очистит проект от {duplicates_count} избыточных историй"
+        ))
+
+    return actionable_recs
 

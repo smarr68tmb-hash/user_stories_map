@@ -13,7 +13,9 @@ from schemas import (
     ValidationResult,
     SimilarityResult,
     FullAnalysisResult,
-    AnalysisRequest
+    AnalysisRequest,
+    ApplyRecommendationRequest,
+    ApplyRecommendationResponse
 )
 from services import (
     validate_project_map,
@@ -282,4 +284,87 @@ def generate_analysis_summary(
         parts.append(f"Групп похожих историй: {similar_groups}.")
     
     return " ".join(parts)
+
+
+@router.post("/project/{project_id}/apply-recommendation", response_model=ApplyRecommendationResponse)
+@limiter.limit("20/minute")
+async def apply_recommendation_endpoint(
+    project_id: int,
+    request: Request,
+    rec_request: ApplyRecommendationRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Применяет actionable рекомендацию к проекту
+
+    Поддерживаемые действия:
+    - ADD_DESCRIPTION: Добавить описания к историям через AI
+    - ADD_CRITERIA: Добавить acceptance criteria через AI
+    - MERGE_STORIES: Объединить дублирующиеся истории
+    - IMPROVE_STORY: Улучшить истории через AI
+    - MOVE_STORY: Переместить истории между релизами
+
+    Args:
+        project_id: ID проекта
+        rec_request: Запрос с ID рекомендации
+
+    Returns:
+        ApplyRecommendationResponse: Результат применения
+    """
+    from services.recommendation_service import apply_recommendation
+    from schemas.analysis import ActionableRecommendation, ActionType, IssueSeverity
+
+    logger.info(
+        f"Applying recommendation {rec_request.recommendation_id} "
+        f"to project {project_id} for user {current_user.id}"
+    )
+
+    # Получаем проект с полной загрузкой
+    project = get_project_with_stories(project_id, current_user.id, db)
+
+    # Сначала запускаем анализ чтобы получить рекомендации
+    try:
+        validation_result = validate_project_map(project, db)
+        similarity_result = analyze_similarity(project, 0.7, 0.9)
+    except Exception as e:
+        logger.error(f"Analysis failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Не удалось проанализировать проект для получения рекомендаций"
+        )
+
+    # Ищем рекомендацию по ID
+    all_recommendations = (
+        validation_result.actionable_recommendations +
+        similarity_result.actionable_recommendations
+    )
+
+    recommendation = None
+    for rec in all_recommendations:
+        if rec.id == rec_request.recommendation_id:
+            recommendation = rec
+            break
+
+    if not recommendation:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Рекомендация {rec_request.recommendation_id} не найдена"
+        )
+
+    # Применяем рекомендацию
+    try:
+        result = await apply_recommendation(recommendation, project, db)
+        logger.info(
+            f"Recommendation applied: success={result.success}, "
+            f"affected={len(result.affected_story_ids)}, "
+            f"deleted={len(result.deleted_story_ids)}"
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Failed to apply recommendation: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при применении рекомендации: {str(e)}"
+        )
 

@@ -31,6 +31,8 @@ from .project import (
 from .analysis import (
     IssueSeverity,
     IssueType,
+    ActionType,
+    ActionableRecommendation,
     ValidationIssue,
     ValidationResult,
     SimilarStory,
@@ -39,7 +41,9 @@ from .analysis import (
     StoryConflict,
     SimilarityResult,
     FullAnalysisResult,
-    AnalysisRequest
+    AnalysisRequest,
+    ApplyRecommendationRequest,
+    ApplyRecommendationResponse
 )
 from .epic import (
     EpicCreate,
@@ -84,6 +88,8 @@ __all__ = [
     # Analysis schemas
     "IssueSeverity",
     "IssueType",
+    "ActionType",
+    "ActionableRecommendation",
     "ValidationIssue",
     "ValidationResult",
     "SimilarStory",
@@ -93,6 +99,8 @@ __all__ = [
     "SimilarityResult",
     "FullAnalysisResult",
     "AnalysisRequest",
+    "ApplyRecommendationRequest",
+    "ApplyRecommendationResponse",
     # Epic schemas
     "EpicCreate",
     "EpicUpdate",

@@ -25,6 +25,30 @@ class IssueType(str, Enum):
     UNBALANCED_RELEASES = "unbalanced_releases"  # Несбалансированные релизы
 
 
+class ActionType(str, Enum):
+    """Типы действий для применения рекомендаций"""
+    MERGE_STORIES = "merge_stories"              # Объединить истории
+    DELETE_STORY = "delete_story"                # Удалить историю
+    IMPROVE_STORY = "improve_story"              # Улучшить историю через AI
+    SPLIT_STORY = "split_story"                  # Разделить историю
+    ADD_CRITERIA = "add_criteria"                # Добавить критерии приемки
+    ADD_DESCRIPTION = "add_description"          # Добавить описание
+    MOVE_STORY = "move_story"                    # Переместить историю
+
+
+class ActionableRecommendation(BaseModel):
+    """Интерактивная рекомендация с действием"""
+    id: str = Field(description="Уникальный ID рекомендации")
+    title: str = Field(description="Краткое описание")
+    description: str = Field(description="Детальное объяснение")
+    action_type: ActionType
+    severity: IssueSeverity
+    story_ids: List[int] = Field(default_factory=list, description="ID историй, к которым относится")
+    action_params: dict = Field(default_factory=dict, description="Параметры для выполнения действия")
+    auto_applicable: bool = Field(default=False, description="Можно применить автоматически")
+    impact: str = Field(default="", description="Ожидаемый эффект от применения")
+
+
 class ValidationIssue(BaseModel):
     """Проблема, найденная при валидации"""
     type: IssueType
@@ -40,6 +64,10 @@ class ValidationResult(BaseModel):
     score: int = Field(ge=0, le=100, description="Оценка качества карты 0-100")
     issues: List[ValidationIssue] = Field(default_factory=list)
     recommendations: List[str] = Field(default_factory=list)
+    actionable_recommendations: List[ActionableRecommendation] = Field(
+        default_factory=list,
+        description="Интерактивные рекомендации с кнопками действий"
+    )
     stats: dict = Field(default_factory=dict)
 
 
@@ -60,6 +88,7 @@ class SimilarityGroup(BaseModel):
     stories: List[SimilarStory]
     group_type: str = Field(description="duplicate или similar")
     recommendation: str
+    actionable_recommendation: Optional[ActionableRecommendation] = None
 
 
 class ConflictType(str, Enum):
@@ -83,6 +112,10 @@ class SimilarityResult(BaseModel):
     """Результат анализа схожести"""
     similar_groups: List[SimilarityGroup] = Field(default_factory=list)
     potential_conflicts: List[StoryConflict] = Field(default_factory=list)
+    actionable_recommendations: List[ActionableRecommendation] = Field(
+        default_factory=list,
+        description="Интерактивные рекомендации для схожих историй"
+    )
     stats: dict = Field(default_factory=dict)
 
 
@@ -103,7 +136,7 @@ class FullAnalysisResult(BaseModel):
 class AnalysisRequest(BaseModel):
     """Запрос на анализ"""
     include_ai_conflicts: bool = Field(
-        default=False, 
+        default=False,
         description="Использовать AI для поиска конфликтов (медленнее, но точнее)"
     )
     similarity_threshold: float = Field(
@@ -118,4 +151,18 @@ class AnalysisRequest(BaseModel):
         le=1.0,
         description="Порог для определения дубликатов (0.8-1.0)"
     )
+
+
+class ApplyRecommendationRequest(BaseModel):
+    """Запрос на применение рекомендации"""
+    recommendation_id: str = Field(description="ID рекомендации для применения")
+
+
+class ApplyRecommendationResponse(BaseModel):
+    """Результат применения рекомендации"""
+    success: bool
+    message: str
+    affected_story_ids: List[int] = Field(default_factory=list)
+    new_story_ids: List[int] = Field(default_factory=list, description="ID новых созданных историй")
+    deleted_story_ids: List[int] = Field(default_factory=list, description="ID удаленных историй")
 

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import api from './api';
 import useFocusTrap from './hooks/useFocusTrap';
+import { Sparkles, AlertCircle, AlertTriangle, Info, Loader2, CheckCircle } from 'lucide-react';
 
 /**
  * @typedef {Object} AnalysisPanelProps
@@ -24,8 +25,29 @@ function AnalysisPanel({ projectId, isOpen, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [analysisResult, setAnalysisResult] = useState(/** @type {any} */ (null));
+  const [successMessage, setSuccessMessage] = useState(/** @type {string | null} */ (null));
   const modalRef = useRef(null);
   useFocusTrap(modalRef, isOpen);
+
+  const handleApplyRecommendation = async (recommendation) => {
+    try {
+      const response = await api.post(`/project/${projectId}/apply-recommendation`, {
+        recommendation_id: recommendation.id
+      });
+
+      if (response.data.success) {
+        setSuccessMessage(response.data.message);
+        // Перезапускаем анализ чтобы обновить рекомендации
+        setTimeout(() => {
+          setSuccessMessage(null);
+          runAnalysis(activeTab);
+        }, 2000);
+      }
+    } catch (err) {
+      console.error('Apply recommendation error:', err);
+      setError(/** @type {any} */ (err).response?.data?.detail || 'Не удалось применить рекомендацию');
+    }
+  };
 
   /**
    * @param {'full' | 'validation' | 'similarity'} type
@@ -120,6 +142,13 @@ function AnalysisPanel({ projectId, isOpen, onClose }) {
             </div>
           )}
 
+          {successMessage && (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
+              <CheckCircle className="w-5 h-5" />
+              <p className="text-sm font-medium">{successMessage}</p>
+            </div>
+          )}
+
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
               <p className="font-medium">Ошибка</p>
@@ -142,13 +171,25 @@ function AnalysisPanel({ projectId, isOpen, onClose }) {
           {!loading && !error && analysisResult && (
             <>
               {analysisResult.type === 'full' && (
-                <FullAnalysisResult data={analysisResult.data} />
+                <FullAnalysisResult
+                  data={analysisResult.data}
+                  projectId={projectId}
+                  onRecommendationApply={handleApplyRecommendation}
+                />
               )}
               {analysisResult.type === 'validation' && (
-                <ValidationResult data={analysisResult.data} />
+                <ValidationResult
+                  data={analysisResult.data}
+                  projectId={projectId}
+                  onRecommendationApply={handleApplyRecommendation}
+                />
               )}
               {analysisResult.type === 'similarity' && (
-                <SimilarityResult data={analysisResult.data} />
+                <SimilarityResult
+                  data={analysisResult.data}
+                  projectId={projectId}
+                  onRecommendationApply={handleApplyRecommendation}
+                />
               )}
             </>
           )}
@@ -212,7 +253,124 @@ function ScoreBadge({ score }) {
   );
 }
 
-function FullAnalysisResult({ data }) {
+function ActionableRecommendations({ recommendations, projectId, onApply }) {
+  const [applyingId, setApplyingId] = useState(null);
+
+  const getSeverityColor = (severity) => {
+    switch(severity) {
+      case 'error': return 'border-red-300 bg-red-50';
+      case 'warning': return 'border-yellow-300 bg-yellow-50';
+      case 'info': return 'border-blue-300 bg-blue-50';
+      default: return 'border-gray-300 bg-gray-50';
+    }
+  };
+
+  const getSeverityIcon = (severity) => {
+    switch(severity) {
+      case 'error': return <AlertCircle className="w-5 h-5 text-red-600" />;
+      case 'warning': return <AlertTriangle className="w-5 h-5 text-yellow-600" />;
+      case 'info': return <Info className="w-5 h-5 text-blue-600" />;
+      default: return <Sparkles className="w-5 h-5 text-gray-600" />;
+    }
+  };
+
+  const getActionLabel = (actionType) => {
+    const labels = {
+      'add_description': 'Добавить описания',
+      'add_criteria': 'Добавить критерии',
+      'merge_stories': 'Объединить истории',
+      'improve_story': 'Улучшить истории',
+      'move_story': 'Переместить истории',
+      'split_story': 'Разделить историю',
+      'delete_story': 'Удалить историю'
+    };
+    return labels[actionType] || 'Применить';
+  };
+
+  const handleApply = async (recommendation) => {
+    setApplyingId(recommendation.id);
+    try {
+      await onApply(recommendation);
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
+  if (!recommendations || recommendations.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-3">
+      <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+        <Sparkles className="w-5 h-5 text-purple-600" />
+        Рекомендуемые действия ({recommendations.length})
+      </h4>
+
+      {recommendations.map((rec) => (
+        <div
+          key={rec.id}
+          className={`border-2 rounded-lg p-4 ${getSeverityColor(rec.severity)}`}
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 mt-0.5">
+              {getSeverityIcon(rec.severity)}
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <h5 className="font-semibold text-gray-900 mb-1">
+                {rec.title}
+              </h5>
+              <p className="text-sm text-gray-700 mb-2">
+                {rec.description}
+              </p>
+
+              {rec.impact && (
+                <p className="text-xs text-gray-600 italic mb-3">
+                  💡 {rec.impact}
+                </p>
+              )}
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleApply(rec)}
+                  disabled={applyingId === rec.id}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm font-medium rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-2"
+                >
+                  {applyingId === rec.id ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Применяем...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      <span>{getActionLabel(rec.action_type)}</span>
+                    </>
+                  )}
+                </button>
+
+                {rec.story_ids && rec.story_ids.length > 0 && (
+                  <span className="text-xs text-gray-500">
+                    Затронет {rec.story_ids.length} {rec.story_ids.length === 1 ? 'историю' : 'историй'}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FullAnalysisResult({ data, projectId, onRecommendationApply }) {
+  // Собираем все actionable рекомендации
+  const allRecommendations = [
+    ...(data.validation?.actionable_recommendations || []),
+    ...(data.similarity?.actionable_recommendations || [])
+  ];
+
   return (
     <div className="space-y-6">
       {/* Summary */}
@@ -225,6 +383,25 @@ function FullAnalysisResult({ data }) {
         </div>
         <p className="text-gray-600">{data.summary}</p>
       </div>
+
+      {/* Actionable Recommendations */}
+      {allRecommendations.length > 0 && (
+        <div className="border border-purple-200 rounded-xl overflow-hidden bg-gradient-to-r from-purple-50 to-blue-50">
+          <div className="bg-gradient-to-r from-purple-100 to-blue-100 px-4 py-3 border-b border-purple-200">
+            <h4 className="font-medium text-gray-800 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-600" />
+              Рекомендуемые действия
+            </h4>
+          </div>
+          <div className="p-4">
+            <ActionableRecommendations
+              recommendations={allRecommendations}
+              projectId={projectId}
+              onApply={onRecommendationApply}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Validation Section */}
       <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -249,7 +426,7 @@ function FullAnalysisResult({ data }) {
   );
 }
 
-function ValidationResult({ data, compact = false }) {
+function ValidationResult({ data, compact = false, projectId, onRecommendationApply }) {
   const severityColors = {
     error: 'bg-red-50 border-red-200 text-red-700',
     warning: 'bg-yellow-50 border-yellow-200 text-yellow-700',
@@ -324,6 +501,15 @@ function ValidationResult({ data, compact = false }) {
         </div>
       )}
 
+      {/* Actionable Recommendations */}
+      {!compact && data.actionable_recommendations && data.actionable_recommendations.length > 0 && (
+        <ActionableRecommendations
+          recommendations={data.actionable_recommendations}
+          projectId={projectId}
+          onApply={onRecommendationApply}
+        />
+      )}
+
       {/* Рекомендации */}
       {data.recommendations?.length > 0 && !compact && (
         <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-100">
@@ -341,7 +527,7 @@ function ValidationResult({ data, compact = false }) {
   );
 }
 
-function SimilarityResult({ data, compact = false }) {
+function SimilarityResult({ data, compact = false, projectId, onRecommendationApply }) {
   const hasDuplicates = data.similar_groups?.some(g => g.group_type === 'duplicate');
   const hasSimilar = data.similar_groups?.some(g => g.group_type === 'similar');
 
@@ -367,6 +553,15 @@ function SimilarityResult({ data, compact = false }) {
         />
       </div>
 
+      {/* Actionable Recommendations */}
+      {!compact && data.actionable_recommendations && data.actionable_recommendations.length > 0 && (
+        <ActionableRecommendations
+          recommendations={data.actionable_recommendations}
+          projectId={projectId}
+          onApply={onRecommendationApply}
+        />
+      )}
+
       {/* Сообщение если всё ок */}
       {!hasDuplicates && !hasSimilar && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
@@ -381,7 +576,7 @@ function SimilarityResult({ data, compact = false }) {
           {data.similar_groups.slice(0, compact ? 2 : 10).map((group, idx) => (
             <SimilarityGroup key={idx} group={group} />
           ))}
-          
+
           {compact && data.similar_groups.length > 2 && (
             <p className="text-sm text-gray-500 text-center">
               ...и ещё {data.similar_groups.length - 2} групп
