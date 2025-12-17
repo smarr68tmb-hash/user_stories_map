@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import StoryMapModals from './components/story-map/StoryMapModals';
 import StoryMapSkeleton from './components/story-map/StoryMapSkeleton';
@@ -5,9 +6,12 @@ import FilterPanel from './components/story-map/FilterPanel';
 import SearchPanel from './components/story-map/SearchPanel';
 import StoryMapBoard from './components/story-map/StoryMapBoard';
 import WireframePanel from './components/story-map/WireframePanel';
+import ViewToggle from './components/story-map/ViewToggle';
+import EpicBreakdownView from './components/story-map/EpicBreakdownView';
 import useActivities from './hooks/useActivities';
 import useTasks from './hooks/useTasks';
 import useStories from './hooks/useStories';
+import { useEpics } from './hooks/useEpics';
 import useDnD from './hooks/useDnD';
 import useStoryMapFilters from './hooks/useStoryMapFilters';
 import useStoryMapDrag from './hooks/useStoryMapDrag';
@@ -22,9 +26,12 @@ const ACTIVITY_PADDING_COLUMNS = 1;
 function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
   const toast = useToast();
   const { refreshProject, isRefreshing } = useProjectRefreshContext();
+  const [viewMode, setViewMode] = useState('storyMap'); // 'storyMap' | 'epic'
+  
   const activitiesApi = useActivities({ project, onUpdate, refreshProject, onUnauthorized, toast });
   const tasksApi = useTasks({ project, onUpdate, refreshProject, onUnauthorized, toast });
   const storiesApi = useStories({ project, onUpdate, refreshProject, onUnauthorized, toast });
+  const epicsApi = useEpics({ project, refreshProject, onUnauthorized, toast });
 
   const {
     createActivity,
@@ -149,36 +156,70 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
     );
   }
 
+  // Рендерим Epic View или Story Map View
+  const renderContentView = () => {
+    if (viewMode === 'epic') {
+      return (
+        <EpicBreakdownView
+          epics={epicsApi.epics}
+          project={project}
+          onGenerateEpics={epicsApi.generateEpics}
+          onUpdateEpic={epicsApi.updateEpic}
+          onAddStoryToEpic={epicsApi.addStoryToEpic}
+          onRemoveStoryFromEpic={epicsApi.removeStoryFromEpic}
+          onAcceptEpic={epicsApi.acceptEpic}
+          onRejectEpic={epicsApi.rejectEpic}
+          loading={epicsApi.loading}
+          generatingEpics={epicsApi.loading.generate}
+        />
+      );
+    }
+
+    // Story Map View (по умолчанию)
+    return (
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <div className="mb-4 flex flex-col gap-3">
+          <FilterPanel
+            statusFilter={statusFilter}
+            releaseFilter={releaseFilter}
+            releases={project.releases}
+            onToggleStatus={toggleStatus}
+            onToggleRelease={toggleRelease}
+            onReset={handleResetFilters}
+          />
+          <SearchPanel
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onOpenAnalysis={() => setAnalysisPanelOpen(true)}
+            isRefreshing={isRefreshing}
+            statusSummary={{ shown: statusFilter.length, total: STATUS_OPTIONS.length }}
+            releaseSummary={{ shown: releaseFilter.length, total: project.releases.length }}
+          />
+          <WireframePanel project={project} refreshProject={refreshProject} toast={toast} />
+        </div>
+
+        <StoryMapBoard
+          filteredProject={filteredProject}
+          activityWidths={activityWidths}
+          taskColumnWidth={TASK_COLUMN_WIDTH}
+          activityHeaderProps={activityHeaderProps}
+          releaseRowProps={releaseRowProps}
+        />
+      </DndContext>
+    );
+  };
+
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <div className="mb-4 flex flex-col gap-3">
-        <FilterPanel
-          statusFilter={statusFilter}
-          releaseFilter={releaseFilter}
-          releases={project.releases}
-          onToggleStatus={toggleStatus}
-          onToggleRelease={toggleRelease}
-          onReset={handleResetFilters}
-        />
-        <SearchPanel
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          onOpenAnalysis={() => setAnalysisPanelOpen(true)}
-          isRefreshing={isRefreshing}
-          statusSummary={{ shown: statusFilter.length, total: STATUS_OPTIONS.length }}
-          releaseSummary={{ shown: releaseFilter.length, total: project.releases.length }}
-        />
-        <WireframePanel project={project} refreshProject={refreshProject} toast={toast} />
+    <>
+      {/* View Toggle - показываем всегда */}
+      <div className="mb-4">
+        <ViewToggle viewMode={viewMode} onViewChange={setViewMode} />
       </div>
 
-      <StoryMapBoard
-        filteredProject={filteredProject}
-        activityWidths={activityWidths}
-        taskColumnWidth={TASK_COLUMN_WIDTH}
-        activityHeaderProps={activityHeaderProps}
-        releaseRowProps={releaseRowProps}
-      />
+      {/* Основной контент в зависимости от выбранного вида */}
+      {renderContentView()}
 
+      {/* Модальные окна - показываем всегда */}
       <StoryMapModals
         editingStory={editingStory}
         editingStoryTaskId={editingStoryTaskId}
@@ -197,7 +238,7 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
         onCloseAnalysis={() => setAnalysisPanelOpen(false)}
         projectId={project.id}
       />
-    </DndContext>
+    </>
   );
 }
 

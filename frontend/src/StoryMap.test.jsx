@@ -50,6 +50,20 @@ vi.mock('./hooks/useStories', () => ({
   }),
 }));
 
+vi.mock('./hooks/useEpics', () => ({
+  useEpics: () => ({
+    epics: [],
+    loading: { generate: false, fetch: false, update: {}, addStory: {}, removeStory: {}, accept: {}, reject: {} },
+    generateEpics: vi.fn(),
+    updateEpic: vi.fn(),
+    addStoryToEpic: vi.fn(),
+    removeStoryFromEpic: vi.fn(),
+    acceptEpic: vi.fn(),
+    rejectEpic: vi.fn(),
+    fetchEpics: vi.fn(),
+  }),
+}));
+
 vi.mock('./hooks/useDnD', () => ({
   __esModule: true,
   default: () => ({
@@ -116,6 +130,16 @@ vi.mock('./components/story-map/StoryMapSkeleton', () => ({
 vi.mock('./components/story-map/StoryMapModals', () => ({
   __esModule: true,
   default: () => <div data-testid="storymap-modals" />,
+}));
+
+vi.mock('./components/story-map/ViewToggle', () => ({
+  __esModule: true,
+  default: () => <div data-testid="view-toggle" />,
+}));
+
+vi.mock('./components/story-map/EpicBreakdownView', () => ({
+  __esModule: true,
+  default: () => <div data-testid="epic-breakdown-view" />,
 }));
 
 const baseProject = {

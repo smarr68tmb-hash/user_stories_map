@@ -22,6 +22,7 @@ export interface Story {
   priority?: Priority | null;
   acceptance_criteria?: string[] | null;
   release_id: number | null;
+  epic_id?: number | null;
   position?: number | null;
   status?: Status | null;
 }
@@ -115,5 +116,40 @@ export interface StoryPayload {
   priority?: Priority;
   acceptance_criteria?: string[];
   status?: Status;
+}
+
+export interface Epic {
+  id: number;
+  project_id: number;
+  title: string;
+  description?: string | null;
+  confidence_score: number;
+  position: number;
+  created_at: string;
+  updated_at: string;
+  stories_count?: number;
+}
+
+export interface EpicWithStories extends Epic {
+  stories: Story[];
+}
+
+export interface EpicGenerateRequest {
+  min_epics?: number;
+  max_epics?: number;
+}
+
+export interface EpicGenerateResponse {
+  success: boolean;
+  message: string;
+  epics: Epic[];
+  total_stories_grouped: number;
+  ungrouped_stories_count: number;
+}
+
+export interface EpicUpdate {
+  title?: string;
+  description?: string | null;
+  position?: number;
 }
 
