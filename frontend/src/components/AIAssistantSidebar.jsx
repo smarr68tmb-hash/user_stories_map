@@ -13,9 +13,9 @@
  */
 
 import { useState } from 'react';
-import { Bot, ChevronRight, ChevronLeft, AlertTriangle, CheckCircle2, AlertCircle, Sparkles, TrendingUp } from 'lucide-react';
+import { Bot, ChevronRight, ChevronLeft, AlertTriangle, CheckCircle2, AlertCircle, Sparkles, TrendingUp, Loader2 } from 'lucide-react';
 
-export function AIAssistantSidebar({ project, analysisResults, onRunFullAnalysis }) {
+export function AIAssistantSidebar({ project, analysisResults, onRunFullAnalysis, isAnalyzing = false }) {
   const [isExpanded, setIsExpanded] = useState(true);
 
   // If no analysis results yet, show minimal state
@@ -71,6 +71,30 @@ export function AIAssistantSidebar({ project, analysisResults, onRunFullAnalysis
           </div>
 
           {/* Analysis Summary */}
+          {!analysisResults && (
+            <div className="mb-6">
+              <div className="p-4 bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200 rounded-lg text-center">
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 className="w-8 h-8 mx-auto mb-2 text-purple-600 animate-spin" />
+                    <p className="text-sm text-gray-700 font-medium mb-1">Анализируем карту...</p>
+                    <p className="text-xs text-gray-600">
+                      Проверяем качество и ищем проблемы
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-4xl mb-2">🔍</div>
+                    <p className="text-sm text-gray-700 font-medium mb-1">Анализ не запущен</p>
+                    <p className="text-xs text-gray-600">
+                      Нажмите "Полный анализ" для проверки карты
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {analysisResults && (
             <div className="mb-6">
               <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -219,9 +243,17 @@ export function AIAssistantSidebar({ project, analysisResults, onRunFullAnalysis
               {onRunFullAnalysis && (
                 <button
                   onClick={onRunFullAnalysis}
-                  className="w-full px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm font-medium rounded-lg hover:from-purple-700 hover:to-blue-700 transition shadow-sm"
+                  disabled={isAnalyzing}
+                  className="w-full px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm font-medium rounded-lg hover:from-purple-700 hover:to-blue-700 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Полный анализ
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Анализируем...</span>
+                    </>
+                  ) : (
+                    <span>Полный анализ</span>
+                  )}
                 </button>
               )}
 

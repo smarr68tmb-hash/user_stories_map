@@ -74,7 +74,10 @@ function AppContent() {
   
   // Состояние для полного анализа
   const [isRunningFullAnalysis, setIsRunningFullAnalysis] = useState(false);
-  
+
+  // Локальное состояние для analysisResults (независимо от streaming)
+  const [localAnalysisResults, setLocalAnalysisResults] = useState(null);
+
   // Обработчик запуска полного анализа
   const handleRunFullAnalysis = useCallback(async () => {
     if (!project || !project.id) {
@@ -101,13 +104,11 @@ function AppContent() {
         issues: fullAnalysis.validation?.issues || [],
         totalIssues: fullAnalysis.validation?.issues?.length || 0
       };
-      
-      // Обновляем analysisResults через setAnalysisResults из hook
-      // Но так как analysisResults приходит из useStreamingGeneration,
-      // мы не можем напрямую его обновить. Вместо этого покажем результат в toast
+
+      // Обновляем локальное состояние analysisResults
+      setLocalAnalysisResults(updatedAnalysisResults);
+
       toast.success(`Анализ завершен! Оценка: ${fullAnalysis.overall_score}/100`);
-      
-      // Можно открыть модальное окно с результатами или обновить sidebar
       console.log('Full analysis result:', fullAnalysis);
     } catch (error) {
       console.error('Full analysis error:', error);
@@ -116,20 +117,23 @@ function AppContent() {
     } finally {
       setIsRunningFullAnalysis(false);
     }
-  }, [project, toast]);
+  }, [project, toast, setLocalAnalysisResults]);
 
   // SSE Streaming hook (Phase 1)
   const {
     progress: streamProgress,
     stage: streamStage,
-    analysisResults,
+    analysisResults: streamingAnalysisResults,
     stats: streamStats,
     isStreaming,
     error: streamError,
     generateWithStreaming,
     cancelStreaming
   } = useStreamingGeneration();
-  
+
+  // Merged analysis results: приоритет у localAnalysisResults
+  const analysisResults = localAnalysisResults || streamingAnalysisResults;
+
   // Редактирование названия проекта
   const [isEditingProjectName, setIsEditingProjectName] = useState(false);
   const [editedProjectName, setEditedProjectName] = useState('');
@@ -217,6 +221,7 @@ function AppContent() {
     await auth.logout();
     setUser(null);
     setProject(null);
+    setLocalAnalysisResults(null);
     setInput('');
     setView('list');
     setDemoMode(false);
@@ -564,6 +569,7 @@ function AppContent() {
   const handleCreateNew = () => {
     setView('create');
     setProject(null);
+    setLocalAnalysisResults(null);
     setInput('');
     setError(null);
   };
@@ -571,6 +577,7 @@ function AppContent() {
   const handleBackToList = () => {
     setView('list');
     setProject(null);
+    setLocalAnalysisResults(null);
     setInput('');
     setError(null);
     localStorage.removeItem('draft_requirements');
@@ -1233,6 +1240,7 @@ function ProjectPage({
             project={project}
             analysisResults={analysisResults}
             onRunFullAnalysis={handleRunFullAnalysis}
+            isAnalyzing={isRunningFullAnalysis}
           />
         )}
       </div>
