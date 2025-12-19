@@ -700,6 +700,7 @@ function AppContent() {
           analysisResults={analysisResults}
           toast={toast}
           handleRunFullAnalysis={handleRunFullAnalysis}
+          isRunningFullAnalysis={isRunningFullAnalysis}
         />
       </ProjectRefreshProvider>
       </>
@@ -1075,6 +1076,7 @@ function ProjectPage({
   analysisResults,
   toast,
   handleRunFullAnalysis,
+  isRunningFullAnalysis,
 }) {
   const { isRefreshing, refreshProject } = useProjectRefreshContext();
   const [isMapLoading, setIsMapLoading] = useState(true);
