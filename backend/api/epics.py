@@ -9,6 +9,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from utils.database import get_db
+from utils import ResourceAccessValidator, ResponseFormatter, RedisManager
 from models import User, Project, Epic, UserStory, UserTask, Activity
 from schemas import (
     EpicResponse,
@@ -28,60 +29,8 @@ limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
 
 
-def get_redis_client():
-    """Получает Redis клиент или возвращает None если недоступен"""
-    try:
-        import redis
-        if settings.REDIS_URL:
-            redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
-            redis_client.ping()  # Проверка соединения
-            return redis_client
-    except Exception:
-        pass
-    return None
-
-
-def get_project_for_user(project_id: int, user_id: int, db: Session) -> Project:
-    """Получает проект пользователя или выбрасывает 404"""
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id)
-        .filter(Project.user_id == user_id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
-
-
-def get_epic_for_user(epic_id: int, user_id: int, db: Session) -> Epic:
-    """Получает эпик пользователя или выбрасывает 404"""
-    epic = (
-        db.query(Epic)
-        .join(Project)
-        .filter(Epic.id == epic_id)
-        .filter(Project.user_id == user_id)
-        .first()
-    )
-    if not epic:
-        raise HTTPException(status_code=404, detail="Epic not found")
-    return epic
-
-
-def get_story_for_user(story_id: int, user_id: int, db: Session) -> UserStory:
-    """Получает историю пользователя или выбрасывает 404"""
-    story = (
-        db.query(UserStory)
-        .join(UserTask)
-        .join(Activity)
-        .join(Project)
-        .filter(UserStory.id == story_id)
-        .filter(Project.user_id == user_id)
-        .first()
-    )
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
-    return story
+# Используем классы-хелперы вместо отдельных функций
+# Это упрощает код и делает его более организованным, аналогично тестам
 
 
 @router.post("/project/{project_id}/epics/generate", response_model=EpicGenerateResponse)
@@ -98,8 +47,9 @@ def generate_epics(
     
     Rate limit: 10 запросов в час
     """
-    # Получаем проект
-    project = get_project_for_user(project_id, current_user.id, db)
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project(project_id)
     
     # Валидация min/max
     if req.min_epics > req.max_epics:
@@ -131,8 +81,8 @@ def generate_epics(
             detail=f"Not enough stories ({len(stories)}) for {req.min_epics} epics. Minimum {req.min_epics} stories required."
         )
     
-    # Получаем Redis клиент
-    redis_client = get_redis_client()
+    # Используем RedisManager для работы с Redis
+    redis_client = RedisManager.get_client()
     
     try:
         # Группируем истории в эпики
@@ -196,8 +146,9 @@ def get_project_epics(
     db: Session = Depends(get_db)
 ):
     """Получает все эпики проекта с историями"""
-    # Получаем проект
-    project = get_project_for_user(project_id, current_user.id, db)
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project(project_id)
     
     # Получаем все эпики проекта
     epics = (
@@ -208,23 +159,11 @@ def get_project_epics(
         .all()
     )
     
-    # Формируем ответ
+    # Используем ResponseFormatter для форматирования ответов
+    formatter = ResponseFormatter()
     result = []
     for epic in epics:
-        stories_data = [
-            StoryResponse(
-                id=story.id,
-                title=story.title,
-                description=story.description,
-                priority=story.priority,
-                acceptance_criteria=story.acceptance_criteria or [],
-                release_id=story.release_id,
-                epic_id=story.epic_id,
-                position=story.position,
-                status=story.status or "todo"
-            )
-            for story in epic.stories
-        ]
+        stories_data = formatter.format_stories(epic.stories)
         
         result.append(EpicWithStoriesResponse(
             id=epic.id,
@@ -249,7 +188,9 @@ def update_epic(
     db: Session = Depends(get_db)
 ):
     """Редактирует эпик (title, description, position)"""
-    epic = get_epic_for_user(epic_id, current_user.id, db)
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    epic = validator.get_epic(epic_id)
     
     # Обновляем поля
     if epic_update.title is not None:
@@ -283,15 +224,13 @@ def add_story_to_epic(
     db: Session = Depends(get_db)
 ):
     """Добавляет историю в эпик"""
-    epic = get_epic_for_user(epic_id, current_user.id, db)
-    story = get_story_for_user(story_id, current_user.id, db)
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    epic = validator.get_epic(epic_id)
+    story = validator.get_story(story_id)
     
     # Проверяем, что история из того же проекта
-    if story.task.activity.project_id != epic.project_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Story and epic must belong to the same project"
-        )
+    validator.verify_same_project(story, epic)
     
     # Проверка на дубликат
     if story.epic_id is not None and story.epic_id != epic_id:
@@ -315,8 +254,10 @@ def remove_story_from_epic(
     db: Session = Depends(get_db)
 ):
     """Убирает историю из эпика"""
-    epic = get_epic_for_user(epic_id, current_user.id, db)
-    story = get_story_for_user(story_id, current_user.id, db)
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    epic = validator.get_epic(epic_id)
+    story = validator.get_story(story_id)
     
     # Проверяем, что история действительно в этом эпике
     if story.epic_id != epic.id:
@@ -343,7 +284,9 @@ def accept_epic(
     По сути, это просто подтверждение - эпик уже создан в БД.
     Можно использовать для логирования или будущих функций.
     """
-    epic = get_epic_for_user(epic_id, current_user.id, db)
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    epic = validator.get_epic(epic_id)
     
     # Эпик уже сохранен, просто возвращаем успех
     logger.info(f"User {current_user.id} accepted epic {epic_id}")
@@ -366,7 +309,9 @@ def reject_epic(
     Отклоняет эпик - убирает все истории из эпика и удаляет сам эпик.
     Истории остаются в проекте, но без привязки к эпику.
     """
-    epic = get_epic_for_user(epic_id, current_user.id, db)
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    epic = validator.get_epic(epic_id)
     
     # Убираем все истории из эпика
     for story in epic.stories:
