@@ -2,7 +2,6 @@
 User Story CRUD endpoints
 """
 import logging
-from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -10,6 +9,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from utils.database import get_db
+from utils import ResourceAccessValidator, ResponseFormatter, RedisManager
 from models import User, UserStory, UserTask, Activity, Project, Release
 from schemas import (
     StoryCreate, 
@@ -24,7 +24,6 @@ from schemas import (
 )
 from dependencies import get_current_active_user
 from services import ai_improve_story_content
-from config import settings
 
 router = APIRouter(prefix="", tags=["stories"])
 limiter = Limiter(key_func=get_remote_address)
@@ -47,52 +46,8 @@ def _find_release_by_priority(db: Session, project_id: int, priority: str):
     )
 
 
-def _get_story_for_user(db: Session, story_id: int, user_id: int) -> Optional[UserStory]:
-    """Возвращает историю, если она принадлежит пользователю, иначе None."""
-    return (
-        db.query(UserStory)
-        .join(UserTask)
-        .join(Activity)
-        .join(Project)
-        .filter(UserStory.id == story_id)
-        .filter(Project.user_id == user_id)
-        .first()
-    )
-
-
-def _require_story_for_user(db: Session, story_id: int, user_id: int) -> UserStory:
-    """Возвращает историю или выбрасывает 404 если не найдена/нет доступа."""
-    story = _get_story_for_user(db, story_id, user_id)
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found or access denied")
-    return story
-
-
-def _serialize_story(story: UserStory) -> StoryResponse:
-    """Единая точка сериализации UserStory -> StoryResponse."""
-    return StoryResponse(
-        id=story.id,
-        title=story.title,
-        description=story.description,
-        priority=story.priority,
-        acceptance_criteria=story.acceptance_criteria or [],
-        release_id=story.release_id,
-        position=story.position,
-        status=story.status or "todo"
-    )
-
-
-def _get_redis_client():
-    """Инициализирует Redis клиент, возвращает None при ошибке."""
-    redis_client = None
-    try:
-        import redis
-        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
-        redis_client.ping()
-    except Exception as e:
-        logger.warning(f"Redis not available: {e}")
-        redis_client = None
-    return redis_client
+# Используем классы-хелперы вместо отдельных функций
+# Это упрощает код и делает его более организованным, аналогично тестам
 
 
 def _story_to_ai_payload(story: UserStory) -> dict:
@@ -114,16 +69,9 @@ def create_story(
     db: Session = Depends(get_db)
 ):
     """Создает новую пользовательскую историю"""
-    # Проверяем существование task и владельца проекта
-    task = db.query(UserTask)\
-        .join(Activity)\
-        .join(Project)\
-        .filter(UserTask.id == story.task_id)\
-        .filter(Project.user_id == current_user.id)\
-        .first()
-    
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found or access denied")
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    task = validator.get_task(story.task_id)
 
     project_id = task.activity.project_id if task.activity else None
 
@@ -162,7 +110,9 @@ def create_story(
     db.commit()
     db.refresh(new_story)
     
-    return _serialize_story(new_story)
+    # Используем ResponseFormatter для форматирования ответа
+    formatter = ResponseFormatter()
+    return formatter.format_story(new_story)
 
 
 @router.put("/story/{story_id}", response_model=StoryResponse)
@@ -175,7 +125,9 @@ def update_story(
     db: Session = Depends(get_db)
 ):
     """Обновляет существующую пользовательскую историю"""
-    story = _require_story_for_user(db, story_id, current_user.id)
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    story = validator.get_story(story_id)
 
     project_id = story.task.activity.project_id if story.task and story.task.activity else None
 
@@ -211,7 +163,9 @@ def update_story(
     db.commit()
     db.refresh(story)
     
-    return _serialize_story(story)
+    # Используем ResponseFormatter для форматирования ответа
+    formatter = ResponseFormatter()
+    return formatter.format_story(story)
 
 
 @router.delete("/story/{story_id}")
@@ -223,7 +177,9 @@ def delete_story(
     db: Session = Depends(get_db)
 ):
     """Удаляет пользовательскую историю"""
-    story = _require_story_for_user(db, story_id, current_user.id)
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    story = validator.get_story(story_id)
     
     task_id = story.task_id
     release_id = story.release_id
@@ -257,18 +213,10 @@ def move_story(
     db: Session = Depends(get_db)
 ):
     """Перемещает пользовательскую историю в другую ячейку"""
-    story = _require_story_for_user(db, story_id, current_user.id)
-    
-    # Проверяем существование task и владельца для целевой ячейки
-    task = db.query(UserTask)\
-        .join(Activity)\
-        .join(Project)\
-        .filter(UserTask.id == move.task_id)\
-        .filter(Project.user_id == current_user.id)\
-        .first()
-    
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found or access denied")
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    story = validator.get_story(story_id)
+    task = validator.get_task(move.task_id)
     
     # Если release_id указан, проверяем его существование
     release = None
@@ -303,7 +251,9 @@ def move_story(
         db.commit()
         db.refresh(story)
 
-        return _serialize_story(story)
+        # Используем ResponseFormatter для форматирования ответа
+        formatter = ResponseFormatter()
+        return formatter.format_story(story)
     
     # Если перемещаем в другую ячейку, обновляем позиции в старой ячейке
     if old_task_id != move.task_id or old_release_id != target_release_id:
@@ -339,7 +289,9 @@ def move_story(
     db.commit()
     db.refresh(story)
     
-    return _serialize_story(story)
+    # Используем ResponseFormatter для форматирования ответа
+    formatter = ResponseFormatter()
+    return formatter.format_story(story)
 
 
 @router.patch("/story/{story_id}/status", response_model=StoryResponse)
@@ -352,13 +304,17 @@ def update_story_status(
     db: Session = Depends(get_db)
 ):
     """Быстрое обновление статуса истории (todo -> in_progress -> done)"""
-    story = _require_story_for_user(db, story_id, current_user.id)
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    story = validator.get_story(story_id)
     
     story.status = status_update.status
     db.commit()
     db.refresh(story)
     
-    return _serialize_story(story)
+    # Используем ResponseFormatter для форматирования ответа
+    formatter = ResponseFormatter()
+    return formatter.format_story(story)
 
 
 @router.post("/story/{story_id}/ai-improve", response_model=AIImproveResponse)
@@ -379,8 +335,12 @@ def ai_improve_story(
     - 'split': Разделить на несколько историй
     - 'edge_cases': Добавить edge cases
     """
-    story = _require_story_for_user(db, story_id, current_user.id)
-    redis_client = _get_redis_client()
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    story = validator.get_story(story_id)
+    
+    # Используем RedisManager для работы с Redis
+    redis_client = RedisManager.get_client()
     story_data = _story_to_ai_payload(story)
     
     try:
@@ -413,10 +373,12 @@ def ai_improve_story(
             db.commit()
             db.refresh(story)
             
+            # Используем ResponseFormatter для форматирования ответа
+            formatter = ResponseFormatter()
             return AIImproveResponse(
                 success=True,
                 message="История успешно улучшена",
-                improved_story=_serialize_story(story),
+                improved_story=formatter.format_story(story),
                 additional_stories=None,
                 suggestion=ai_result.get('suggestion', '')
             )
@@ -451,7 +413,11 @@ def ai_bulk_improve_stories(
             detail="Maximum 10 stories can be improved at once"
         )
     
-    redis_client = _get_redis_client()
+    # Используем RedisManager для работы с Redis
+    redis_client = RedisManager.get_client()
+    
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
     
     improved_count = 0
     failed_count = 0
@@ -459,8 +425,10 @@ def ai_bulk_improve_stories(
     
     for story_id in bulk_request.story_ids:
         try:
-            story = _get_story_for_user(db, story_id, current_user.id)
-            if not story:
+            # Пытаемся получить историю, если нет доступа - пропускаем
+            try:
+                story = validator.get_story(story_id)
+            except HTTPException:
                 details.append({
                     'story_id': story_id,
                     'success': False,
