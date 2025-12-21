@@ -66,7 +66,7 @@ class TestStreamingGeneration:
     @pytest.fixture
     def mock_redis(self):
         """Mock Redis client."""
-        with patch('services.streaming_service.get_redis_client') as mock:
+        with patch('services.streaming_service.RedisManager.get_client') as mock:
             redis_mock = MagicMock()
             mock.return_value = redis_mock
             yield redis_mock

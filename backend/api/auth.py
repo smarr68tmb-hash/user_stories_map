@@ -156,7 +156,13 @@ def refresh_token_endpoint(
     if refresh_token.revoked:
         raise HTTPException(status_code=401, detail="Token revoked")
     
-    if refresh_token.expires_at < datetime.now(timezone.utc):
+    # Нормализуем expires_at к UTC, если он naive (без timezone)
+    expires_at = refresh_token.expires_at
+    if expires_at.tzinfo is None:
+        # Если datetime без timezone, предполагаем UTC
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    
+    if expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=401, detail="Token expired")
     
     # Генерируем новый access token

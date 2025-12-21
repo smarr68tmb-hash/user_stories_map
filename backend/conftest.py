@@ -5,16 +5,20 @@ Provides:
 - Database fixtures (in-memory SQLite for tests)
 - Mock Redis client
 - Common test data fixtures
+- FastAPI TestClient fixtures
 """
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock, MagicMock, patch
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
+from fastapi.testclient import TestClient
+from jose import jwt
 
 # Import только models - без main.py (избегаем циклических зависимостей)
 from models import Base, User, RefreshToken, Project, Activity, UserTask, Release, UserStory, Epic
 from services.auth_service import get_password_hash
+from config import settings
 
 
 # ============================================================================
@@ -351,3 +355,99 @@ def disable_rate_limiting(monkeypatch):
     """
     # Можно добавить патчи для rate limiter если нужно
     pass
+
+
+# ============================================================================
+# FastAPI TestClient Fixtures
+# ============================================================================
+
+@pytest.fixture
+def client(db_session):
+    """
+    FastAPI TestClient для интеграционных тестов.
+    
+    Usage:
+        def test_endpoint(client):
+            response = client.get("/endpoint")
+            assert response.status_code == 200
+    """
+    # Импортируем app здесь, чтобы избежать циклических зависимостей
+    from main import app
+    
+    # Переопределяем зависимость get_db для использования тестовой БД
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass  # Не закрываем сессию, она управляется фикстурой
+    
+    app.dependency_overrides = {}
+    from utils.database import get_db
+    app.dependency_overrides[get_db] = override_get_db
+    
+    with TestClient(app) as test_client:
+        yield test_client
+    
+    # Очищаем переопределения после теста
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def auth_headers(test_user):
+    """
+    Создает заголовки авторизации для тестов.
+    
+    Usage:
+        def test_protected_endpoint(client, auth_headers):
+            response = client.get("/protected", headers=auth_headers)
+    """
+    # Создаем access token для тестового пользователя
+    from datetime import timedelta
+    from services.auth_service import create_access_token
+    
+    access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(test_user.id)},
+        expires_delta=access_token_expires
+    )
+    
+    return {"Authorization": f"Bearer {access_token}"}
+
+
+@pytest.fixture
+def test_user_credentials():
+    """
+    Данные для регистрации/логина тестового пользователя.
+    """
+    return {
+        "email": "test@example.com",
+        "password": "TestPassword123!",
+        "full_name": "Test User"
+    }
+
+
+@pytest.fixture
+def registered_user(client, test_user_credentials):
+    """
+    Регистрирует пользователя и возвращает его данные.
+    """
+    response = client.post("/register", json=test_user_credentials)
+    assert response.status_code == 201
+    return test_user_credentials
+
+
+@pytest.fixture
+def refresh_token(client, registered_user):
+    """
+    Получает refresh token для тестов.
+    """
+    response = client.post(
+        "/token",
+        data={
+            "username": registered_user["email"],
+            "password": registered_user["password"]
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert response.status_code == 200
+    return response.json()["refresh_token"]

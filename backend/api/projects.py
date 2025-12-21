@@ -779,12 +779,8 @@ def create_activity(
     db.refresh(new_activity)
     
     # Возвращаем ActivityResponse с пустым списком tasks
-    return ActivityResponse(
-        id=new_activity.id,
-        title=new_activity.title,
-        position=new_activity.position,
-        tasks=[]
-    )
+    formatter = ResponseFormatter()
+    return formatter.format_activity(new_activity, include_tasks=False)
 
 
 @router.put("/activity/{activity_id}", response_model=ActivityResponse)
@@ -856,33 +852,8 @@ def update_activity(
     db.refresh(activity)
     
     # Формируем ответ с tasks
-    tasks_data = []
-    for task in activity.tasks:
-        stories_data = []
-        for story in task.stories:
-            stories_data.append(StoryResponse(
-                id=story.id,
-                title=story.title,
-                description=story.description,
-                priority=story.priority,
-                acceptance_criteria=story.acceptance_criteria or [],
-                release_id=story.release_id,
-                position=story.position,
-                status=story.status or "todo"
-            ))
-        tasks_data.append(TaskResponse(
-            id=task.id,
-            title=task.title,
-            position=task.position,
-            stories=stories_data
-        ))
-    
-    return ActivityResponse(
-        id=activity.id,
-        title=activity.title,
-        position=activity.position,
-        tasks=tasks_data
-    )
+    formatter = ResponseFormatter()
+    return formatter.format_activity(activity, include_tasks=True)
 
 
 @router.delete("/activity/{activity_id}")
@@ -993,12 +964,8 @@ def create_task(
     db.refresh(new_task)
     
     # Возвращаем TaskResponse с пустым списком stories
-    return TaskResponse(
-        id=new_task.id,
-        title=new_task.title,
-        position=new_task.position,
-        stories=[]
-    )
+    formatter = ResponseFormatter()
+    return formatter.format_task(new_task, include_stories=False)
 
 
 @router.put("/task/{task_id}", response_model=TaskResponse)
@@ -1080,25 +1047,8 @@ def update_task(
     db.refresh(task)
     
     # Формируем ответ с stories
-    stories_data = []
-    for story in task.stories:
-        stories_data.append(StoryResponse(
-            id=story.id,
-            title=story.title,
-            description=story.description,
-            priority=story.priority,
-            acceptance_criteria=story.acceptance_criteria or [],
-            release_id=story.release_id,
-            position=story.position,
-            status=story.status or "todo"
-        ))
-    
-    return TaskResponse(
-        id=task.id,
-        title=task.title,
-        position=task.position,
-        stories=stories_data
-    )
+    formatter = ResponseFormatter()
+    return formatter.format_task(task, include_stories=True)
 
 
 @router.delete("/task/{task_id}")
@@ -1179,24 +1129,8 @@ def move_task(
     # Если позиция не изменилась, ничего не делаем
     if old_position == new_position:
         db.refresh(task)
-        stories_data = []
-        for story in task.stories:
-            stories_data.append(StoryResponse(
-                id=story.id,
-                title=story.title,
-                description=story.description,
-                priority=story.priority,
-                acceptance_criteria=story.acceptance_criteria or [],
-                release_id=story.release_id,
-                position=story.position,
-                status=story.status or "todo"
-            ))
-        return TaskResponse(
-            id=task.id,
-            title=task.title,
-            position=task.position,
-            stories=stories_data
-        )
+        formatter = ResponseFormatter()
+        return formatter.format_task(task, include_stories=True)
     
     # Обновляем позиции других задач
     if new_position < old_position:
@@ -1227,23 +1161,6 @@ def move_task(
     db.refresh(task)
     
     # Формируем ответ с stories
-    stories_data = []
-    for story in task.stories:
-        stories_data.append(StoryResponse(
-            id=story.id,
-            title=story.title,
-            description=story.description,
-            priority=story.priority,
-            acceptance_criteria=story.acceptance_criteria or [],
-            release_id=story.release_id,
-            position=story.position,
-            status=story.status or "todo"
-        ))
-    
-    return TaskResponse(
-        id=task.id,
-        title=task.title,
-        position=task.position,
-        stories=stories_data
-    )
+    formatter = ResponseFormatter()
+    return formatter.format_task(task, include_stories=True)
 
