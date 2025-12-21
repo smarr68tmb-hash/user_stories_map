@@ -20,7 +20,7 @@ from config import settings
 from utils.database import SessionLocal
 from models import Project, Activity, UserTask, UserStory, Release
 from services.ai_service import generate_markdown_wireframe
-from services.queue_provider import QueueAdapter
+from services.queue_provider import get_queue_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -83,9 +83,18 @@ def enqueue_wireframe_job(project_id: int, user_id: int) -> str:
     """
     Создаёт задачу генерации wireframe.
     Возвращает job_id из выбранного адаптера очереди.
+    Использует кешированный экземпляр QueueAdapter для переиспользования соединения.
     """
+    adapter = get_queue_adapter(driver="redis")
+    
+    if adapter is None:
+        # Redis недоступен, выбрасываем исключение для fallback на синхронную генерацию
+        raise HTTPException(
+            status_code=503,
+            detail="Redis unavailable. Wireframe generation will fall back to synchronous mode."
+        )
+    
     try:
-        adapter = QueueAdapter(driver="redis")
         job = adapter.enqueue(process_wireframe_job, project_id, user_id)
         return job.id
     except HTTPException:

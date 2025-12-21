@@ -40,11 +40,11 @@ logger = logging.getLogger(__name__)
 # Lazy import для wireframe сервисов (чтобы не ломать импорт если Redis недоступен)
 WIREFRAME_AVAILABLE = False
 enqueue_wireframe_job = None
-QueueAdapter = None
+get_queue_adapter = None
 
 try:
     from services.wireframe_service import enqueue_wireframe_job
-    from services.queue_provider import QueueAdapter
+    from services.queue_provider import get_queue_adapter
     WIREFRAME_AVAILABLE = True
     logger.info("✅ Wireframe services loaded successfully")
 except ImportError as e:
@@ -502,8 +502,9 @@ def generate_project_wireframe(
     except HTTPException as e:
         db.rollback()
         # Если Redis недоступен, пробуем синхронную генерацию
-        if e.status_code == 503 and "Redis" in str(e.detail):
-            logger.warning("Redis unavailable, falling back to synchronous wireframe generation")
+        error_detail = str(e.detail).lower()
+        if e.status_code == 503 and ("redis" in error_detail or "unavailable" in error_detail):
+            logger.warning(f"Redis unavailable (detail: {e.detail}), falling back to synchronous wireframe generation")
             try:
                 from services.wireframe_service import process_wireframe_job
                 # Генерируем синхронно
@@ -567,12 +568,13 @@ def get_project_wireframe_status(
     project = validator.get_project(project_id)
 
     queue_status = None
-    if job_id and WIREFRAME_AVAILABLE and QueueAdapter:
+    if job_id and WIREFRAME_AVAILABLE and get_queue_adapter:
         try:
-            adapter = QueueAdapter(driver="redis")
-            job = adapter.get_job(job_id)
-            if job:
-                queue_status = job.get_status(refresh=True)
+            adapter = get_queue_adapter(driver="redis")
+            if adapter:
+                job = adapter.get_job(job_id)
+                if job:
+                    queue_status = job.get_status(refresh=True)
         except Exception as e:  # pragma: no cover - только логирование статуса очереди
             logger.warning(f"Failed to fetch queue status for job {job_id}: {e}")
 
