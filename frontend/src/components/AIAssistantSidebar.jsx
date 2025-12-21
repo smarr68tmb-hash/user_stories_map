@@ -165,7 +165,7 @@ export function AIAssistantSidebar({ project, analysisResults, onRunFullAnalysis
                           {analysisResults.issues.slice(0, 3).map((issue, idx) => (
                             <li key={idx} className="flex items-start gap-1">
                               <span className="text-orange-500">•</span>
-                              <span>{issue}</span>
+                              <span>{typeof issue === 'string' ? issue : issue.message || issue.type || 'Проблема'}</span>
                             </li>
                           ))}
                           {analysisResults.totalIssues > 3 && (
