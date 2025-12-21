@@ -658,11 +658,11 @@ def enhance_requirements(raw_text: str, redis_client=None, use_cache: bool = Tru
                 logger.info(f"✅ Cache HIT for enhancement: {cache_key[:50]}...")
                 return json.loads(cached_result)
             else:
-                logger.debug(f"Cache MISS for enhancement: {cache_key[:50]}...")
+                logger.info(f"Cache MISS for enhancement: {cache_key[:50]}...")
         except Exception as e:
             logger.warning(f"⚠️ Redis cache read failed for key {cache_key[:50]}...: {e}")
-    elif use_cache and not redis_client:
-        logger.debug(f"Redis client not available, skipping cache check for enhancement")
+        elif use_cache and not redis_client:
+            logger.warning(f"⚠️ Redis client not available, skipping cache check for enhancement")
     
     system_prompt = """Ты — эксперт по написанию product requirements для IT-продуктов.
 Твоя задача: УЛУЧШИТЬ ФОРМУЛИРОВКИ требований пользователя, сохраняя ВСЮ информацию и структуру.
@@ -811,7 +811,7 @@ confidence: 0.9-1.0 (понятно), 0.7-0.9 (есть предположени
             except Exception as e:
                 logger.error(f"❌ Redis cache write failed for key {cache_key[:50]}...: {e}", exc_info=True)
         elif use_cache and not redis_client:
-            logger.debug(f"Redis client not available, skipping cache for key: {cache_key[:50]}...")
+            logger.warning(f"⚠️ Redis client not available, skipping cache write for key: {cache_key[:50]}...")
         
         logger.info(f"Requirements enhanced. Confidence: {result.get('confidence', 'N/A')}")
         return result
@@ -888,11 +888,11 @@ def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool =
                 logger.info(f"✅ Cache HIT for AI map: {cache_key[:50]}...")
                 return json.loads(cached_result)
             else:
-                logger.debug(f"Cache MISS for AI map: {cache_key[:50]}...")
+                logger.info(f"Cache MISS for AI map: {cache_key[:50]}...")
         except Exception as e:
             logger.warning(f"⚠️ Redis cache read failed for key {cache_key[:50]}...: {e}")
-    elif use_cache and not redis_client:
-        logger.debug(f"Redis client not available, skipping cache check for AI map")
+        elif use_cache and not redis_client:
+            logger.warning(f"⚠️ Redis client not available, skipping cache check for AI map")
     
     system_prompt = """Ты — эксперт Product Manager и Business Analyst, специализирующийся на User Story Mapping (USM). 
 Твоя задача — анализировать неструктурированные требования к продукту и преобразовывать их в структурированную User Story Map в формате JSON.
@@ -1034,7 +1034,7 @@ def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool =
             except Exception as e:
                 logger.error(f"❌ Redis cache write failed for key {cache_key[:50]}...: {e}", exc_info=True)
         elif use_cache and not redis_client:
-            logger.debug(f"Redis client not available, skipping cache for key: {cache_key[:50]}...")
+            logger.warning(f"⚠️ Redis client not available, skipping cache write for key: {cache_key[:50]}...")
         
         return result
         
@@ -1297,11 +1297,11 @@ def ai_improve_story_content(
                 logger.info(f"✅ Cache HIT for improvement: {cache_key[:50]}...")
                 return json.loads(cached_result)
             else:
-                logger.debug(f"Cache MISS for improvement: {cache_key[:50]}...")
+                logger.info(f"Cache MISS for improvement: {cache_key[:50]}...")
         except Exception as e:
             logger.warning(f"⚠️ Redis cache read failed for key {cache_key[:50]}...: {e}")
-    elif use_cache and not redis_client:
-        logger.debug(f"Redis client not available, skipping cache check for improvement")
+        elif use_cache and not redis_client:
+            logger.warning(f"⚠️ Redis client not available, skipping cache check for improvement")
     
     # Подготовка промпта в зависимости от действия
     action_prompts = {
@@ -1443,7 +1443,7 @@ Acceptance Criteria: {json.dumps(story_data.get('acceptance_criteria', []), ensu
             except Exception as e:
                 logger.error(f"❌ Redis cache write failed for key {cache_key[:50]}...: {e}", exc_info=True)
         elif use_cache and not redis_client:
-            logger.debug(f"Redis client not available, skipping cache for key: {cache_key[:50]}...")
+            logger.warning(f"⚠️ Redis client not available, skipping cache write for key: {cache_key[:50]}...")
         
         return result
         
