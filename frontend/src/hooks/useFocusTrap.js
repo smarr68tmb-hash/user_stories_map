@@ -14,7 +14,7 @@ const FOCUSABLE_SELECTOR = [
 
 export default function useFocusTrap(ref, isActive) {
   useEffect(() => {
-    if (!isActive || !ref?.current) return undefined;
+    if (!isActive || !ref?.current) return;
 
     const node = ref.current;
     const focusable = node.querySelectorAll(FOCUSABLE_SELECTOR);

@@ -170,7 +170,7 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
           onAcceptEpic={epicsApi.acceptEpic}
           onRejectEpic={epicsApi.rejectEpic}
           loading={epicsApi.loading}
-          generatingEpics={epicsApi.loading.generate}
+          generatingEpics={epicsApi.loading?.generate || false}
         />
       );
     }
@@ -182,7 +182,7 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
           <FilterPanel
             statusFilter={statusFilter}
             releaseFilter={releaseFilter}
-            releases={project.releases}
+            releases={project?.releases || []}
             onToggleStatus={toggleStatus}
             onToggleRelease={toggleRelease}
             onReset={handleResetFilters}
@@ -193,7 +193,7 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
             onOpenAnalysis={() => setAnalysisPanelOpen(true)}
             isRefreshing={isRefreshing}
             statusSummary={{ shown: statusFilter.length, total: STATUS_OPTIONS.length }}
-            releaseSummary={{ shown: releaseFilter.length, total: project.releases.length }}
+            releaseSummary={{ shown: releaseFilter.length, total: project?.releases?.length || 0 }}
           />
           <WireframePanel project={project} refreshProject={refreshProject} toast={toast} />
         </div>

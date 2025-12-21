@@ -23,7 +23,7 @@ function WireframePanel({ project, refreshProject, toast }) {
 
   useEffect(() => {
     let active = true;
-    if (status !== 'pending') return undefined;
+    if (status !== 'pending') return;
 
     const poll = async () => {
       try {
