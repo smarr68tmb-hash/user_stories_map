@@ -27,6 +27,7 @@ project = validator.get_project(project_id)  # Автоматически выб
 
 **Методы:**
 - `get_project(project_id)` - получение проекта
+- `get_project_with_stories(project_id)` - получение проекта с полной загрузкой связей (activities, tasks, stories, releases)
 - `get_epic(epic_id)` - получение эпика
 - `get_story(story_id)` - получение истории
 - `get_activity(activity_id)` - получение активности
@@ -346,7 +347,10 @@ redis_client = RedisManager.get_client()
    - Все работы с Redis переведены на `RedisManager`
 3. ✅ `api/stories.py` - уже рефакторен
    - Использует `ResourceAccessValidator`, `ResponseFormatter`, `RedisManager`
-4. ⏳ `api/analysis.py` - можно использовать `RedisManager`
+4. ✅ `api/analysis.py` - уже рефакторен
+   - Использует `ResourceAccessValidator` для проверки доступа
+   - Добавлен метод `get_project_with_stories()` в `ResourceAccessValidator` для загрузки проекта с полными связями
+   - Удалена дублирующая функция `get_project_with_stories()`
 
 ### Обновление тестов
 

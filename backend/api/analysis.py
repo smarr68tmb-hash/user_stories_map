@@ -3,11 +3,12 @@ Analysis endpoints - анализ схожести и валидация кар�
 """
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from utils.database import get_db
+from utils.resource_validator import ResourceAccessValidator
 from models import User, Project, Activity, UserTask
 from schemas import (
     ValidationResult,
@@ -28,25 +29,6 @@ from dependencies import get_current_active_user
 router = APIRouter(prefix="", tags=["analysis"])
 limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
-
-
-def get_project_with_stories(project_id: int, user_id: int, db: Session) -> Project:
-    """Получает проект с полной загрузкой всех связей"""
-    project = db.query(Project)\
-        .options(
-            joinedload(Project.activities)
-            .subqueryload(Activity.tasks)
-            .subqueryload(UserTask.stories),
-            joinedload(Project.releases)
-        )\
-        .filter(Project.id == project_id)\
-        .filter(Project.user_id == user_id)\
-        .first()
-    
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    return project
 
 
 @router.get("/project/{project_id}/validate", response_model=ValidationResult)
@@ -72,7 +54,8 @@ def validate_project(
     """
     logger.info(f"Validating project {project_id} for user {current_user.id}")
     
-    project = get_project_with_stories(project_id, current_user.id, db)
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project_with_stories(project_id)
     
     try:
         result = validate_project_map(project, db)
@@ -125,7 +108,8 @@ def analyze_project_similarity(
         f"(sim={similarity_threshold}, dup={duplicate_threshold})"
     )
     
-    project = get_project_with_stories(project_id, current_user.id, db)
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project_with_stories(project_id)
     
     try:
         result = analyze_similarity(project, similarity_threshold, duplicate_threshold)
@@ -168,7 +152,8 @@ def full_project_analysis(
     
     logger.info(f"Running full analysis for project {project_id}")
     
-    project = get_project_with_stories(project_id, current_user.id, db)
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project_with_stories(project_id)
     
     try:
         # Валидация
@@ -321,7 +306,8 @@ async def apply_recommendation_endpoint(
     )
 
     # Получаем проект с полной загрузкой
-    project = get_project_with_stories(project_id, current_user.id, db)
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project_with_stories(project_id)
 
     # Сначала запускаем анализ чтобы получить рекомендации
     try:

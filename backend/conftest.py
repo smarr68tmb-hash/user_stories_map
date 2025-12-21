@@ -169,7 +169,7 @@ def test_project(db_session, test_user):
     """
     project = Project(
         name="Test Project",
-        requirements="Test requirements",
+        raw_requirements="Test requirements",
         user_id=test_user.id
     )
     db_session.add(project)
@@ -181,7 +181,7 @@ def test_project(db_session, test_user):
     for i, title in enumerate(["MVP", "Release 1", "Later"]):
         release = Release(
             title=title,
-            order=i,
+            position=i,
             project_id=project.id
         )
         db_session.add(release)

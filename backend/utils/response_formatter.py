@@ -3,8 +3,11 @@ Response Formatter - централизованное форматировани
 
 Упрощает создание ответов для API endpoints, аналогично организации тестов в классы.
 """
-from typing import List
-from models import UserStory, UserTask, Activity, Project, Release
+from typing import List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from models import UserStory, UserTask, Activity, Project, Release
+
 from schemas import (
     StoryResponse,
     TaskResponse,
@@ -22,7 +25,7 @@ class ResponseFormatter:
     """
     
     @staticmethod
-    def format_story(story: UserStory) -> StoryResponse:
+    def format_story(story: "UserStory") -> StoryResponse:
         """
         Форматирует историю в StoryResponse.
         
@@ -45,7 +48,7 @@ class ResponseFormatter:
         )
     
     @staticmethod
-    def format_stories(stories: List[UserStory]) -> List[StoryResponse]:
+    def format_stories(stories: List["UserStory"]) -> List[StoryResponse]:
         """
         Форматирует список историй в StoryResponse.
         
@@ -58,7 +61,7 @@ class ResponseFormatter:
         return [ResponseFormatter.format_story(story) for story in stories]
     
     @staticmethod
-    def format_task(task: UserTask, include_stories: bool = True) -> TaskResponse:
+    def format_task(task: "UserTask", include_stories: bool = True) -> TaskResponse:
         """
         Форматирует задачу в TaskResponse.
         
@@ -81,7 +84,7 @@ class ResponseFormatter:
         )
     
     @staticmethod
-    def format_tasks(tasks: List[UserTask], include_stories: bool = True) -> List[TaskResponse]:
+    def format_tasks(tasks: List["UserTask"], include_stories: bool = True) -> List[TaskResponse]:
         """
         Форматирует список задач в TaskResponse.
         
@@ -95,7 +98,7 @@ class ResponseFormatter:
         return [ResponseFormatter.format_task(task, include_stories) for task in tasks]
     
     @staticmethod
-    def format_activity(activity: Activity, include_tasks: bool = True) -> ActivityResponse:
+    def format_activity(activity: "Activity", include_tasks: bool = True) -> ActivityResponse:
         """
         Форматирует активность в ActivityResponse.
         
@@ -118,7 +121,7 @@ class ResponseFormatter:
         )
     
     @staticmethod
-    def format_activities(activities: List[Activity], include_tasks: bool = True) -> List[ActivityResponse]:
+    def format_activities(activities: List["Activity"], include_tasks: bool = True) -> List[ActivityResponse]:
         """
         Форматирует список активностей в ActivityResponse.
         
@@ -132,7 +135,7 @@ class ResponseFormatter:
         return [ResponseFormatter.format_activity(activity, include_tasks) for activity in activities]
     
     @staticmethod
-    def format_release(release: Release) -> ReleaseResponse:
+    def format_release(release: "Release") -> ReleaseResponse:
         """
         Форматирует релиз в ReleaseResponse.
         
@@ -149,7 +152,7 @@ class ResponseFormatter:
         )
     
     @staticmethod
-    def format_releases(releases: List[Release]) -> List[ReleaseResponse]:
+    def format_releases(releases: List["Release"]) -> List[ReleaseResponse]:
         """
         Форматирует список релизов в ReleaseResponse.
         
@@ -162,7 +165,7 @@ class ResponseFormatter:
         return [ResponseFormatter.format_release(release) for release in releases]
     
     @staticmethod
-    def format_project(project: Project) -> ProjectResponse:
+    def format_project(project: "Project") -> ProjectResponse:
         """
         Форматирует проект в ProjectResponse с полной структурой.
         

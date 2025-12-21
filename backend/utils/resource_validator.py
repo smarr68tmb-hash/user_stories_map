@@ -3,11 +3,12 @@ Resource Access Validator - централизованная проверка д
 
 Упрощает проверку прав доступа в API endpoints, аналогично организации тестов в классы.
 """
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from models import Project, Epic, UserStory, Activity, UserTask
+if TYPE_CHECKING:
+    from models import Project, Epic, UserStory, Activity, UserTask
 
 
 class ResourceAccessValidator:
@@ -26,7 +27,7 @@ class ResourceAccessValidator:
         self.db = db
         self.user_id = user_id
     
-    def get_project(self, project_id: int) -> Project:
+    def get_project(self, project_id: int) -> "Project":
         """
         Получает проект пользователя или выбрасывает 404.
         
@@ -39,6 +40,8 @@ class ResourceAccessValidator:
         Raises:
             HTTPException: 404 если проект не найден или нет доступа
         """
+        from models import Project
+        
         project = (
             self.db.query(Project)
             .filter(Project.id == project_id)
@@ -49,7 +52,38 @@ class ResourceAccessValidator:
             raise HTTPException(status_code=404, detail="Project not found")
         return project
     
-    def get_epic(self, epic_id: int) -> Epic:
+    def get_project_with_stories(self, project_id: int) -> "Project":
+        """
+        Получает проект пользователя с полной загрузкой всех связей (activities, tasks, stories, releases).
+        
+        Args:
+            project_id: ID проекта
+            
+        Returns:
+            Project: Проект пользователя с загруженными связями
+            
+        Raises:
+            HTTPException: 404 если проект не найден или нет доступа
+        """
+        from models import Project, Activity, UserTask
+        
+        project = (
+            self.db.query(Project)
+            .options(
+                joinedload(Project.activities)
+                .subqueryload(Activity.tasks)
+                .subqueryload(UserTask.stories),
+                joinedload(Project.releases)
+            )
+            .filter(Project.id == project_id)
+            .filter(Project.user_id == self.user_id)
+            .first()
+        )
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        return project
+    
+    def get_epic(self, epic_id: int) -> "Epic":
         """
         Получает эпик пользователя или выбрасывает 404.
         
@@ -62,6 +96,8 @@ class ResourceAccessValidator:
         Raises:
             HTTPException: 404 если эпик не найден или нет доступа
         """
+        from models import Epic, Project
+        
         epic = (
             self.db.query(Epic)
             .join(Project)
@@ -73,7 +109,7 @@ class ResourceAccessValidator:
             raise HTTPException(status_code=404, detail="Epic not found")
         return epic
     
-    def get_story(self, story_id: int) -> UserStory:
+    def get_story(self, story_id: int) -> "UserStory":
         """
         Получает историю пользователя или выбрасывает 404.
         
@@ -86,6 +122,8 @@ class ResourceAccessValidator:
         Raises:
             HTTPException: 404 если история не найдена или нет доступа
         """
+        from models import UserStory, UserTask, Activity, Project
+        
         story = (
             self.db.query(UserStory)
             .join(UserTask)
@@ -99,7 +137,7 @@ class ResourceAccessValidator:
             raise HTTPException(status_code=404, detail="Story not found")
         return story
     
-    def get_activity(self, activity_id: int) -> Activity:
+    def get_activity(self, activity_id: int) -> "Activity":
         """
         Получает активность пользователя или выбрасывает 404.
         
@@ -112,6 +150,8 @@ class ResourceAccessValidator:
         Raises:
             HTTPException: 404 если активность не найдена или нет доступа
         """
+        from models import Activity, Project
+        
         activity = (
             self.db.query(Activity)
             .join(Project)
@@ -123,7 +163,7 @@ class ResourceAccessValidator:
             raise HTTPException(status_code=404, detail="Activity not found")
         return activity
     
-    def get_task(self, task_id: int) -> UserTask:
+    def get_task(self, task_id: int) -> "UserTask":
         """
         Получает задачу пользователя или выбрасывает 404.
         
@@ -136,6 +176,8 @@ class ResourceAccessValidator:
         Raises:
             HTTPException: 404 если задача не найдена или нет доступа
         """
+        from models import UserTask, Activity, Project
+        
         task = (
             self.db.query(UserTask)
             .join(Activity)
@@ -148,14 +190,14 @@ class ResourceAccessValidator:
             raise HTTPException(status_code=404, detail="Task not found")
         return task
     
-    def verify_same_project(self, story: UserStory, epic: Epic) -> None:
+    def verify_same_project(self, story: "UserStory", epic: "Epic") -> None:
         """
         Проверяет, что история и эпик принадлежат одному проекту.
         
         Args:
             story: История
             epic: Эпик
-            
+        
         Raises:
             HTTPException: 400 если проекты не совпадают
         """
