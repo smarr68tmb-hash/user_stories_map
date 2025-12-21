@@ -20,7 +20,7 @@ from services.ai_service import enhance_requirements, generate_ai_map
 from services.validation_service import validate_project_map
 from services.similarity_service import analyze_similarity
 from models import Project, Release, Activity, UserTask, UserStory
-from config import get_redis_client
+from utils.redis_manager import RedisManager
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ async def generate_map_streaming(
         - {type: "error", message: str}
     """
 
-    redis_client = get_redis_client()
+    redis_client = RedisManager.get_client()
     generation_text = requirements_text
     enhancement_data = None
 
