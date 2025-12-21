@@ -10,6 +10,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from utils.database import get_db
+from utils import ResourceAccessValidator, ResponseFormatter, RedisManager
 from models import User, Project, Activity, UserTask, Release, UserStory
 from schemas import (
     RequirementsInput,
@@ -52,92 +53,8 @@ except Exception as e:
     logger.warning(f"Wireframe services not available: {type(e).__name__}: {e}", exc_info=True)
 
 
-def format_project_response(project: Project) -> ProjectResponse:
-    """
-    Форматирует проект в ProjectResponse (DRY принцип)
-
-    Args:
-        project: Project объект с загруженными отношениями (activities, tasks, stories, releases)
-
-    Returns:
-        ProjectResponse с полной структурой проекта
-    """
-    activities_data = []
-    for activity in project.activities:
-        tasks_data = []
-        for task in activity.tasks:
-            stories_data = [
-                StoryResponse(
-                    id=story.id,
-                    title=story.title,
-                    description=story.description,
-                    priority=story.priority,
-                    acceptance_criteria=story.acceptance_criteria or [],
-                    release_id=story.release_id,
-                    position=story.position,
-                    status=story.status or "todo"
-                )
-                for story in task.stories
-            ]
-            tasks_data.append(TaskResponse(
-                id=task.id,
-                title=task.title,
-                position=task.position,
-                stories=stories_data
-            ))
-        activities_data.append(ActivityResponse(
-            id=activity.id,
-            title=activity.title,
-            position=activity.position,
-            tasks=tasks_data
-        ))
-
-    releases_data = [
-        ReleaseResponse(
-            id=release.id,
-            title=release.title,
-            position=release.position
-        )
-        for release in project.releases
-    ]
-
-    return ProjectResponse(
-        id=project.id,
-        name=project.name,
-        raw_requirements=project.raw_requirements,
-        activities=activities_data,
-        releases=releases_data,
-        wireframe_markdown=project.wireframe_markdown,
-        wireframe_generated_at=project.wireframe_generated_at,
-        wireframe_status=project.wireframe_status,
-        wireframe_error=project.wireframe_error,
-    )
-
-
-def get_redis_client():
-    """Получает Redis клиент или возвращает None если недоступен"""
-    try:
-        import redis
-        from config import settings
-        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
-        redis_client.ping()
-        return redis_client
-    except Exception as e:
-        # В production это критичная проблема - логируем как error
-        if settings.ENVIRONMENT == "production":
-            logger.error(f"❌ Redis unavailable in production: {e}. Caching disabled!")
-            # В production можно отправить alert в Sentry
-            try:
-                import sentry_sdk
-                sentry_sdk.capture_message(
-                    f"Redis connection failed: {e}",
-                    level="error"
-                )
-            except ImportError:
-                pass
-        else:
-            logger.warning(f"⚠️ Redis not available in development: {e}. Caching disabled.")
-        return None
+# Используем классы-хелперы вместо отдельных функций
+# Это упрощает код и делает его более организованным, аналогично тестам
 
 
 @router.post("/enhance-requirements", response_model=EnhancementResponse)
@@ -163,7 +80,7 @@ def enhance_requirements_endpoint(
         raise HTTPException(status_code=400, detail="Requirements text cannot be empty")
     
     try:
-        redis_client = get_redis_client()
+        redis_client = RedisManager.get_client()
         result = enhance_requirements(req.text, redis_client=redis_client)
         
         logger.info(f"Requirements enhanced for user {current_user.id}. Confidence: {result.get('confidence', 'N/A')}")
@@ -212,7 +129,7 @@ def generate_map(
         raise HTTPException(status_code=400, detail="Requirements text cannot be empty")
     
     # Получаем Redis клиент
-    redis_client = get_redis_client()
+    redis_client = RedisManager.get_client()
     
     # Текст для генерации (может быть улучшен на Stage 1)
     generation_text = req.text
@@ -414,7 +331,7 @@ def generate_map_demo(
         raise HTTPException(status_code=400, detail="Requirements text cannot be empty")
 
     # Получаем Redis клиент
-    redis_client = get_redis_client()
+    redis_client = RedisManager.get_client()
 
     # Текст для генерации
     generation_text = req.text
@@ -523,6 +440,10 @@ def get_project(
     db: Session = Depends(get_db)
 ):
     """Возвращает полную структуру проекта для отрисовки на фронтенде"""
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project(project_id)
+    
     # Исправление N+1 проблемы через eager loading
     project = db.query(Project)\
         .options(
@@ -535,10 +456,9 @@ def get_project(
         .filter(Project.user_id == current_user.id)\
         .first()
 
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    return format_project_response(project)
+    # Используем ResponseFormatter для форматирования ответа
+    formatter = ResponseFormatter()
+    return formatter.format_project(project)
 
 
 @router.post("/project/{project_id}/wireframe/generate")
@@ -556,6 +476,11 @@ def generate_project_wireframe(
             detail="Wireframe generation service is not available. Redis queue may be unavailable."
         )
     
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project(project_id)
+    
+    # Загружаем проект с отношениями для wireframe генерации
     project = (
         db.query(Project)
         .options(
@@ -564,8 +489,6 @@ def generate_project_wireframe(
         .filter(Project.id == project_id, Project.user_id == current_user.id)
         .first()
     )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
 
     if not project.activities:
         raise HTTPException(status_code=400, detail="Project has no activities to generate wireframe")
@@ -619,13 +542,9 @@ def get_project_wireframe(
     db: Session = Depends(get_db),
 ):
     """Возвращает текущий wireframe markdown и статус."""
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project(project_id)
 
     return {
         "markdown": project.wireframe_markdown,
@@ -643,13 +562,9 @@ def get_project_wireframe_status(
     db: Session = Depends(get_db),
 ):
     """Возвращает статус wireframe и (опционально) статус задачи очереди."""
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project(project_id)
 
     queue_status = None
     if job_id and WIREFRAME_AVAILABLE and QueueAdapter:
@@ -679,14 +594,9 @@ def update_project(
     db: Session = Depends(get_db)
 ):
     """Обновляет название проекта"""
-    # Проверяем существование проекта и владельца
-    project = db.query(Project)\
-        .filter(Project.id == project_id)\
-        .filter(Project.user_id == current_user.id)\
-        .first()
-    
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found or access denied")
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project(project_id)
     
     # Обновляем название, если указано
     if project_update.name is not None:
@@ -718,7 +628,9 @@ def update_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found or access denied")
 
-    return format_project_response(project)
+    # Используем ResponseFormatter для форматирования ответа
+    formatter = ResponseFormatter()
+    return formatter.format_project(project)
 
 
 @router.get("/projects")
@@ -793,14 +705,9 @@ def delete_project(
     db: Session = Depends(get_db)
 ):
     """Удаляет проект и все связанные данные (activities, tasks, stories, releases)"""
-    # Проверяем существование проекта и владельца
-    project = db.query(Project)\
-        .filter(Project.id == project_id)\
-        .filter(Project.user_id == current_user.id)\
-        .first()
-    
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found or access denied")
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project(project_id)
     
     project_name = project.name
     

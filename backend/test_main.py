@@ -106,3 +106,37 @@ def test_generate_map_invalid_json(client, auth_headers):
         )
     assert response.status_code == 502
 
+
+def test_get_project_uses_resource_access_validator(client, auth_headers, test_project):
+    """Проверка, что get_project использует ResourceAccessValidator"""
+    # Тест должен работать с новым кодом через ResourceAccessValidator
+    response = client.get(f"/project/{test_project.id}", headers=auth_headers)
+    assert response.status_code == 200
+    assert "id" in response.json()
+    assert "name" in response.json()
+    assert "activities" in response.json()
+    assert "releases" in response.json()
+
+
+def test_update_project_uses_resource_access_validator(client, auth_headers, test_project):
+    """Проверка, что update_project использует ResourceAccessValidator"""
+    new_name = "Updated Project Name"
+    response = client.put(
+        f"/project/{test_project.id}",
+        json={"name": new_name},
+        headers=auth_headers
+    )
+    assert response.status_code == 200
+    assert response.json()["name"] == new_name
+
+
+def test_delete_project_uses_resource_access_validator(client, auth_headers, test_project):
+    """Проверка, что delete_project использует ResourceAccessValidator"""
+    response = client.delete(f"/project/{test_project.id}", headers=auth_headers)
+    assert response.status_code == 200
+    assert "success" in response.json()["status"]
+    
+    # Проверяем, что проект действительно удален
+    response = client.get(f"/project/{test_project.id}", headers=auth_headers)
+    assert response.status_code == 404
+

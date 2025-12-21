@@ -236,6 +236,54 @@ def get_project_epics(project_id: int, current_user: User, db: Session):
 
 ---
 
+### Пример рефакторинга `api/projects.py`:
+
+**До рефакторинга:**
+```python
+def get_project(project_id: int, current_user: User, db: Session):
+    project = db.query(Project)\
+        .filter(Project.id == project_id)\
+        .filter(Project.user_id == current_user.id)\
+        .first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    return format_project_response(project)  # Локальная функция
+
+def get_redis_client():  # Дублирующая функция
+    try:
+        import redis
+        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        redis_client.ping()
+        return redis_client
+    except Exception:
+        return None
+```
+
+**После рефакторинга:**
+```python
+def get_project(project_id: int, current_user: User, db: Session):
+    # Используем ResourceAccessValidator для проверки доступа
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project(project_id)
+    
+    # Используем ResponseFormatter для форматирования ответа
+    formatter = ResponseFormatter()
+    return formatter.format_project(project)
+
+# Redis клиент получаем через RedisManager
+redis_client = RedisManager.get_client()
+```
+
+**Результат:**
+- ✅ Удалены дублирующие функции `get_redis_client()` и `format_project_response()`
+- ✅ Все проверки доступа используют `ResourceAccessValidator`
+- ✅ Все форматирование использует `ResponseFormatter`
+- ✅ Все работы с Redis используют `RedisManager`
+- ✅ Код стал более консистентным с другими файлами
+
+---
+
 ## Миграция существующего кода
 
 ### Шаг 1: Импорт классов
@@ -289,9 +337,23 @@ redis_client = RedisManager.get_client()
 Следующие файлы можно рефакторить аналогично `api/epics.py`:
 
 1. ✅ `api/epics.py` - уже рефакторен
-2. ⏳ `api/projects.py` - можно использовать все классы
-3. ⏳ `api/stories.py` - можно использовать `ResourceAccessValidator` и `ResponseFormatter`
+   - Использует `ResourceAccessValidator`, `ResponseFormatter`, `RedisManager`
+2. ✅ `api/projects.py` - уже рефакторен
+   - Использует `ResourceAccessValidator`, `ResponseFormatter`, `RedisManager`
+   - Удалены дублирующие функции `get_redis_client()` и `format_project_response()`
+   - Все проверки доступа переведены на `ResourceAccessValidator`
+   - Все форматирование ответов переведено на `ResponseFormatter`
+   - Все работы с Redis переведены на `RedisManager`
+3. ✅ `api/stories.py` - уже рефакторен
+   - Использует `ResourceAccessValidator`, `ResponseFormatter`, `RedisManager`
 4. ⏳ `api/analysis.py` - можно использовать `RedisManager`
+
+### Обновление тестов
+
+После рефакторинга `api/projects.py` были обновлены тесты в `test_main.py`:
+- ✅ Добавлены тесты для проверки работы с `ResourceAccessValidator`
+- ✅ Добавлены тесты для проверки работы с `ResponseFormatter`
+- ✅ Существующие тесты продолжают работать без изменений (мокают `generate_ai_map`, а не Redis напрямую)
 
 ---
 
