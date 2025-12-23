@@ -95,7 +95,17 @@ function WireframePanel({ project, refreshProject, toast }) {
     setError(null);
     try {
       const { data } = await wireframes.generate(project.id);
-      setJobId(data.job_id);
+      
+      // Если генерация завершена синхронно (production mode)
+      if (data.status === 'completed') {
+        setLoading(false);
+        setStatus('success');
+        await refreshProject({ silent: true });
+        toast?.success?.('Wireframe успешно сгенерирован');
+      } else {
+        // Асинхронная генерация (development mode с RQ)
+        setJobId(data.job_id);
+      }
     } catch (err) {
       setLoading(false);
       setStatus(project.wireframe_status || 'idle');
