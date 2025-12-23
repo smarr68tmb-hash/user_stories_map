@@ -55,26 +55,19 @@ class QueueAdapter:
             # Если URL начинается с rediss://, используем SSL
             use_ssl = redis_url.startswith("rediss://")
             
-            # Для RQ с decode_responses=False и SSL (rediss://) нужно использовать ручное создание ConnectionPool
-            # redis.from_url() не всегда правильно обрабатывает SSL для decode_responses=False
+            # Для RQ с decode_responses=False и SSL используем from_url с параметрами в URL
+            # redis-py 5.0+ автоматически обрабатывает rediss:// и поддерживает параметры в query string
             if use_ssl:
-                import ssl
-                from urllib.parse import urlparse
+                # Добавляем параметр ssl_cert_reqs=none к URL для отключения проверки сертификата (Upstash)
+                # Это работает для redis-py 5.0+ с decode_responses=False
+                if "?" not in redis_url:
+                    redis_url_with_params = f"{redis_url}?ssl_cert_reqs=none"
+                else:
+                    redis_url_with_params = f"{redis_url}&ssl_cert_reqs=none"
                 
-                # Парсим URL вручную для SSL соединений
-                parsed = urlparse(redis_url)
-                
-                # Создаем ConnectionPool с SSL через connection_kwargs
-                # Для redis-py 5.0+ с decode_responses=False SSL параметры передаются через connection_kwargs
-                pool = redis.ConnectionPool(
-                    host=parsed.hostname,
-                    port=parsed.port or 6379,
-                    password=parsed.password,
-                    db=int(parsed.path.lstrip('/')) if parsed.path else 0,
+                self.connection = redis.from_url(
+                    redis_url_with_params,
                     decode_responses=False,  # RQ требует bytes
-                    connection_kwargs={
-                        "ssl_cert_reqs": ssl.CERT_NONE,  # Для Upstash не требуется проверка сертификата
-                    },
                     socket_connect_timeout=5,
                     socket_timeout=5,
                     retry_on_timeout=True,
@@ -82,7 +75,6 @@ class QueueAdapter:
                     socket_keepalive=True,
                     socket_keepalive_options={}
                 )
-                self.connection = redis.Redis(connection_pool=pool)
             else:
                 # Для обычного подключения без SSL используем from_url
                 self.connection = redis.from_url(
