@@ -55,19 +55,45 @@ class QueueAdapter:
             # Если URL начинается с rediss://, используем SSL
             use_ssl = redis_url.startswith("rediss://")
             
-            # Парсим URL для правильной настройки соединения
-            self.connection = redis.from_url(
-                redis_url,
-                ssl=use_ssl,
-                ssl_cert_reqs=None,  # Для Upstash не требуется проверка сертификата
-                decode_responses=False,  # RQ требует bytes
-                socket_connect_timeout=5,  # Таймаут подключения 5 секунд
-                socket_timeout=5,  # Таймаут операций 5 секунд
-                retry_on_timeout=True,  # Повторять при таймауте
-                health_check_interval=30,  # Проверка здоровья каждые 30 секунд
-                socket_keepalive=True,  # Поддержание соединения
-                socket_keepalive_options={}  # Опции keepalive
-            )
+            # Для RQ с decode_responses=False и SSL нужно использовать специальный подход
+            # redis.from_url() автоматически определяет SSL по префиксу rediss://
+            # Но для RQ нужно явно указать параметры через connection_pool_kwargs
+            if use_ssl:
+                import ssl
+                from urllib.parse import urlparse
+                
+                # Парсим URL вручную для правильной настройки SSL
+                parsed = urlparse(redis_url)
+                
+                # Создаем connection pool с SSL параметрами
+                pool = redis.ConnectionPool(
+                    host=parsed.hostname,
+                    port=parsed.port or 6379,
+                    password=parsed.password,
+                    db=int(parsed.path.lstrip('/')) if parsed.path else 0,
+                    decode_responses=False,  # RQ требует bytes
+                    ssl=True,
+                    ssl_cert_reqs=ssl.CERT_NONE,  # Для Upstash не требуется проверка сертификата
+                    socket_connect_timeout=5,
+                    socket_timeout=5,
+                    retry_on_timeout=True,
+                    health_check_interval=30,
+                    socket_keepalive=True,
+                    socket_keepalive_options={}
+                )
+                self.connection = redis.Redis(connection_pool=pool)
+            else:
+                # Для обычного подключения без SSL используем from_url
+                self.connection = redis.from_url(
+                    redis_url,
+                    decode_responses=False,  # RQ требует bytes
+                    socket_connect_timeout=5,
+                    socket_timeout=5,
+                    retry_on_timeout=True,
+                    health_check_interval=30,
+                    socket_keepalive=True,
+                    socket_keepalive_options={}
+                )
             
             # Проверяем соединение с таймаутом
             self.connection.ping()
