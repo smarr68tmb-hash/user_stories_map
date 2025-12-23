@@ -493,6 +493,39 @@ def generate_project_wireframe(
     if not project.activities:
         raise HTTPException(status_code=400, detail="Project has no activities to generate wireframe")
 
+    # На production (Render) всегда используем синхронную генерацию
+    # RQ worker не запущен на Render, поэтому асинхронная генерация не работает
+    from config import settings
+    use_sync_generation = settings.ENVIRONMENT == "production"
+    
+    if use_sync_generation:
+        logger.info(f"🔄 Generating wireframe synchronously for project {project_id} (production mode)")
+        try:
+            from services.wireframe_service import process_wireframe_job
+            # Генерируем синхронно
+            project.wireframe_status = "generating"
+            project.wireframe_error = None
+            db.commit()
+            
+            markdown = process_wireframe_job(project_id, current_user.id)
+            project.wireframe_status = "success"
+            project.wireframe_error = None
+            db.commit()
+            logger.info(f"✅ Wireframe generated synchronously for project {project_id}")
+            return {"status": "completed", "message": "Wireframe generated synchronously"}
+        except Exception as sync_error:
+            db.rollback()
+            error_msg = str(sync_error) if str(sync_error) else repr(sync_error)
+            project.wireframe_status = "error"
+            project.wireframe_error = f"Synchronous generation failed: {error_msg}"
+            db.commit()
+            logger.error(f"Synchronous wireframe generation failed: {error_msg}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Wireframe generation failed: {error_msg}"
+            )
+    
+    # В development пробуем использовать очередь (если доступна)
     try:
         job_id = enqueue_wireframe_job(project_id, current_user.id)
         project.wireframe_status = "pending"
