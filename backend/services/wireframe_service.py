@@ -89,6 +89,7 @@ def enqueue_wireframe_job(project_id: int, user_id: int) -> str:
     
     if adapter is None:
         # Redis недоступен, выбрасываем исключение для fallback на синхронную генерацию
+        logger.warning("⚠️ Redis unavailable for wireframe queue. Wireframe generation will fall back to synchronous mode.")
         raise HTTPException(
             status_code=503,
             detail="Redis unavailable. Wireframe generation will fall back to synchronous mode."

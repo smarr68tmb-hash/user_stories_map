@@ -504,7 +504,8 @@ def generate_project_wireframe(
         # Если Redis недоступен, пробуем синхронную генерацию
         error_detail = str(e.detail).lower()
         if e.status_code == 503 and ("redis" in error_detail or "unavailable" in error_detail):
-            logger.warning(f"Redis unavailable (detail: {e.detail}), falling back to synchronous wireframe generation")
+            logger.warning(f"⚠️ Redis unavailable for wireframe queue (detail: {e.detail}), falling back to synchronous wireframe generation")
+            logger.info(f"🔄 Generating wireframe synchronously for project {project_id}")
             try:
                 from services.wireframe_service import process_wireframe_job
                 # Генерируем синхронно
@@ -516,6 +517,7 @@ def generate_project_wireframe(
                 project.wireframe_status = "success"
                 project.wireframe_error = None
                 db.commit()
+                logger.info(f"✅ Wireframe generated synchronously for project {project_id}")
                 return {"status": "completed", "message": "Wireframe generated synchronously (Redis unavailable)"}
             except Exception as sync_error:
                 db.rollback()

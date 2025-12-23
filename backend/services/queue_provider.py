@@ -48,6 +48,10 @@ class QueueAdapter:
             # Поддержка TLS для Upstash и других провайдеров
             redis_url = settings.REDIS_URL
             
+            # Логируем информацию о подключении (без пароля)
+            safe_url = redis_url.split('@')[-1] if '@' in redis_url else redis_url
+            logger.info(f"🔌 QueueAdapter: connecting to Redis at {safe_url}")
+            
             # Если URL начинается с rediss://, используем SSL
             use_ssl = redis_url.startswith("rediss://")
             
@@ -68,7 +72,7 @@ class QueueAdapter:
             # Проверяем соединение с таймаутом
             self.connection.ping()
             self.queue = Queue("wireframes", connection=self.connection, default_timeout=90)
-            logger.debug(f"✅ QueueAdapter initialized with Redis RQ (TLS: {use_ssl})")
+            logger.info(f"✅ QueueAdapter initialized with Redis RQ (TLS: {use_ssl}, queue: wireframes)")
         except redis.exceptions.ConnectionError as e:
             logger.error(f"❌ Redis connection error: {e}")
             self.connection = None
@@ -177,25 +181,28 @@ def get_queue_adapter(driver: str = "redis") -> Optional[QueueAdapter]:
             # Проверяем, что соединение еще работает
             if _adapter_instance.connection:
                 _adapter_instance.connection.ping()
+                logger.debug("QueueAdapter: cached instance connection OK")
                 return _adapter_instance
             else:
                 # Соединение потеряно, сбрасываем и создаем новое
-                logger.debug("QueueAdapter: cached instance lost connection, resetting...")
+                logger.warning("⚠️ QueueAdapter: cached instance lost connection, resetting...")
                 _adapter_instance = None
         except Exception as e:
             # Соединение не работает, сбрасываем и создаем новое
-            logger.debug(f"QueueAdapter: cached instance connection check failed ({e}), resetting...")
+            logger.warning(f"⚠️ QueueAdapter: cached instance connection check failed ({e}), resetting...")
             _adapter_instance = None
     
     # Создаем новый экземпляр
     try:
         _adapter_instance = QueueAdapter(driver=driver)
+        logger.info(f"✅ QueueAdapter initialized successfully (driver: {driver})")
         return _adapter_instance
-    except HTTPException:
+    except HTTPException as e:
         # Redis недоступен, возвращаем None для graceful degradation
+        logger.warning(f"⚠️ QueueAdapter: Redis unavailable for queue operations (driver: {driver}): {e.detail}")
         return None
     except Exception as e:
-        logger.error(f"QueueAdapter: unexpected error creating adapter: {e}", exc_info=True)
+        logger.error(f"❌ QueueAdapter: unexpected error creating adapter: {e}", exc_info=True)
         return None
 
 
