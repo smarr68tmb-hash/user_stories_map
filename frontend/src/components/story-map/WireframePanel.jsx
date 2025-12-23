@@ -25,21 +25,58 @@ function WireframePanel({ project, refreshProject, toast }) {
     let active = true;
     if (status !== 'pending') return;
 
+    let pollCount = 0;
+    const MAX_POLLS = 120; // Максимум 3 минуты (120 * 1.5 сек)
+    let pollTimer = null;
+
     const poll = async () => {
       try {
+        pollCount++;
+        
+        // Проверяем таймаут
+        if (pollCount > MAX_POLLS) {
+          if (!active) return;
+          setLoading(false);
+          setStatus('error');
+          setError('Таймаут генерации wireframe. Возможно, очередь задач недоступна.');
+          toast?.error?.('Таймаут генерации wireframe');
+          await refreshProject({ silent: true });
+          return;
+        }
+
         const { data } = await wireframes.status(project.id, jobId || undefined);
         if (!active) return;
-        setStatus(data.status || 'idle');
+        
+        // Обрабатываем статус из API
+        const apiStatus = data.status || 'idle';
+        const jobStatus = data.job_status; // Может быть "queued", "started", "finished", "failed"
+        
+        // Если задача в очереди слишком долго (более 30 секунд), считаем это ошибкой
+        if (jobStatus === 'queued' && pollCount > 20) {
+          setLoading(false);
+          setStatus('error');
+          setError('Задача не обрабатывается. Возможно, RQ worker не запущен.');
+          toast?.error?.('Задача не обрабатывается. Используется синхронная генерация.');
+          await refreshProject({ silent: true });
+          return;
+        }
+        
+        setStatus(apiStatus);
         setError(data.error || null);
-        if (data.status !== 'pending') {
+        
+        // Если статус изменился на success или error, останавливаем polling
+        if (apiStatus !== 'pending' && apiStatus !== 'queued') {
           await refreshProject({ silent: true });
           setLoading(false);
         } else {
-          setTimeout(poll, 1500);
+          // Продолжаем polling
+          pollTimer = setTimeout(poll, 1500);
         }
       } catch (err) {
         if (!active) return;
         setLoading(false);
+        setStatus('error');
+        setError('Не удалось получить статус wireframe');
         toast?.error?.('Не удалось получить статус wireframe');
       }
     };
@@ -48,6 +85,7 @@ function WireframePanel({ project, refreshProject, toast }) {
     return () => {
       active = false;
       clearTimeout(timer);
+      if (pollTimer) clearTimeout(pollTimer);
     };
   }, [status, jobId, project.id, refreshProject, toast]);
 
