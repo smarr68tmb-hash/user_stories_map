@@ -284,6 +284,12 @@ export const projects = {
   update: (projectId: number | string, name: string) => api.put<Project>(`/project/${projectId}`, { name }),
 
   delete: (projectId: number | string) => api.delete(`/project/${projectId}`),
+  
+  createShareLink: (projectId: number | string) =>
+    api.post<{ share_token: string; share_url: string; message: string }>(`/project/${projectId}/share`),
+  
+  deleteShareLink: (projectId: number | string) =>
+    api.delete(`/project/${projectId}/share`),
 };
 
 export const wireframes = {

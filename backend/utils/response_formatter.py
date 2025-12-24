@@ -188,5 +188,6 @@ class ResponseFormatter:
             wireframe_generated_at=getattr(project, 'wireframe_generated_at', None),
             wireframe_status=getattr(project, 'wireframe_status', None),
             wireframe_error=getattr(project, 'wireframe_error', None),
+            share_token=getattr(project, 'share_token', None),
         )
 

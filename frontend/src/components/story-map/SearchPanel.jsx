@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
+import { Share2 } from 'lucide-react';
 
 function SearchPanel({
   searchQuery,
   onSearchChange,
   onOpenAnalysis,
+  onOpenShare,
   isRefreshing = false,
   statusSummary,
   releaseSummary,
@@ -31,6 +33,15 @@ function SearchPanel({
           <span>📊</span>
           Анализ карты
         </button>
+        {onOpenShare && (
+          <button
+            onClick={onOpenShare}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium shadow-lg hover:bg-blue-700 transition flex items-center gap-2"
+          >
+            <Share2 className="w-4 h-4" />
+            Поделиться
+          </button>
+        )}
       </div>
       <div className="flex items-center gap-3 text-xs text-gray-500">
         {isRefreshing && (

@@ -8,6 +8,7 @@ import StoryMapBoard from './components/story-map/StoryMapBoard';
 import WireframePanel from './components/story-map/WireframePanel';
 import ViewToggle from './components/story-map/ViewToggle';
 import EpicBreakdownView from './components/story-map/EpicBreakdownView';
+import ShareDialog from './components/ShareDialog';
 import useActivities from './hooks/useActivities';
 import useTasks from './hooks/useTasks';
 import useStories from './hooks/useStories';
@@ -27,6 +28,7 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
   const toast = useToast();
   const { refreshProject, isRefreshing } = useProjectRefreshContext();
   const [viewMode, setViewMode] = useState('storyMap'); // 'storyMap' | 'epic'
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   
   const activitiesApi = useActivities({ project, onUpdate, refreshProject, onUnauthorized, toast });
   const tasksApi = useTasks({ project, onUpdate, refreshProject, onUnauthorized, toast });
@@ -237,6 +239,12 @@ function StoryMap({ project, onUpdate, onUnauthorized, isLoading = false }) {
         analysisPanelOpen={analysisPanelOpen}
         onCloseAnalysis={() => setAnalysisPanelOpen(false)}
         projectId={project.id}
+      />
+      <ShareDialog
+        projectId={project.id}
+        isOpen={shareDialogOpen}
+        onClose={() => setShareDialogOpen(false)}
+        currentShareUrl={project.share_token ? `${import.meta.env.VITE_API_URL || window.location.origin}/share/${project.share_token}` : null}
       />
     </>
   );

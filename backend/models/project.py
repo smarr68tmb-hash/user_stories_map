@@ -20,6 +20,7 @@ class Project(Base):
     wireframe_generated_at = Column(DateTime(timezone=True), nullable=True)
     wireframe_status = Column(String, default="idle", server_default="idle")
     wireframe_error = Column(Text, nullable=True)
+    share_token = Column(String, nullable=True, unique=True, index=True)
     
     # Relationships
     owner = relationship("User", back_populates="projects")

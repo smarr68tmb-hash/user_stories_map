@@ -27,6 +27,8 @@ from .project import (
     TaskUpdate,
     TaskMove,
     ProjectUpdate,
+    ShareLinkResponse,
+    ShareProjectResponse,
 )
 from .analysis import (
     IssueSeverity,
@@ -85,6 +87,8 @@ __all__ = [
     "TaskCreate",
     "TaskUpdate",
     "TaskMove",
+    "ShareLinkResponse",
+    "ShareProjectResponse",
     # Analysis schemas
     "IssueSeverity",
     "IssueType",

@@ -84,6 +84,7 @@ class ProjectResponse(BaseModel):
     wireframe_generated_at: Optional[datetime] = None
     wireframe_status: Optional[str] = None
     wireframe_error: Optional[str] = None
+    share_token: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -128,4 +129,21 @@ class ProjectUpdate(BaseModel):
         max_length=255,
         description="Название проекта (максимум 255 символов)"
     )
+
+
+class ShareLinkResponse(BaseModel):
+    """Схема ответа с share link"""
+    share_token: str
+    share_url: str
+    message: str = "Share link created successfully"
+
+
+class ShareProjectResponse(BaseModel):
+    """Схема ответа с проектом по share token (view-only)"""
+    id: int
+    name: str
+    activities: List[ActivityResponse]
+    releases: List[ReleaseResponse]
+    shared: bool = True
+    view_only: bool = True
 

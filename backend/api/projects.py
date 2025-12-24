@@ -2,6 +2,7 @@
 Project endpoints - генерация и управление проектами
 """
 import logging
+import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -26,7 +27,9 @@ from schemas import (
     TaskCreate,
     TaskUpdate,
     TaskMove,
-    ProjectUpdate
+    ProjectUpdate,
+    ShareLinkResponse,
+    ShareProjectResponse
 )
 from services.ai_service import generate_ai_map, enhance_requirements
 from services.agent_service import generate_map_with_agent
@@ -1200,4 +1203,58 @@ def move_task(
     # Формируем ответ с stories
     formatter = ResponseFormatter()
     return formatter.format_task(task, include_stories=True)
+
+
+# ========== SHARE LINK ENDPOINTS ==========
+
+@router.post("/project/{project_id}/share", response_model=ShareLinkResponse)
+@limiter.limit("30/hour")
+def create_share_link(
+    project_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Создает или обновляет share token для проекта"""
+    # Проверяем доступ к проекту
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project(project_id)
+    
+    # Генерируем новый UUID токен
+    share_token = str(uuid.uuid4())
+    project.share_token = share_token
+    db.commit()
+    
+    # Формируем публичную ссылку
+    base_url = str(request.base_url).rstrip('/')
+    share_url = f"{base_url}/share/{share_token}"
+    
+    logger.info(f"Share link created for project {project_id} by user {current_user.id}")
+    
+    return ShareLinkResponse(
+        share_token=share_token,
+        share_url=share_url,
+        message="Share link created successfully"
+    )
+
+
+@router.delete("/project/{project_id}/share")
+@limiter.limit("30/hour")
+def delete_share_link(
+    project_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Отключает share link для проекта"""
+    # Проверяем доступ к проекту
+    validator = ResourceAccessValidator(db, current_user.id)
+    project = validator.get_project(project_id)
+    
+    project.share_token = None
+    db.commit()
+    
+    logger.info(f"Share link disabled for project {project_id} by user {current_user.id}")
+    
+    return {"status": "success", "message": "Share link disabled successfully"}
 

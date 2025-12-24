@@ -57,6 +57,7 @@ export interface Project {
   wireframe_generated_at?: string | null;
   wireframe_status?: WireframeStatus | null;
   wireframe_error?: string | null;
+  share_token?: string | null;
 }
 
 export interface WireframeResponse {
