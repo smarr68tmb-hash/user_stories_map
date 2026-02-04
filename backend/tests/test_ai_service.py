@@ -2,7 +2,7 @@
 Тесты для AI Service - критически важный модуль!
 
 Покрытие:
-1. ✅ Fallback между провайдерами (Gemini → Groq → Perplexity → OpenAI)
+1. ✅ Fallback между провайдерами (Gemini → Groq → OpenAI)
 2. ✅ Rate limit tracker (проактивное переключение)
 3. ✅ Парсинг JSON ответов от AI
 4. ✅ Обработка ошибок (timeout, rate limit, API errors)
@@ -31,7 +31,6 @@ from services.ai_service import (
     GeminiProProvider,
     GeminiFlashProvider,
     GroqProvider,
-    PerplexityProvider,
     OpenAIProvider,
     CompletionResult,
 )
@@ -105,7 +104,6 @@ class TestRateLimitTracker:
 
         # Для не-Gemini провайдеров should_skip_provider всегда False
         assert not tracker.should_skip_provider("groq")
-        assert not tracker.should_skip_provider("perplexity")
         assert not tracker.should_skip_provider("openai")
         # AgentRouter удален - блокируется WAF
 
@@ -285,7 +283,7 @@ class TestErrorHandling:
 
     def test_should_retry_429_in_message(self):
         """429 в сообщении об ошибке должен вызывать retry"""
-        provider = PerplexityProvider(api_key="test-key")
+        provider = GroqProvider(api_key="test-key")
         # APIError с 429 в сообщении
         error = APIError("429 Too Many Requests", request=Mock(), body=None)
         assert provider.should_retry_error(error) is True
@@ -408,7 +406,7 @@ class TestJSONParsing:
     @patch('services.ai_service.provider_registry')
     def test_parse_json_with_markdown(self, mock_registry, mock_fallback):
         """Парсинг JSON внутри markdown блока ```json ... ```"""
-        mock_registry.get_available_providers.return_value = ["perplexity"]
+        mock_registry.get_available_providers.return_value = ["groq"]
 
         markdown_wrapped = "```json\n" + json.dumps({
             "productName": "Test",
@@ -417,7 +415,7 @@ class TestJSONParsing:
         }) + "\n```"
 
         mock_completion = CompletionResult(markdown_wrapped)
-        mock_fallback.return_value = (mock_completion, "perplexity")
+        mock_fallback.return_value = (mock_completion, "groq")
 
         result = generate_ai_map("Test requirements")
 

@@ -23,7 +23,7 @@ pytest tests/test_streaming.py -v
 
 Тестирует:
 - ✅ **RateLimitTracker** - Отслеживание и проактивное переключение при приближении к лимитам
-- ✅ **Fallback mechanism** - Автоматическое переключение между провайдерами (Gemini → Groq → Perplexity → OpenAI)
+- ✅ **Fallback mechanism** - Автоматическое переключение между провайдерами (Gemini → Groq → OpenAI)
 - ✅ **JSON parsing** - Парсинг ответов от AI с очисткой markdown (```json ... ```)
 - ✅ **Error handling** - RateLimitError, APIConnectionError, APITimeoutError, APIError
 - ✅ **Redis caching** - Cache hit/miss, TTL, cache key generation

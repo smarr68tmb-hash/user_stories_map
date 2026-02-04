@@ -1,6 +1,6 @@
 """
 AI service - генерация User Story Map через AI API
-Поддерживает fallback между провайдерами: Gemini → Groq → Perplexity → OpenAI
+Поддерживает fallback между провайдерами: Gemini → Groq → OpenAI
 С умным rate limiting и проактивным переключением провайдеров
 """
 import json
@@ -263,7 +263,7 @@ class GeminiFlashProvider(GeminiProvider):
 
 
 class OpenAICompatibleProvider(AIProvider):
-    """Базовый класс для OpenAI-совместимых провайдеров (Groq, Perplexity, OpenAI)"""
+    """Базовый класс для OpenAI-совместимых провайдеров (Groq, OpenAI)"""
     
     def __init__(self, name: str, api_key: Optional[str] = None, base_url: Optional[str] = None):
         super().__init__(name, api_key)
@@ -343,22 +343,6 @@ class GroqProvider(OpenAICompatibleProvider):
         return os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 
-class PerplexityProvider(OpenAICompatibleProvider):
-    """Провайдер для Perplexity"""
-    
-    def __init__(self, api_key: Optional[str] = None):
-        super().__init__(
-            "perplexity",
-            api_key,
-            base_url="https://api.perplexity.ai"
-        )
-    
-    def get_model(self, is_enhancement: bool = False, task_type: str = None) -> str:
-        if is_enhancement or task_type == "enhancement":
-            return os.getenv("PERPLEXITY_ENHANCEMENT_MODEL", "llama-3.1-sonar-small-32k-online")
-        return os.getenv("PERPLEXITY_MODEL", "llama-3.1-sonar-large-128k-online")
-
-
 class OpenAIProvider(OpenAICompatibleProvider):
     """Провайдер для OpenAI"""
     
@@ -394,10 +378,6 @@ class ProviderRegistry:
         # Groq
         if settings.GROQ_API_KEY:
             self.providers["groq"] = GroqProvider(settings.GROQ_API_KEY)
-        
-        # Perplexity
-        if settings.PERPLEXITY_API_KEY:
-            self.providers["perplexity"] = PerplexityProvider(settings.PERPLEXITY_API_KEY)
         
         # OpenAI
         if settings.OPENAI_API_KEY:
@@ -502,7 +482,7 @@ def _make_request_with_fallback(
     if not providers:
         raise HTTPException(
             status_code=503,
-            detail="No AI providers configured. Set GEMINI_API_KEY, GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY."
+            detail="No AI providers configured. Set GEMINI_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY."
         )
 
     # Очищаем старые записи rate limiter
@@ -646,7 +626,7 @@ def enhance_requirements(raw_text: str, redis_client=None, use_cache: bool = Tru
     if not available_providers:
         raise HTTPException(
             status_code=503,
-            detail="AI API key not configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY environment variable."
+            detail="AI API key not configured. Set GEMINI_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY environment variable."
         )
     
     # Проверяем кеш перед запросом к AI
@@ -876,7 +856,7 @@ def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool =
     if not available_providers:
         raise HTTPException(
             status_code=503,
-            detail="AI API key not configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY environment variable."
+            detail="AI API key not configured. Set GEMINI_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY environment variable."
         )
     
     # Проверяем кеш перед запросом к AI
@@ -966,7 +946,7 @@ def generate_ai_map(requirements_text: str, redis_client=None, use_cache: bool =
         response_text = completion.choices[0].message.content
         logger.info(f"Successfully received AI response from {used_provider.upper()}")
         
-        # Очистка ответа от возможных markdown форматирования (для Perplexity)
+        # Очистка ответа от возможных markdown форматирования (иногда JSON оборачивается в ```json ... ```)
         response_text = response_text.strip()
         if response_text.startswith("```json"):
             response_text = response_text[7:]  # Убираем ```json
@@ -1101,7 +1081,7 @@ def generate_markdown_wireframe(project_snapshot: dict, timeout: float = 60.0) -
     if not available_providers:
         raise HTTPException(
             status_code=503,
-            detail="AI API key not configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY environment variable."
+            detail="AI API key not configured. Set GEMINI_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY environment variable."
         )
 
     # Валидация объёма (проверяем после создания summary, так как он более компактный)
@@ -1318,7 +1298,7 @@ def ai_improve_story_content(
     if not available_providers:
         raise HTTPException(
             status_code=503,
-            detail="AI API key not configured. Set GROQ_API_KEY, PERPLEXITY_API_KEY, or OPENAI_API_KEY environment variable."
+            detail="AI API key not configured. Set GEMINI_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY environment variable."
         )
     
     # Проверяем кеш

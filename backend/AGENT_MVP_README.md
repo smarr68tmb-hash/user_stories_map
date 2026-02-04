@@ -147,7 +147,6 @@ print(f"Validation score: {result['metadata']['validation']['score']}")
    GEMINI_API_KEY=your_gemini_key
    GROQ_API_KEY=your_groq_key
    OPENAI_API_KEY=your_openai_key
-   PERPLEXITY_API_KEY=your_perplexity_key
    ```
 
 2. (Опционально) Redis для кеширования:

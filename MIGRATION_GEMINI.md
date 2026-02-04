@@ -1,4 +1,4 @@
-# 🔄 Migration: OpenAI → Gemini/Groq/Perplexity
+# 🔄 Migration: OpenAI → Gemini/Groq
 
 ## Изменения
 
@@ -6,13 +6,13 @@
 
 1. **Config.py обновлен:**
    - ✅ Добавлен `GEMINI_API_KEY`
-   - ✅ Приоритет изменен: `gemini → groq → perplexity` (вместо `groq → perplexity → openai`)
+   - ✅ Приоритет изменен: `gemini → groq → openai`
    - ✅ Удалена зависимость от `OPENAI_API_KEY`
 
 2. **Wireframe Worker переписан:**
    - ✅ Новый файл: `backend/workers/wireframe_worker_text.py`
    - ✅ Генерирует **text-based wireframes** (ASCII + Markdown)
-   - ✅ Работает с Gemini/Groq/Perplexity (без OpenAI/DALL-E)
+   - ✅ Работает с Gemini/Groq/OpenAI (без OpenAI/DALL-E, если OpenAI не включать)
 
 3. **Убраны зависимости:**
    - ❌ OpenAI client
@@ -23,7 +23,7 @@
 
 | Параметр | OpenAI + DALL-E (старое) | Text-Based (новое) |
 |----------|--------------------------|-------------------|
-| **Провайдер** | OpenAI (GPT-4 + DALL-E 3) | Gemini/Groq/Perplexity |
+| **Провайдер** | OpenAI (GPT-4 + DALL-E 3) | Gemini/Groq/OpenAI |
 | **Стоимость** | ~$0.045 per wireframe | $0 (бесплатно) |
 | **Время генерации** | ~20-30 сек | ~5-10 сек |
 | **Формат output** | PNG изображение | ASCII + Markdown |
@@ -67,10 +67,9 @@
 # ✅ NEW - Добавьте Gemini
 GEMINI_API_KEY=AIza...
 GROQ_API_KEY=gsk_...
-PERPLEXITY_API_KEY=pplx-...
 
 # Приоритет (gemini первый)
-AI_PROVIDER_PRIORITY=gemini,groq,perplexity
+AI_PROVIDER_PRIORITY=gemini,groq,openai
 
 # ❌ REMOVE - Больше не нужны
 # OPENAI_API_KEY=...
@@ -133,7 +132,7 @@ Wireframe component теперь показывает markdown вместо из
 **Phase 2: Backend Infrastructure**
 
 Обновить упоминания AI провайдеров:
-- "OpenAI" → "Gemini/Groq/Perplexity"
+- "OpenAI" → "Gemini/Groq/OpenAI"
 - Удалить секции про Cloudinary setup
 
 ---

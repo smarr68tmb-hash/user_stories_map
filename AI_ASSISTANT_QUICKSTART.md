@@ -136,9 +136,6 @@ INFO - Improvement result cached in Redis
 ```bash
 # Установите API ключ
 export OPENAI_API_KEY=sk-your-api-key-here
-
-# Или используйте Perplexity
-export PERPLEXITY_API_KEY=pplx-your-api-key-here
 ```
 
 ### Ошибка: "Rate limit exceeded"

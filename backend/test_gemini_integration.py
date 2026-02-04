@@ -5,16 +5,25 @@ import os
 import sys
 from dotenv import load_dotenv
 
+# Это интеграционный скрипт, а не unit-тест.
+# Чтобы он не ломал `pytest` в CI/локально, по умолчанию пропускаем его при сборе.
+if os.getenv("RUN_GEMINI_INTEGRATION_TESTS") != "1":
+    import pytest
+    pytest.skip(
+        "Gemini integration test is disabled by default. "
+        "Set RUN_GEMINI_INTEGRATION_TESTS=1 to enable.",
+        allow_module_level=True,
+    )
+
 # Загружаем переменные окружения
 load_dotenv()
 
 # Импортируем модули
 from config import settings
 from services.ai_service import (
-    gemini_client,
     rate_limiter,
     _get_model_for_provider,
-    _call_gemini_api
+    provider_registry,
 )
 
 
@@ -41,7 +50,7 @@ def test_client_initialization():
     print("2. Проверка инициализации Gemini клиента")
     print("=" * 60)
 
-    if gemini_client:
+    if provider_registry.get_provider("gemini") or provider_registry.get_provider("gemini-pro") or provider_registry.get_provider("gemini-flash"):
         print("✓ Gemini client initialized successfully")
     else:
         print("❌ Gemini client NOT initialized")
@@ -94,7 +103,8 @@ def test_api_call():
     print("5. Тестовый запрос к Gemini API")
     print("=" * 60)
 
-    if not gemini_client:
+    provider = provider_registry.get_provider("gemini-flash") or provider_registry.get_provider("gemini") or provider_registry.get_provider("gemini-pro")
+    if not provider:
         print("❌ Gemini client not initialized, skipping API test")
         return False
 
@@ -104,10 +114,10 @@ def test_api_call():
             {"role": "user", "content": "Скажи 'Привет! Интеграция работает!' одним предложением в JSON формате: {\"message\": \"...\"}\n\nIMPORTANT: Return ONLY valid JSON, no additional text or markdown formatting."}
         ]
 
-        model = settings.GEMINI_ENHANCEMENT_MODEL
+        model = provider.get_model(is_enhancement=True, task_type="enhancement")
         print(f"→ Отправляю запрос к модели {model}...")
 
-        response_text = _call_gemini_api(messages, model, temperature=0.7, timeout=30.0)
+        response_text = provider.call(messages, model, temperature=0.7, timeout=30.0)
 
         print(f"✓ Получен ответ от Gemini API:")
         print(f"  {response_text[:200]}...")
@@ -137,7 +147,7 @@ def main():
     results.append(("Model Selection", test_model_selection()))
 
     # API тест только если клиент инициализирован
-    if gemini_client:
+    if provider_registry.get_provider("gemini") or provider_registry.get_provider("gemini-pro") or provider_registry.get_provider("gemini-flash"):
         results.append(("API Call", test_api_call()))
     else:
         print("⚠️ Пропускаю API тест - Gemini client не инициализирован")

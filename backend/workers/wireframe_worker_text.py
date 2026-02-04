@@ -4,7 +4,7 @@ RabbitMQ Consumer для генерации Text-based Wireframes
 
 Функции:
 - Потребление из очереди ai.wireframe.generation
-- Генерация ASCII/Markdown UI wireframes через AI (Gemini/Groq/Perplexity)
+- Генерация ASCII/Markdown UI wireframes через AI (Gemini/Groq/OpenAI)
 - Создание структурированных описаний UI
 - Сохранение в database
 - Обновление прогресса в Redis
@@ -80,7 +80,7 @@ class TextWireframeWorker:
         # Check AI provider
         if not settings.get_api_key():
             logger.error("❌ No AI API key configured!")
-            logger.error("   Set GEMINI_API_KEY, GROQ_API_KEY, or PERPLEXITY_API_KEY")
+            logger.error("   Set GEMINI_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY")
             sys.exit(1)
 
         logger.info(f"✅ AI client ready ({settings.API_PROVIDER})")
@@ -294,7 +294,7 @@ class TextWireframeWorker:
             platform=platform
         )
 
-        # Use existing AI service (works with Gemini/Groq/Perplexity)
+        # Use existing AI service (works with Gemini/Groq/OpenAI)
         ai_response = generate_ai_response(
             prompt=prompt,
             redis_client=self.redis_client,

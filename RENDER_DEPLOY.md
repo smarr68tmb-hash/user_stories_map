@@ -47,7 +47,7 @@
 #### Обязательные:
 - `DATABASE_URL` - URL PostgreSQL базы данных (например, от Supabase)
 - `JWT_SECRET_KEY` - секретный ключ для JWT (минимум 32 символа, используйте случайную строку)
-- `GEMINI_API_KEY` или другой AI API ключ (Groq, Perplexity, OpenAI)
+- `GEMINI_API_KEY` или другой AI API ключ (Groq, OpenAI)
 
 #### Опциональные (для wireframe):
 - `REDIS_URL` - URL Redis для очереди (если используется wireframe generation)

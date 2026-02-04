@@ -22,7 +22,7 @@ GEMINI_API_KEY=AIzaYourKeyHere
 
 ```bash
 # Приоритет провайдеров (первый - приоритетный)
-AI_PROVIDER_PRIORITY=gemini,groq,perplexity,openai
+AI_PROVIDER_PRIORITY=gemini,groq,openai
 
 # Модели Gemini для разных задач
 GEMINI_ENHANCEMENT_MODEL=gemini-2.0-flash-exp    # Stage 1: Enhancement (250 RPD)
@@ -65,7 +65,7 @@ GEMINI_ASSISTANT_MODEL=gemini-2.0-flash-exp    # 250 RPD, достаточно �
 
 По умолчанию:
 ```
-Gemini → Groq → Perplexity → OpenAI
+Gemini → Groq → OpenAI
 ```
 
 ### Как работает fallback
@@ -129,7 +129,7 @@ python test_gemini_integration.py
 
 1. Проверка конфигурации
    ✓ GEMINI_API_KEY: Установлен
-   ✓ Available providers: ['gemini', 'groq', 'perplexity']
+   ✓ Available providers: ['gemini', 'groq', 'openai']
    ...
 
 2. Проверка инициализации Gemini клиента
@@ -189,7 +189,7 @@ API Call             ✅ PASSED
    GEMINI_PRO_LIMIT=40
    GEMINI_FLASH_LIMIT=220
    ```
-2. Убедитесь, что настроены fallback провайдеры (Groq, Perplexity, OpenAI)
+2. Убедитесь, что настроены fallback провайдеры (Groq, OpenAI)
 
 ### Content blocked
 

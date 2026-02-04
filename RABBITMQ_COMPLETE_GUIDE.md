@@ -95,7 +95,7 @@ User → POST /generate-map-async → 202 Accepted (job_id) [1 second]
 
 **Что делает (актуально):**
 ```
-User Story → AI (Gemini/Groq/Perplexity) → ASCII схема + Markdown описание
+User Story → AI (Gemini/Groq/OpenAI) → ASCII схема + Markdown описание
 ```
 
 - ASCII-вайрфрейм (box drawing)
@@ -175,7 +175,7 @@ User Story → AI (Gemini/Groq/Perplexity) → ASCII схема + Markdown оп�
 │  │  3. Call AI     │  │  3. Get stories  │  │                │ │
 │  │     (Gemini/    │  │  4. Generate     │  │                │ │
 │  │      Groq/      │  │     text prompt  │  │                │ │
-│  │      Perplexity)│  │  5. Call AI      │  │                │ │
+│  │      OpenAI)    │  │  5. Call AI      │  │                │ │
 │  │  4. Save to DB  │  │     (ASCII/MD)   │  │                │ │
 │  │  5. Update job  │  │  6. Update job   │  │                │ │
 │  │     status:     │  │     status       │  │                │ │
@@ -190,7 +190,7 @@ User Story → AI (Gemini/Groq/Perplexity) → ASCII схема + Markdown оп�
 │                    EXTERNAL SERVICES                            │
 │  ┌──────────────┐  ┌──────────────┐                             │
 │  │   Gemini     │  │    Groq      │                             │
-│  │ /Perplexity  │  │ (fallback)   │                             │
+│  │ /OpenAI      │  │ (fallback)   │                             │
 │  └──────────────┘  └──────────────┘                             │
 └─────────────────────────────────────────────────────────────────┘
             │                  │
@@ -331,7 +331,7 @@ User Story → AI (Gemini/Groq/Perplexity) → ASCII схема + Markdown оп�
 
          [5.2] Build text wireframe prompt (style/platform-aware)
 
-         [5.3] Call AI provider (Gemini/Groq/Perplexity) via generate_ai_response()
+         [5.3] Call AI provider (Gemini/Groq/OpenAI) via generate_ai_response()
                → получаем текст с блоком ```ascii``` + разделы
 
          [5.4] Parse response:
@@ -553,7 +553,7 @@ brew install redis
 ```
 
 **2. AI API (для text wireframes)**
-- Ключи: GEMINI_API_KEY / GROQ_API_KEY / PERPLEXITY_API_KEY
+- Ключи: GEMINI_API_KEY / GROQ_API_KEY / OPENAI_API_KEY
 - Модели текстовые; изображения не требуются
 
 **3. Supabase (PostgreSQL) - уже используется**
@@ -648,7 +648,7 @@ check_env "DATABASE_URL"
 check_env "REDIS_URL"
 check_env "GEMINI_API_KEY"
 check_env "GROQ_API_KEY"
-check_env "PERPLEXITY_API_KEY"
+check_env "OPENAI_API_KEY"
 
 echo ""
 echo "=== New Required Variables ==="
@@ -742,7 +742,7 @@ CLOUDAMQP_URL=amqps://username:password@host.cloudamqp.com/vhost
 # ========================================
 GEMINI_API_KEY=AIza...
 GROQ_API_KEY=gsk-...
-PERPLEXITY_API_KEY=pplx-...
+OPENAI_API_KEY=sk-...
 
 # ========================================
 # Database (existing)
@@ -1508,14 +1508,14 @@ class Settings:
         # ==========================================
         self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
         self.GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-        self.PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
+        self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
         self.API_PROVIDER = os.getenv("API_PROVIDER", "")
         self.API_MODEL = os.getenv("API_MODEL", "")
         self.API_TEMPERATURE = float(os.getenv("API_TEMPERATURE", "0.7"))
 
         # Приоритет провайдеров для fallback (текстовые)
         self.AI_PROVIDER_PRIORITY = [
-            p.strip() for p in os.getenv("AI_PROVIDER_PRIORITY", "gemini,groq,perplexity").split(",")
+            p.strip() for p in os.getenv("AI_PROVIDER_PRIORITY", "gemini,groq,openai").split(",")
             if p.strip()
         ]
 
@@ -1617,8 +1617,8 @@ class Settings:
             elif provider == "groq" and self.GROQ_API_KEY:
                 self.API_PROVIDER = "groq"
                 return
-            elif provider == "perplexity" and self.PERPLEXITY_API_KEY:
-                self.API_PROVIDER = "perplexity"
+            elif provider == "openai" and self.OPENAI_API_KEY:
+                self.API_PROVIDER = "openai"
                 return
 
         # Fallback: определяем по формату ключа
@@ -1628,8 +1628,8 @@ class Settings:
                 self.API_PROVIDER = "gemini"
             elif api_key.startswith("gsk_"):
                 self.API_PROVIDER = "groq"
-            elif api_key.startswith("pplx-"):
-                self.API_PROVIDER = "perplexity"
+            elif api_key.startswith("sk-"):
+                self.API_PROVIDER = "openai"
 
     def _set_default_model(self):
         """Установка модели по умолчанию"""
@@ -1640,8 +1640,8 @@ class Settings:
             self.API_MODEL = "gemini-2.0-flash-exp"
         elif self.API_PROVIDER == "groq":
             self.API_MODEL = "llama-3.3-70b-versatile"
-        elif self.API_PROVIDER == "perplexity":
-            self.API_MODEL = "sonar"
+        elif self.API_PROVIDER == "openai":
+            self.API_MODEL = "gpt-4o-mini"
 
     def _validate_settings(self):
         """Валидация настроек при запуске"""
@@ -1694,9 +1694,9 @@ class Settings:
                 return self.GEMINI_API_KEY
             elif provider == "groq" and self.GROQ_API_KEY:
                 return self.GROQ_API_KEY
-            elif provider == "perplexity" and self.PERPLEXITY_API_KEY:
-                return self.PERPLEXITY_API_KEY
-        return self.GEMINI_API_KEY or self.GROQ_API_KEY or self.PERPLEXITY_API_KEY
+            elif provider == "openai" and self.OPENAI_API_KEY:
+                return self.OPENAI_API_KEY
+        return self.GEMINI_API_KEY or self.GROQ_API_KEY or self.OPENAI_API_KEY
 
     def get_api_key_for_provider(self, provider: str) -> Optional[str]:
         """Возвращает API ключ для конкретного провайдера"""
@@ -1704,8 +1704,8 @@ class Settings:
             return self.GEMINI_API_KEY
         elif provider == "groq":
             return self.GROQ_API_KEY
-        elif provider == "perplexity":
-            return self.PERPLEXITY_API_KEY
+        elif provider == "openai":
+            return self.OPENAI_API_KEY
         return None
 
     def get_available_providers(self) -> List[str]:
@@ -1742,7 +1742,7 @@ python -c "from config import settings; print('Config loaded successfully!')"
 
 **Ожидаемый вывод:**
 ```
-✅ AI providers available: gemini, groq, perplexity
+✅ AI providers available: gemini, groq, openai
 ✅ RabbitMQ enabled: amqps://vrcptkqu:***@hawk-01.rmq.cloudamqp.com/vrcptkqu
 Config loaded successfully!
 ```

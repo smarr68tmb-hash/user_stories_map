@@ -13,7 +13,7 @@
 - Backend: FastAPI + PostgreSQL (Supabase)
 - Frontend: React + Vite
 - Deployment: Render.com
-- AI: Gemini (приоритет по умолчанию) → Groq → Perplexity → OpenAI с автоматическим fallback
+- AI: Gemini (приоритет по умолчанию) → Groq → OpenAI с автоматическим fallback
 - Архитектура AI: Strategy Pattern с единым интерфейсом для всех провайдеров
 
 ## 🚀 Быстрый старт
@@ -36,15 +36,14 @@ source venv/bin/activate  # На Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Установите AI ключи (приоритет по умолчанию: gemini → groq → perplexity → openai):
+4. Установите AI ключи (приоритет по умолчанию: gemini → groq → openai):
 ```bash
 export GEMINI_API_KEY=your-gemini-key-here       # приоритетный
 export GROQ_API_KEY=gsk-your-api-key-here        # fallback 1
-export PERPLEXITY_API_KEY=pplx-your-api-key-here # fallback 2
-export OPENAI_API_KEY=sk-your-api-key-here       # fallback 3
+export OPENAI_API_KEY=sk-your-api-key-here       # fallback 2
 
 # Необязательно: переопределить порядок
-# export AI_PROVIDER_PRIORITY="gemini,groq,perplexity,openai"
+# export AI_PROVIDER_PRIORITY="gemini,groq,openai"
 ```
 
 Система автоматически переключается между провайдерами при ошибках или лимитах.
@@ -284,7 +283,7 @@ backend/
 - **SQLAlchemy** — ORM для работы с БД
 - **PostgreSQL (Supabase)** — облачная база данных
 - **Alembic** — миграции БД
-- **Gemini/Groq/Perplexity/OpenAI API** — генерация карты через AI с автоматическим fallback
+- **Gemini/Groq/OpenAI API** — генерация карты через AI с автоматическим fallback
 - **Redis** — кеширование AI ответов
 - **JWT** — аутентификация
 - **Slowapi** — rate limiting
@@ -300,7 +299,7 @@ backend/
 - Архитектура на основе Strategy Pattern с базовым классом `AIProvider`
 - Автоматический fallback между провайдерами при ошибках
 - Единая обработка ошибок и rate limiting
-- Поддержка: Gemini (Pro/Flash), Groq, Perplexity, OpenAI
+- Поддержка: Gemini (Pro/Flash), Groq, OpenAI
 
 ### Frontend
 - **React** — UI библиотека
@@ -448,9 +447,8 @@ usm-service/
 # Создайте .env файл в корне проекта и задайте ключи (минимум один)
 export GEMINI_API_KEY=your-gemini-key-here
 # export GROQ_API_KEY=...
-# export PERPLEXITY_API_KEY=...
 # export OPENAI_API_KEY=...
-# export AI_PROVIDER_PRIORITY="gemini,groq,perplexity,openai"
+# export AI_PROVIDER_PRIORITY="gemini,groq,openai"
 
 # Запустите все сервисы
 docker-compose up

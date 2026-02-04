@@ -16,18 +16,17 @@ class Settings:
         # API Keys
         self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
         self.GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-        self.PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
         self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
         self.API_PROVIDER = os.getenv("API_PROVIDER", "")
         self.API_MODEL = os.getenv("API_MODEL", "")
         self.API_TEMPERATURE = float(os.getenv("API_TEMPERATURE", "0.7"))
 
         # AgentRouter удален - блокируется WAF (Web Application Firewall) и возвращает CAPTCHA вместо JSON
-        # Используйте Groq/Gemini/Perplexity/OpenAI вместо AgentRouter
+        # Используйте Gemini/Groq/OpenAI вместо AgentRouter
 
-        # Приоритет провайдеров для fallback (через запятую: "gemini,groq,perplexity")
+        # Приоритет провайдеров для fallback (через запятую: "gemini,groq,openai")
         self.AI_PROVIDER_PRIORITY = [
-            p.strip() for p in os.getenv("AI_PROVIDER_PRIORITY", "gemini,groq,perplexity").split(",")
+            p.strip() for p in os.getenv("AI_PROVIDER_PRIORITY", "gemini,groq,openai").split(",")
             if p.strip()
         ]
         
@@ -103,9 +102,6 @@ class Settings:
             elif provider == "groq" and self.GROQ_API_KEY:
                 self.API_PROVIDER = "groq"
                 return
-            elif provider == "perplexity" and self.PERPLEXITY_API_KEY:
-                self.API_PROVIDER = "perplexity"
-                return
             elif provider == "openai" and self.OPENAI_API_KEY:
                 self.API_PROVIDER = "openai"
                 return
@@ -118,8 +114,6 @@ class Settings:
                 self.API_PROVIDER = "gemini"
             elif api_key.startswith("gsk_"):
                 self.API_PROVIDER = "groq"
-            elif api_key.startswith("pplx-"):
-                self.API_PROVIDER = "perplexity"
             # Если ключ есть, но формат не распознан, не устанавливаем провайдера
             # (оставляем пустую строку, что означает "не определен")
         # Если ключа нет, оставляем API_PROVIDER пустым (не устанавливаем по умолчанию)
@@ -134,8 +128,6 @@ class Settings:
             self.API_MODEL = "gemini-2.0-flash-exp"
         elif self.API_PROVIDER == "groq":
             self.API_MODEL = "llama-3.3-70b-versatile"
-        elif self.API_PROVIDER == "perplexity":
-            self.API_MODEL = "sonar"
         # Если провайдер не определен (нет ключей), оставляем API_MODEL пустым
         # Это предотвращает вводящее в заблуждение состояние
     
@@ -168,11 +160,9 @@ class Settings:
                 return self.GEMINI_API_KEY
             elif provider == "groq" and self.GROQ_API_KEY:
                 return self.GROQ_API_KEY
-            elif provider == "perplexity" and self.PERPLEXITY_API_KEY:
-                return self.PERPLEXITY_API_KEY
             elif provider == "openai" and self.OPENAI_API_KEY:
                 return self.OPENAI_API_KEY
-        return self.GEMINI_API_KEY or self.GROQ_API_KEY or self.PERPLEXITY_API_KEY or self.OPENAI_API_KEY
+        return self.GEMINI_API_KEY or self.GROQ_API_KEY or self.OPENAI_API_KEY
     
     def get_api_key_for_provider(self, provider: str) -> Optional[str]:
         """Возвращает API ключ для конкретного провайдера"""
@@ -180,8 +170,6 @@ class Settings:
             return self.GEMINI_API_KEY
         elif provider == "groq":
             return self.GROQ_API_KEY
-        elif provider == "perplexity":
-            return self.PERPLEXITY_API_KEY
         elif provider == "openai":
             return self.OPENAI_API_KEY
         return None
@@ -199,8 +187,8 @@ class Settings:
         Возвращает список провайдеров для конкретного типа задачи.
 
         Стратегия:
-        - generation/assistant: gemini-pro → gemini-flash → groq → perplexity → openai
-        - enhancement: gemini-pro → gemini-flash → groq → perplexity → openai
+        - generation/assistant: gemini-pro → gemini-flash → groq → openai
+        - enhancement: gemini-pro → gemini-flash → groq → openai
 
         Args:
             task_type: Тип задачи ('enhancement', 'generation', 'assistant')
@@ -211,7 +199,7 @@ class Settings:
         providers = []
 
         # AgentRouter удален - блокируется WAF и возвращает CAPTCHA вместо JSON
-        # Используем Gemini/Groq/Perplexity/OpenAI
+        # Используем Gemini/Groq/OpenAI
 
         # Gemini Pro — сильная модель (50 RPD), используем для всех задач
         if self.GEMINI_API_KEY:
@@ -225,9 +213,7 @@ class Settings:
         if self.GROQ_API_KEY:
             providers.append("groq")
 
-        # Perplexity и OpenAI — дополнительные fallback
-        if self.PERPLEXITY_API_KEY:
-            providers.append("perplexity")
+        # OpenAI — дополнительный fallback
         if self.OPENAI_API_KEY:
             providers.append("openai")
 

@@ -36,7 +36,7 @@ uvicorn main:app --reload
 
 ```bash
 # Приоритет: сначала бесплатный Gemini
-AI_PROVIDER_PRIORITY=gemini,groq,perplexity,openai
+AI_PROVIDER_PRIORITY=gemini,groq,openai
 
 # Модели (используйте Flash для экономии лимитов)
 GEMINI_ENHANCEMENT_MODEL=gemini-2.0-flash-exp    # 250 запросов/день
@@ -62,7 +62,7 @@ GEMINI_FLASH_LIMIT=230    # Из 250
    - При 230/250 запросов Flash → переключение на Groq
 
 3. **Автоматический fallback** при ошибках:
-   - Gemini → Groq → Perplexity → OpenAI
+   - Gemini → Groq → OpenAI
 
 ---
 
@@ -72,7 +72,7 @@ GEMINI_FLASH_LIMIT=230    # Из 250
 
 ```
 ✅ Initialized Gemini API client
-✅ Настроены AI провайдеры (в порядке приоритета): gemini, groq, perplexity
+✅ Настроены AI провайдеры (в порядке приоритета): gemini, groq, openai
 Trying GEMINI with model gemini-2.0-flash-exp
 ✅ Successfully got response from GEMINI
 ```
@@ -91,7 +91,7 @@ Trying GROQ with model llama-3.3-70b-versatile
 
 | Без Gemini | С Gemini |
 |------------|----------|
-| ❌ Платные API (OpenAI, Perplexity) | ✅ **Бесплатно** 250-300 запросов/день |
+| ❌ Платные API (OpenAI) | ✅ **Бесплатно** 250-300 запросов/день |
 | ⚠️ Риск исчерпания квоты | ✅ Автоматический **fallback** на другие провайдеры |
 | 🐌 Одна модель для всех задач | ✅ **Оптимальная модель** для каждой задачи |
 | 😰 Внезапные ошибки при лимите | ✅ **Проактивное** переключение до лимита |

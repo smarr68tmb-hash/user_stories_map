@@ -21,25 +21,23 @@ cp .env.example .env
 
 Или установите переменные окружения:
 ```bash
-# Приоритет по умолчанию: gemini → groq → perplexity → openai
+# Приоритет по умолчанию: gemini → groq → openai
 export GEMINI_API_KEY=your-gemini-key-here       # приоритетный
 export GROQ_API_KEY=gsk-your-key-here            # fallback 1
-export PERPLEXITY_API_KEY=pplx-your-key-here     # fallback 2
-export OPENAI_API_KEY=sk-your-key-here           # fallback 3
+export OPENAI_API_KEY=sk-your-key-here           # fallback 2
 
 # Явная настройка приоритета (опционально)
-# export AI_PROVIDER_PRIORITY="gemini,groq,perplexity,openai"
+# export AI_PROVIDER_PRIORITY="gemini,groq,openai"
 
 # Использование новых Groq Compound моделей (опционально)
 # export GROQ_MODEL="groq/compound"              # для generation (450 T/SEC, 131K context)
 # export GROQ_ENHANCEMENT_MODEL="groq/compound-mini"  # для enhancement
 ```
 
-**Поддерживаются четыре провайдера с автоматическим fallback:**
+**Поддерживаются провайдеры с автоматическим fallback:**
 - **Gemini** (приоритет по умолчанию) — быстрый и дешёвый
 - **Groq** — fallback 1
-- **Perplexity** — fallback 2
-- **OpenAI** — fallback 3
+- **OpenAI** — fallback 2
 
 Система автоматически переключается между провайдерами при ошибках или исчерпании лимитов.
 
@@ -77,11 +75,10 @@ python test_groq_compound.py --compare
 ### API Ключи (хотя бы один обязателен)
 - `GEMINI_API_KEY` - ключ Gemini (приоритет по умолчанию)
 - `GROQ_API_KEY` - ключ Groq (fallback 1)
-- `PERPLEXITY_API_KEY` - ключ Perplexity (fallback 2)
-- `OPENAI_API_KEY` - ключ OpenAI (fallback 3)
+- `OPENAI_API_KEY` - ключ OpenAI (fallback 2)
 
 ### Настройки провайдеров
-- `AI_PROVIDER_PRIORITY` - Порядок приоритета (по умолчанию: `gemini,groq,perplexity,openai`)
+- `AI_PROVIDER_PRIORITY` - Порядок приоритета (по умолчанию: `gemini,groq,openai`)
 - `API_PROVIDER` - Явное указание основного провайдера (опционально, для обратной совместимости)
 
 ### Модели (опционально, есть умолчания)
@@ -89,7 +86,6 @@ python test_groq_compound.py --compare
 - `GROQ_MODEL` / `GROQ_ENHANCEMENT_MODEL`
   - По умолчанию: `llama-3.3-70b-versatile` (generation), `llama-3.1-8b-instant` (enhancement)
   - Новые модели Compound: `groq/compound` или `groq/compound-mini` (450 T/SEC, 131K context)
-- `PERPLEXITY_MODEL` / `PERPLEXITY_ENHANCEMENT_MODEL`
 - `OPENAI_MODEL` / `OPENAI_ENHANCEMENT_MODEL`
 - `ENHANCEMENT_MODEL` - общая модель для Stage 1
 - `API_MODEL` - общая модель для Stage 2
@@ -105,7 +101,7 @@ python test_groq_compound.py --compare
 - **Базовый класс `AIProvider`** — абстрактный интерфейс для всех провайдеров
 - **Конкретные реализации:**
   - `GeminiProvider`, `GeminiProProvider`, `GeminiFlashProvider` — для Google Gemini
-  - `GroqProvider`, `PerplexityProvider`, `OpenAIProvider` — для OpenAI-совместимых API
+  - `GroqProvider`, `OpenAIProvider` — для OpenAI-совместимых API
 - **`ProviderRegistry`** — централизованный реестр всех доступных провайдеров
 - **Автоматический fallback** — система автоматически переключается между провайдерами при ошибках
 

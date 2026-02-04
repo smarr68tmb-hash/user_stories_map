@@ -250,7 +250,7 @@ python main.py
 ```
 ✅ Application started successfully
 📦 Database: postgresql://...
-🤖 AI Provider: perplexity
+🤖 AI Provider: gemini
 🌍 Environment: development
 ```
 

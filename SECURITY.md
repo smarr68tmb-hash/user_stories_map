@@ -47,7 +47,7 @@
 
 3. **ПОМЕНЯЙТЕ ВСЕ СЕКРЕТЫ** которые были в закоммиченном файле:
    - JWT_SECRET_KEY
-   - OPENAI_API_KEY / GROQ_API_KEY / PERPLEXITY_API_KEY
+   - GEMINI_API_KEY / GROQ_API_KEY / OPENAI_API_KEY
    - DATABASE_URL (пароль БД)
    - Любые другие ключи
 

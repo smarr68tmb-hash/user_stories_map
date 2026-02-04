@@ -43,7 +43,7 @@ HTTP Response
 - **Two-Stage AI**: `/enhance-requirements` (Stage 1) + `/generate-map` (Stage 2) с кешем (24ч/1ч).
 - **Анализ/валидация**: endpoints `GET /project/{id}/validate`, `GET /project/{id}/analyze/similarity`, `POST /project/{id}/analyze/full`.
 - **Статусы историй**: цикл `todo → in_progress → done → blocked → todo`, быстрый toggling на карточке.
-- **AI провайдеры**: приоритет по умолчанию `gemini → groq → perplexity → openai`, настраивается через `AI_PROVIDER_PRIORITY`; отдельные модели для Stage1/Stage2/assistant.
+- **AI провайдеры**: приоритет по умолчанию `gemini → groq → openai`, настраивается через `AI_PROVIDER_PRIORITY`; отдельные модели для Stage1/Stage2/assistant.
 
 ---
 

@@ -9,7 +9,7 @@
 ### 🔴 ВЫСОКИЙ ПРИОРИТЕТ - Покрыто тестами!
 
 ✅ **ai_service.py** - 40+ тестов
-- Fallback между провайдерами (Gemini → Groq → Perplexity → OpenAI)
+- Fallback между провайдерами (Gemini → Groq → OpenAI)
 - Rate limit tracker (проактивное переключение)
 - Парсинг JSON ответов от AI
 - Обработка ошибок (timeout, rate limit, API errors)

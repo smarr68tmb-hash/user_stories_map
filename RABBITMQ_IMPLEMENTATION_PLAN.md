@@ -565,12 +565,12 @@ RabbitMQ Consumer для генерации Text-based Wireframes
 
 Функции:
 - Потребление из очереди ai.wireframe.generation
-- Генерация ASCII/Markdown UI wireframes через AI (Gemini/Groq/Perplexity)
+- Генерация ASCII/Markdown UI wireframes через AI (Gemini/Groq/OpenAI)
 - Структурированные описания UI (layout/navigation/ui elements)
 - Обновление прогресса в Redis
 
 Зависимости:
-- AI ключи: GEMINI_API_KEY / GROQ_API_KEY / PERPLEXITY_API_KEY
+- AI ключи: GEMINI_API_KEY / GROQ_API_KEY / OPENAI_API_KEY
 
 Запуск:
     python workers/wireframe_worker_text.py
@@ -3506,7 +3506,7 @@ RABBITMQ_ENABLED=true
 # AI API Keys
 OPENAI_API_KEY=sk-...
 GROQ_API_KEY=gsk_...
-PERPLEXITY_API_KEY=pplx-...
+OPENAI_API_KEY=sk-...
 API_PROVIDER=groq
 API_MODEL=llama-3.3-70b-versatile
 

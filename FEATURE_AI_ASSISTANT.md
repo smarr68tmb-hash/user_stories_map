@@ -117,14 +117,12 @@ USM-Service использует AI на двух уровнях:
 ## Конфигурация
 
 ```bash
-# .env - одна модель для всего
-PERPLEXITY_API_KEY=pplx-xxx
-API_MODEL=sonar-pro
+# .env - пример (одна модель для всего)
+API_MODEL=gpt-4o-mini
 
-# .env - разные модели для Stage 1 и Stage 2
-PERPLEXITY_API_KEY=pplx-xxx
-API_MODEL=sonar-pro           # Stage 2: генерация карты
-ENHANCEMENT_MODEL=sonar       # Stage 1: улучшение (быстрее)
+# .env - разные модели для Stage 1 и Stage 2 (опционально)
+API_MODEL=gpt-4o              # Stage 2: генерация карты
+ENHANCEMENT_MODEL=gpt-4o-mini  # Stage 1: улучшение (быстрее/дешевле)
 ```
 
 ## Frontend компонент
@@ -454,7 +452,6 @@ frontend/src/
 
 ### Используемые AI модели
 - **OpenAI:** `gpt-4o` (по умолчанию)
-- **Perplexity:** `sonar` (если используется Perplexity API)
 
 ### Температура
 - 0.7 (баланс между креативностью и точностью)

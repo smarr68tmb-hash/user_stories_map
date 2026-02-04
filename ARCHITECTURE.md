@@ -26,7 +26,7 @@ backend/
 - **SQLAlchemy** — ORM для работы с БД
 - **PostgreSQL** — база данных (production)
 - **Alembic** — миграции БД
-- **AI провайдеры** — Gemini (приоритет по умолчанию) → Groq → Perplexity → OpenAI с автоматическим fallback
+- **AI провайдеры** — Gemini (приоритет по умолчанию) → Groq → OpenAI с автоматическим fallback
 - **Two-Stage AI** — отдельные модели для enhancement/generation/assistant (по умолчанию Gemini `gemini-2.0-flash-exp`)
 - **Redis** — кеширование AI ответов
 - **JWT** — аутентификация
@@ -127,7 +127,7 @@ backend/
 │   │   ├── generate_ai_map()
 │   │   ├── enhance_requirements()
 │   │   ├── get_cache_key()
-│   │   ├── Fallback Gemini → Groq → Perplexity → OpenAI
+│   │   ├── Fallback Gemini → Groq → OpenAI
 │   │   └── Настраиваемые модели для Stage1/Stage2/assistant
 │   │
 │   ├── similarity_service.py # Анализ схожести историй (v2.3.0)
@@ -261,7 +261,7 @@ package "Data Layer" <<database>> {
 }
 
 package "External Services" <<external>> {
-  [AI Providers\n(Gemini/Groq/Perplexity/OpenAI)] as AI
+  [AI Providers\n(Gemini/Groq/OpenAI)] as AI
 }
 
 Auth --> ApiClient
@@ -295,7 +295,7 @@ AnalysisAPI --> AIGen : Optional AI scoring
 
 **AI провайдеры и fallback**
 
-- Приоритет по умолчанию: `gemini → groq → perplexity → openai`
+- Приоритет по умолчанию: `gemini → groq → openai`
 - Gemini: модели `gemini-2.0-flash-exp` для enhancement/generation/assistant
 - Проактивные лимиты Gemini: 230 req/day (flash), 45 req/day (pro) для автопереключения
 - Настройка моделей: `GEMINI_*_MODEL`, `GROQ_*_MODEL`, `PERPLEXITY_*_MODEL`, `OPENAI_*_MODEL`, `ENHANCEMENT_MODEL`
@@ -522,7 +522,7 @@ BE -> Cache: Проверяет кеш (TTL 1ч)
 alt Кеш найден
   Cache --> BE: Cached map
 else
-  BE -> AI: Generate map (fallback gemini→groq→perplexity→openai)
+  BE -> AI: Generate map (fallback gemini→groq→openai)
   AI --> BE: JSON response
   BE -> Cache: Сохраняет результат (TTL 1ч)
   BE -> DB: Создает Project/Activities/Tasks/Releases/UserStories
@@ -765,7 +765,7 @@ cloud "Supabase" {
 }
 
 cloud "External Services" {
-  component "AI Providers\n(Gemini/Groq/Perplexity/OpenAI)" as AI
+  component "AI Providers\n(Gemini/Groq/OpenAI)" as AI
 }
 
 User --> FE : HTTPS
@@ -781,8 +781,8 @@ end note
 note right of BE
   Environment Variables (основные):
   - DATABASE_URL
-  - GEMINI_API_KEY / GROQ_API_KEY / PERPLEXITY_API_KEY / OPENAI_API_KEY
-  - AI_PROVIDER_PRIORITY (default: gemini,groq,perplexity,openai)
+  - GEMINI_API_KEY / GROQ_API_KEY / OPENAI_API_KEY
+  - AI_PROVIDER_PRIORITY (default: gemini,groq,openai)
   - GEMINI_*_MODEL / GROQ_*_MODEL / PERPLEXITY_*_MODEL / OPENAI_*_MODEL / ENHANCEMENT_MODEL
   - JWT_SECRET_KEY
   - ALLOWED_ORIGINS

@@ -101,7 +101,7 @@ def debug_ai_providers():
         }
     
     # Проверяем остальные OpenAI-совместимые провайдеры
-    for provider_name in ["groq", "perplexity", "openai"]:
+    for provider_name in ["groq", "openai"]:
         if provider_name in clients:
             providers_status[provider_name] = {
                 "status": "initialized",
@@ -128,13 +128,13 @@ def debug_ai_providers():
             "enhancement": available_for_enhancement,
         },
         "priority_order": {
-            "generation": "gemini-pro → gemini-flash → groq → perplexity → openai",
-            "enhancement": "gemini-pro → gemini-flash → groq → perplexity → openai",
+            "generation": "gemini-pro → gemini-flash → groq → openai",
+            "enhancement": "gemini-pro → gemini-flash → groq → openai",
         },
         "timestamp": datetime.utcnow().isoformat(),
     }
 
 
 # AgentRouter endpoints удалены - AgentRouter блокируется WAF и возвращает CAPTCHA вместо JSON
-# Используйте Groq/Gemini/Perplexity/OpenAI вместо AgentRouter
+# Используйте Gemini/Groq/OpenAI вместо AgentRouter
 

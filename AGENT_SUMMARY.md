@@ -222,7 +222,7 @@ backend/
 Все существующие зависимости, ничего нового не требуется:
 - ✅ `fastapi`
 - ✅ `google-generativeai` (Gemini)
-- ✅ `openai` (Groq/OpenAI/Perplexity)
+- ✅ `openai` (Groq/OpenAI)
 - ✅ `redis` (опционально)
 
 ### API ключи (нужен хотя бы один):
@@ -232,7 +232,6 @@ backend/
 GEMINI_API_KEY=...      # Рекомендуется (бесплатный tier)
 GROQ_API_KEY=...        # Альтернатива
 OPENAI_API_KEY=...      # Альтернатива (платный)
-PERPLEXITY_API_KEY=...  # Альтернатива
 ```
 
 ## 🎓 Уроки и выводы

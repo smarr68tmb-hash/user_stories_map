@@ -30,8 +30,8 @@ SENSITIVE_PATTERNS = [
     (r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', '[MASKED_JWT]'),
     # Bearer токены в заголовках
     (r'Bearer\s+[A-Za-z0-9_.-]+', 'Bearer [MASKED]'),
-    # API ключи (sk-..., pplx-...)
-    (r'(sk-|pplx-)[A-Za-z0-9]+', '[MASKED_API_KEY]'),
+    # API ключи (sk-...)
+    (r'(sk-)[A-Za-z0-9]+', '[MASKED_API_KEY]'),
     # Refresh токены (base64-подобные длинные строки)
     (r'"refresh_token"\s*:\s*"[A-Za-z0-9_-]{20,}"', '"refresh_token": "[MASKED]"'),
     # Пароли в JSON
